@@ -1425,7 +1425,7 @@ mod tests {
             );
 
         let compiled = graph.compile().unwrap();
-        compiled.invoke(JsonState::new(), None).await.unwrap();
+        compiled.invoke(JsonState::new(), None).await.expect("failed");
 
         assert!(
             max_active.load(Ordering::SeqCst) > 1,
@@ -1458,7 +1458,7 @@ mod tests {
 
         let compiled: CompiledGraphImpl<JsonState> = graph.compile().unwrap();
 
-        let final_state = compiled.invoke(JsonState::new(), None).await.unwrap();
+        let final_state = compiled.invoke(JsonState::new(), None).await.expect("failed");
         assert_eq!(final_state.get_value("flag"), Some(json!(true)));
         assert_eq!(final_state.get_value("reader_saw_flag"), Some(json!(false)));
 
@@ -1522,7 +1522,7 @@ mod tests {
             .add_edge("rejected", END);
 
         let compiled = graph.compile().unwrap();
-        let final_state = compiled.invoke(JsonState::new(), None).await.unwrap();
+        let final_state = compiled.invoke(JsonState::new(), None).await.expect("failed");
 
         assert_eq!(
             final_state.get_value::<serde_json::Value>("decision"),
@@ -1567,7 +1567,7 @@ mod tests {
             .add_edge("rejected", END);
 
         let compiled = graph.compile().unwrap();
-        let final_state = compiled.invoke(JsonState::new(), None).await.unwrap();
+        let final_state = compiled.invoke(JsonState::new(), None).await.expect("failed");
 
         assert_eq!(
             final_state.get_value::<serde_json::Value>("decision"),

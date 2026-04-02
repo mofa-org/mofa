@@ -430,7 +430,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(r1.chunks_total, r2.chunks_total);
-        assert_eq!(store.count().await.unwrap(), r1.chunks_total);
+        assert_eq!(store.count().await.expect("failed"), r1.chunks_total);
     }
 
     #[tokio::test]

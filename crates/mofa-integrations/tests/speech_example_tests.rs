@@ -32,7 +32,7 @@ mod openai_examples {
     #[tokio::test]
     async fn openai_tts_list_voices_returns_six() {
         let adapter = OpenAiTtsAdapter::new(OpenAiSpeechConfig::new().with_api_key("fake"));
-        let voices = adapter.list_voices().await.unwrap();
+        let voices = adapter.list_voices().await.expect("failed");
 
         assert_eq!(voices.len(), 6, "OpenAI TTS should expose 6 voices");
 
@@ -60,7 +60,7 @@ mod openai_examples {
     async fn openai_tts_health_check_with_key_set() {
         let adapter = OpenAiTtsAdapter::new(OpenAiSpeechConfig::new().with_api_key("sk-fake"));
         assert!(
-            adapter.health_check().await.unwrap(),
+            adapter.health_check().await.expect("failed"),
             "health check should pass when key is set"
         );
     }
@@ -148,7 +148,7 @@ mod elevenlabs_examples {
     #[tokio::test]
     async fn elevenlabs_health_check_with_key() {
         let adapter = ElevenLabsTtsAdapter::new(ElevenLabsConfig::new().with_api_key("fake"));
-        assert!(adapter.health_check().await.unwrap());
+        assert!(adapter.health_check().await.expect("failed"));
     }
 
     #[test]
@@ -184,7 +184,7 @@ mod deepgram_examples {
     #[tokio::test]
     async fn deepgram_health_check_with_key() {
         let adapter = DeepgramAsrAdapter::new(DeepgramConfig::new().with_api_key("fake"));
-        assert!(adapter.health_check().await.unwrap());
+        assert!(adapter.health_check().await.expect("failed"));
     }
 
     #[test]

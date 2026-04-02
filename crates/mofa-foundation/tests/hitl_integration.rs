@@ -53,10 +53,10 @@ async fn test_review_manager_basic_flow() {
 
     // Create review
     let review = ReviewRequest::new("exec-1", ReviewType::Approval, create_test_context());
-    let review_id = manager.request_review(review).await.unwrap();
+    let review_id = manager.request_review(review).await.expect("failed");
 
     // Verify pending
-    let pending = manager.list_pending(None, None).await.unwrap();
+    let pending = manager.list_pending(None, None).await.expect("failed");
     assert_eq!(pending.len(), 1);
     assert_eq!(pending[0].id, review_id);
 
@@ -71,7 +71,7 @@ async fn test_review_manager_basic_flow() {
         .unwrap();
 
     // Verify resolved
-    let review = manager.get_review(&review_id).await.unwrap().unwrap();
+    let review = manager.get_review(&review_id).await.expect("failed").unwrap();
     assert_eq!(review.status, ReviewStatus::Approved);
 }
 
@@ -87,7 +87,7 @@ async fn test_workflow_review_handler() {
         .unwrap();
 
     // Check not resolved
-    assert!(!handler.is_resolved(&review_id).await.unwrap());
+    assert!(!handler.is_resolved(&review_id).await.expect("failed"));
 
     // Resolve
     manager
@@ -100,8 +100,8 @@ async fn test_workflow_review_handler() {
         .unwrap();
 
     // Check resolved
-    assert!(handler.is_resolved(&review_id).await.unwrap());
-    assert!(handler.is_approved(&review_id).await.unwrap());
+    assert!(handler.is_resolved(&review_id).await.expect("failed"));
+    assert!(handler.is_approved(&review_id).await.expect("failed"));
 }
 
 #[tokio::test]
@@ -121,7 +121,7 @@ async fn test_tool_review_handler() {
         .unwrap();
 
     // Verify review created
-    let review = manager.get_review(&review_id).await.unwrap().unwrap();
+    let review = manager.get_review(&review_id).await.expect("failed").unwrap();
     assert_eq!(review.execution_id, "exec-1");
     assert!(review.metadata.tags.contains(&"tool_execution".to_string()));
 
@@ -152,19 +152,19 @@ async fn test_multi_tenant_isolation() {
     // Create reviews for different tenants
     let mut review_1 = ReviewRequest::new("exec-1", ReviewType::Approval, create_test_context());
     review_1.metadata.tenant_id = Some(tenant_1);
-    let id_1 = manager.request_review(review_1).await.unwrap();
+    let id_1 = manager.request_review(review_1).await.expect("failed");
 
     let mut review_2 = ReviewRequest::new("exec-2", ReviewType::Approval, create_test_context());
     review_2.metadata.tenant_id = Some(tenant_2);
-    let id_2 = manager.request_review(review_2).await.unwrap();
+    let id_2 = manager.request_review(review_2).await.expect("failed");
 
     // List for tenant_1
-    let tenant_1_reviews = manager.list_pending(Some(tenant_1), None).await.unwrap();
+    let tenant_1_reviews = manager.list_pending(Some(tenant_1), None).await.expect("failed");
     assert_eq!(tenant_1_reviews.len(), 1);
     assert_eq!(tenant_1_reviews[0].id, id_1);
 
     // List for tenant_2
-    let tenant_2_reviews = manager.list_pending(Some(tenant_2), None).await.unwrap();
+    let tenant_2_reviews = manager.list_pending(Some(tenant_2), None).await.expect("failed");
     assert_eq!(tenant_2_reviews.len(), 1);
     assert_eq!(tenant_2_reviews[0].id, id_2);
 
@@ -200,10 +200,10 @@ async fn test_review_lifecycle() {
         ReviewType::Approval,
         create_test_context(),
     );
-    let review_id = manager.request_review(review).await.unwrap();
+    let review_id = manager.request_review(review).await.expect("failed");
 
     // Verify pending
-    let review = manager.get_review(&review_id).await.unwrap().unwrap();
+    let review = manager.get_review(&review_id).await.expect("failed").unwrap();
     assert_eq!(review.status, ReviewStatus::Pending);
 
     // Reject review
@@ -220,7 +220,7 @@ async fn test_review_lifecycle() {
         .unwrap();
 
     // Verify rejected
-    let review = manager.get_review(&review_id).await.unwrap().unwrap();
+    let review = manager.get_review(&review_id).await.expect("failed").unwrap();
     assert_eq!(review.status, ReviewStatus::Rejected);
     assert!(review.resolved_by.is_some());
 }

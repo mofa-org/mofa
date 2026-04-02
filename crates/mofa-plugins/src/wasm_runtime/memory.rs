@@ -549,7 +549,7 @@ mod tests {
     async fn test_shared_buffer() {
         let buf = SharedMemoryBuffer::new(1024);
 
-        buf.write(b"test data").await.unwrap();
+        buf.write(b"test data").await.expect("failed");
         assert_eq!(buf.read().await, b"test data");
 
         buf.clear().await;

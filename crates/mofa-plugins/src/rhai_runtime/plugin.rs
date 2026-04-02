@@ -803,31 +803,31 @@ mod tests {
             .unwrap();
 
         let ctx = PluginContext::default();
-        plugin.load(&ctx).await.unwrap();
+        plugin.load(&ctx).await.expect("failed");
         assert!(matches!(
             *plugin.state.read().await,
             RhaiPluginState::Loaded
         ));
 
-        plugin.init_plugin().await.unwrap();
+        plugin.init_plugin().await.expect("failed");
         assert!(matches!(
             *plugin.state.read().await,
             RhaiPluginState::Running
         ));
 
-        plugin.stop().await.unwrap();
+        plugin.stop().await.expect("failed");
         assert!(matches!(
             *plugin.state.read().await,
             RhaiPluginState::Paused
         ));
 
-        plugin.start().await.unwrap();
+        plugin.start().await.expect("failed");
         assert!(matches!(
             *plugin.state.read().await,
             RhaiPluginState::Running
         ));
 
-        plugin.unload().await.unwrap();
+        plugin.unload().await.expect("failed");
         assert!(matches!(
             *plugin.state.read().await,
             RhaiPluginState::Unloaded
@@ -841,10 +841,10 @@ mod tests {
             .unwrap();
 
         let ctx = PluginContext::default();
-        plugin.load(&ctx).await.unwrap();
-        plugin.init_plugin().await.unwrap();
+        plugin.load(&ctx).await.expect("failed");
+        plugin.init_plugin().await.expect("failed");
 
-        let result = plugin.execute("Hello World!".to_string()).await.unwrap();
+        let result = plugin.execute("Hello World!".to_string()).await.expect("failed");
         // Result should be the string returned by execute function
         // Note: The result is JSON serialized, so it will be a quoted string
         println!("Execute result: {}", result);
@@ -857,7 +857,7 @@ mod tests {
             result
         );
 
-        plugin.unload().await.unwrap();
+        plugin.unload().await.expect("failed");
     }
 
     // ========================================================================
@@ -872,10 +872,10 @@ mod tests {
             }
         "#;
 
-        let plugin = RhaiPlugin::from_content("test-add", script).await.unwrap();
+        let plugin = RhaiPlugin::from_content("test-add", script).await.expect("failed");
 
         let args = vec![Dynamic::from(5), Dynamic::from(3)];
-        let result = plugin.call_script_function("add", &args).await.unwrap();
+        let result = plugin.call_script_function("add", &args).await.expect("failed");
 
         assert!(result.is_some());
         assert_eq!(result.unwrap().as_int().unwrap(), 8);
@@ -894,7 +894,7 @@ mod tests {
             .unwrap();
 
         let args = vec![Dynamic::from("World")];
-        let result = plugin.call_script_function("greet", &args).await.unwrap();
+        let result = plugin.call_script_function("greet", &args).await.expect("failed");
 
         assert!(result.is_some());
         let result_str = result.unwrap().to_string();
@@ -913,7 +913,7 @@ mod tests {
             }
         "#;
 
-        let plugin = RhaiPlugin::from_content("test-sum", script).await.unwrap();
+        let plugin = RhaiPlugin::from_content("test-sum", script).await.expect("failed");
 
         let array = rhai::Array::from(vec![Dynamic::from(1), Dynamic::from(2), Dynamic::from(3)]);
         let args = vec![array.into()];
@@ -935,9 +935,9 @@ mod tests {
             }
         "#;
 
-        let plugin = RhaiPlugin::from_content("test-pi", script).await.unwrap();
+        let plugin = RhaiPlugin::from_content("test-pi", script).await.expect("failed");
 
-        let result = plugin.call_script_function("get_pi", &[]).await.unwrap();
+        let result = plugin.call_script_function("get_pi", &[]).await.expect("failed");
 
         assert!(result.is_some());
         let value = result.unwrap().as_float().unwrap();
@@ -982,7 +982,7 @@ mod tests {
             .unwrap();
 
         let args = vec![Dynamic::from(5)];
-        let result = plugin.call_script_function("process", &args).await.unwrap();
+        let result = plugin.call_script_function("process", &args).await.expect("failed");
 
         assert!(result.is_some());
         assert_eq!(result.unwrap().as_int().unwrap(), 20); // (5 * 2) + 10
@@ -1275,8 +1275,8 @@ mod tests {
             .unwrap();
 
         let ctx = PluginContext::default();
-        plugin.load(&ctx).await.unwrap();
-        plugin.init_plugin().await.unwrap();
+        plugin.load(&ctx).await.expect("failed");
+        plugin.init_plugin().await.expect("failed");
 
         // Execute once to increment counters
         let _ = plugin.execute("ping".to_string()).await;
@@ -1299,8 +1299,8 @@ mod tests {
             .unwrap();
 
         let ctx = PluginContext::default();
-        plugin.load(&ctx).await.unwrap();
-        plugin.init_plugin().await.unwrap();
+        plugin.load(&ctx).await.expect("failed");
+        plugin.init_plugin().await.expect("failed");
 
         // Grab Arc before any execution
         let stats = plugin.stats();
@@ -1328,8 +1328,8 @@ mod tests {
             .unwrap();
 
         let ctx = PluginContext::default();
-        plugin.load(&ctx).await.unwrap();
-        plugin.init_plugin().await.unwrap();
+        plugin.load(&ctx).await.expect("failed");
+        plugin.init_plugin().await.expect("failed");
 
         let stats = plugin.stats();
 

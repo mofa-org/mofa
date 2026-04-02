@@ -1,0 +1,10 @@
+﻿UU crates/mofa-cli/src/commands/agent/create.rs
+UU crates/mofa-cli/src/commands/plugin/install.rs
+UU crates/mofa-cli/src/commands/run.rs
+UU crates/mofa-cli/src/utils/process_manager.rs
+UU crates/mofa-foundation/src/adapter/descriptor.rs
+UU crates/mofa-foundation/src/adapter/registry.rs
+UU crates/mofa-foundation/src/llm/anthropic.rs
+UU crates/mofa-foundation/src/llm/google.rs
+UU crates/mofa-foundation/src/workflow/profiler.rs
+UU crates/mofa-foundation/src/workflow/state_graph.rs

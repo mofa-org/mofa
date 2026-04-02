@@ -55,12 +55,12 @@ mod tests {
         };
 
         let engine = ConsensusEngine::new(node_id, config, storage, transport);
-        engine.start().await.unwrap();
+        engine.start().await.expect("failed");
 
         // Give it a moment to initialize
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
-        engine.stop().await.unwrap();
+        engine.stop().await.expect("failed");
     }
 
     #[tokio::test]

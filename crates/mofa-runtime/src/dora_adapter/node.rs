@@ -353,16 +353,16 @@ mod tests {
         let node = DoraAgentNode::new(config);
         assert_eq!(node.state().await, NodeState::Created);
 
-        node.init().await.unwrap();
+        node.init().await.expect("failed");
         assert_eq!(node.state().await, NodeState::Running);
 
-        node.pause().await.unwrap();
+        node.pause().await.expect("failed");
         assert_eq!(node.state().await, NodeState::Paused);
 
-        node.resume().await.unwrap();
+        node.resume().await.expect("failed");
         assert_eq!(node.state().await, NodeState::Running);
 
-        node.stop().await.unwrap();
+        node.stop().await.expect("failed");
         assert_eq!(node.state().await, NodeState::Stopped);
     }
 }

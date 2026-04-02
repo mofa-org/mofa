@@ -36,8 +36,8 @@
 //! use mofa_kernel::ObjectStore;
 //!
 //! let config = S3Config::new("us-east-1", "my-bucket");
-//! let store = S3ObjectStore::new(config).await.unwrap();
-//! store.put("report.txt", b"hello".to_vec()).await.unwrap();
+//! let store = S3ObjectStore::new(config).await.expect("failed");
+//! store.put("report.txt", b"hello".to_vec()).await.expect("failed");
 //! # }
 //! ```
 

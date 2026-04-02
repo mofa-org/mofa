@@ -151,7 +151,7 @@ impl Drop for ScheduleEntry {
 ///         AgentInput::text("generate report"),
 ///         MissedTickPolicy::Skip,
 ///     ).unwrap()
-/// ).await.unwrap();
+/// ).await.expect("failed");
 /// ```
 pub struct CronScheduler {
     /// Runner used to execute agents on each scheduled tick.
@@ -746,7 +746,7 @@ mod tests {
 
         // Second scheduler: start() must load the persisted schedule.
         let s2 = make_persisted_scheduler(&path);
-        s2.start().await.unwrap();
+        s2.start().await.expect("failed");
         let schedules = s2.list().await;
         assert_eq!(
             schedules.len(),
@@ -783,13 +783,13 @@ mod tests {
             }
 
             // Unregister one — this must write the updated list to disk.
-            s.unregister("remove").await.unwrap();
+            s.unregister("remove").await.expect("failed");
             assert_eq!(s.list().await.len(), 1);
         }
 
         // Fresh scheduler: only "keep" should reload.
         let s2 = make_persisted_scheduler(&path);
-        s2.start().await.unwrap();
+        s2.start().await.expect("failed");
         let schedules = s2.list().await;
         assert_eq!(schedules.len(), 1, "removed schedule must not be reloaded");
         assert_eq!(schedules[0].schedule_id, "keep");
@@ -817,11 +817,11 @@ mod tests {
             )
             .await
             .unwrap();
-            s.unregister("only").await.unwrap();
+            s.unregister("only").await.expect("failed");
         }
 
         let s2 = make_persisted_scheduler(&path);
-        s2.start().await.unwrap();
+        s2.start().await.expect("failed");
         assert!(
             s2.list().await.is_empty(),
             "empty file must reload as zero schedules"

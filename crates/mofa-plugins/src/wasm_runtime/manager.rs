@@ -591,7 +591,7 @@ mod tests {
 
         let mut config = WasmPluginConfig::new("greet-plugin");
         config.resource_limits.max_fuel = None;
-        let handle = manager.load_wat(wat, Some(config)).await.unwrap();
+        let handle = manager.load_wat(wat, Some(config)).await.expect("failed");
 
         assert_eq!(handle.id(), "greet-plugin");
 
@@ -599,10 +599,10 @@ mod tests {
         assert_eq!(plugins.len(), 1);
 
         // Initialize
-        manager.initialize(&handle).await.unwrap();
+        manager.initialize(&handle).await.expect("failed");
 
         // Call function
-        let result = manager.call_i32(&handle, "greet", &[]).await.unwrap();
+        let result = manager.call_i32(&handle, "greet", &[]).await.expect("failed");
         assert_eq!(result, 42);
 
         // Check stats
@@ -611,7 +611,7 @@ mod tests {
         assert_eq!(stats.active_plugins, 1);
 
         // Unload
-        manager.unload(&handle).await.unwrap();
+        manager.unload(&handle).await.expect("failed");
         assert_eq!(manager.list_plugins().await.len(), 0);
     }
 
@@ -626,7 +626,7 @@ mod tests {
         let mut config = WasmPluginConfig::new("event-test");
         config.resource_limits.max_fuel = None;
 
-        let handle = manager.load_wat(wat, Some(config)).await.unwrap();
+        let handle = manager.load_wat(wat, Some(config)).await.expect("failed");
 
         // Should receive Loaded event
         if let Ok(event) = rx.try_recv() {
@@ -638,6 +638,6 @@ mod tests {
             }
         }
 
-        manager.unload(&handle).await.unwrap();
+        manager.unload(&handle).await.expect("failed");
     }
 }

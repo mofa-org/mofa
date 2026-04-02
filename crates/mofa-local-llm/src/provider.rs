@@ -331,7 +331,7 @@ mod tests {
     #[tokio::test]
     async fn test_infer_before_load_fails() {
         let p = make_provider();
-        let result = p.infer("hello").await;
+        let result: Result<_, _> = p.infer("hello").await;
         assert!(result.is_err());
         assert!(matches!(result, Err(OrchestratorError::InferenceFailed(_))));
     }
@@ -400,7 +400,7 @@ mod tests {
     #[tokio::test]
     async fn test_health_check_not_loaded() {
         let p = make_provider();
-        let healthy = p.health_check().await.unwrap();
+        let healthy = p.health_check().await.expect("failed");
         assert!(!healthy);
     }
 
@@ -414,7 +414,7 @@ mod tests {
         let p = make_provider();
         // Calling infer through a trait reference must produce InferenceFailed
         let provider: &dyn ModelProvider = &p;
-        let result = provider.infer("hello").await;
+        let result: Result<_, _> = provider.infer("hello").await;
         assert!(result.is_err());
         assert!(matches!(result, Err(OrchestratorError::InferenceFailed(_))));
     }
@@ -432,20 +432,20 @@ mod tests {
         let mut provider = LinuxLocalProvider::new(config).unwrap();
 
         // load succeeds with a real file
-        provider.load().await.unwrap();
+        provider.load().await.expect("failed");
         assert!(provider.is_loaded());
         assert!(provider.memory_usage_bytes() > 0);
 
         // infer succeeds after load
-        let response = provider.infer("test prompt").await.unwrap();
+        let response = provider.infer("test prompt").await.expect("failed");
         assert!(!response.is_empty());
         assert!(response.contains("cpu"));
 
         // health_check reports healthy
-        assert!(provider.health_check().await.unwrap());
+        assert!(provider.health_check().await.expect("failed"));
 
         // unload resets state
-        provider.unload().await.unwrap();
+        provider.unload().await.expect("failed");
         assert!(!provider.is_loaded());
         assert_eq!(provider.memory_usage_bytes(), 0);
 
@@ -464,11 +464,11 @@ mod tests {
             .with_backend(ComputeBackend::Cpu);
         let mut p = LinuxLocalProvider::new(config).unwrap();
 
-        p.load().await.unwrap();
+        p.load().await.expect("failed");
         assert!(p.is_loaded());
 
         // second load should succeed without error
-        p.load().await.unwrap();
+        p.load().await.expect("failed");
         assert!(p.is_loaded());
 
         let _ = std::fs::remove_dir_all(&dir);
@@ -485,11 +485,11 @@ mod tests {
             .with_backend(ComputeBackend::Cpu);
         let mut p = LinuxLocalProvider::new(config).unwrap();
 
-        p.load().await.unwrap();
-        p.unload().await.unwrap();
+        p.load().await.expect("failed");
+        p.unload().await.expect("failed");
 
         // infer must fail after unload
-        let result = p.infer("hello").await;
+        let result: Result<_, _> = p.infer("hello").await;
         assert!(result.is_err());
         assert!(matches!(result, Err(OrchestratorError::InferenceFailed(_))));
 

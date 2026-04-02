@@ -544,7 +544,7 @@ mod tests {
             depends_on: Vec::new(),
         };
 
-        let result = coordinator.dispatch_subtask(&subtask).await.unwrap();
+        let result = coordinator.dispatch_subtask(&subtask).await.expect("failed");
         assert_eq!(result.agent_id, "backend_agent");
     }
 }

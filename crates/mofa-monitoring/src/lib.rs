@@ -19,7 +19,7 @@
 //!
 //! let server = DashboardServer::new(config);
 //! // Start the server (this would block)
-//! // server.start().await.unwrap();
+//! // server.start().await.expect("failed");
 //! # }
 //! ```
 

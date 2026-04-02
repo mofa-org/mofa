@@ -275,10 +275,10 @@ mod tests {
         let msg = SimpleInboundMessage::new("test", "user", "chat", "Hello");
 
         tokio::spawn(async move {
-            bus.publish_inbound(msg).await.unwrap();
+            bus.publish_inbound(msg).await.expect("failed");
         });
 
-        let received = rx.recv().await.unwrap();
+        let received = rx.recv().await.expect("failed");
         assert_eq!(received.content, "Hello");
     }
 
@@ -289,10 +289,10 @@ mod tests {
         let mut rx1 = bus.subscribe_inbound();
         let mut rx2 = bus.subscribe_inbound();
 
-        bus.publish_inbound("test".to_string()).await.unwrap();
+        bus.publish_inbound("test".to_string()).await.expect("failed");
 
-        let received1 = rx1.recv().await.unwrap();
-        let received2 = rx2.recv().await.unwrap();
+        let received1 = rx1.recv().await.expect("failed");
+        let received2 = rx2.recv().await.expect("failed");
 
         assert_eq!(received1, "test");
         assert_eq!(received2, "test");
@@ -305,9 +305,9 @@ mod tests {
         let mut rx = bus.subscribe_outbound();
         let msg = SimpleOutboundMessage::new("telegram", "123", "Response");
 
-        bus.publish_outbound(msg).await.unwrap();
+        bus.publish_outbound(msg).await.expect("failed");
 
-        let received = rx.recv().await.unwrap();
+        let received = rx.recv().await.expect("failed");
         assert_eq!(received.content, "Response");
     }
 

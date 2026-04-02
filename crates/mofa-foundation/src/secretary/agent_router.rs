@@ -1314,7 +1314,7 @@ mod tests {
             "todo_1",
         );
 
-        let decision = router.route(&context, &agents).await.unwrap();
+        let decision = router.route(&context, &agents).await.expect("failed");
         assert_eq!(decision.agent_id, "agent_1");
         assert_eq!(decision.decision_type, RoutingDecisionType::CapabilityMatch);
     }
@@ -1357,7 +1357,7 @@ mod tests {
             "todo_1",
         );
 
-        let decision = router.route(&context, &agents).await.unwrap();
+        let decision = router.route(&context, &agents).await.expect("failed");
         assert_eq!(decision.agent_id, "backend_agent");
         assert_eq!(decision.decision_type, RoutingDecisionType::RuleMatch);
     }
@@ -1388,7 +1388,7 @@ mod tests {
             "todo_1",
         );
 
-        let decision = composite.route(&context, &agents).await.unwrap();
+        let decision = composite.route(&context, &agents).await.expect("failed");
         assert_eq!(decision.agent_id, "agent_1");
     }
 }

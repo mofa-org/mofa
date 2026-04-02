@@ -383,7 +383,7 @@ mod tests {
     #[tokio::test]
     async fn tts_list_voices() {
         let adapter = OpenAiTtsAdapter::new(OpenAiSpeechConfig::new());
-        let voices = adapter.list_voices().await.unwrap();
+        let voices = adapter.list_voices().await.expect("failed");
         assert_eq!(voices.len(), 6);
         assert_eq!(voices[0].id, "alloy");
     }

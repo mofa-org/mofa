@@ -899,7 +899,7 @@ mod tests {
         let (slow_tx, mut slow_rx) = mpsc::channel(1);
         bus.register("slow", slow_tx.clone()).await;
 
-        slow_tx.send(AgentEvent::Shutdown).await.unwrap();
+        slow_tx.send(AgentEvent::Shutdown).await.expect("failed");
 
         let bus_for_send = Arc::clone(&bus);
         let send_task =
@@ -913,7 +913,7 @@ mod tests {
             .expect("register should not block while send_to waits");
 
         let _ = slow_rx.recv().await;
-        send_task.await.unwrap().unwrap();
+        send_task.await.expect("failed").unwrap();
     }
 
     #[tokio::test]
@@ -922,7 +922,7 @@ mod tests {
         let (slow_tx, mut slow_rx) = mpsc::channel(1);
         bus.register("slow", slow_tx.clone()).await;
 
-        slow_tx.send(AgentEvent::Shutdown).await.unwrap();
+        slow_tx.send(AgentEvent::Shutdown).await.expect("failed");
 
         let bus_for_send = Arc::clone(&bus);
         let send_task =
@@ -936,7 +936,7 @@ mod tests {
             .expect("register should not block while broadcast waits");
 
         let _ = slow_rx.recv().await;
-        send_task.await.unwrap().unwrap();
+        send_task.await.expect("failed").unwrap();
     }
 
     #[tokio::test]
@@ -946,7 +946,7 @@ mod tests {
         bus.register("slow", slow_tx.clone()).await;
         bus.subscribe("slow", "topic-a").await;
 
-        slow_tx.send(AgentEvent::Shutdown).await.unwrap();
+        slow_tx.send(AgentEvent::Shutdown).await.expect("failed");
 
         let bus_for_send = Arc::clone(&bus);
         let send_task =
@@ -964,7 +964,7 @@ mod tests {
         .expect("subscribe should not block while publish waits");
 
         let _ = slow_rx.recv().await;
-        send_task.await.unwrap().unwrap();
+        send_task.await.expect("failed").unwrap();
     }
 }
 

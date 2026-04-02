@@ -189,10 +189,10 @@ mod tests {
         lb.add_node(NodeId::new("node-3")).await;
 
         // Should cycle through nodes
-        let node1 = lb.select_node().await.unwrap().unwrap();
-        let node2 = lb.select_node().await.unwrap().unwrap();
-        let node3 = lb.select_node().await.unwrap().unwrap();
-        let node4 = lb.select_node().await.unwrap().unwrap();
+        let node1 = lb.select_node().await.expect("failed").unwrap();
+        let node2 = lb.select_node().await.expect("failed").unwrap();
+        let node3 = lb.select_node().await.expect("failed").unwrap();
+        let node4 = lb.select_node().await.expect("failed").unwrap();
 
         assert_eq!(node1, NodeId::new("node-1"));
         assert_eq!(node2, NodeId::new("node-2"));
@@ -207,7 +207,7 @@ mod tests {
         lb.add_node(NodeId::new("node-2")).await;
 
         // Initially both have 0, should select first
-        let node = lb.select_node().await.unwrap().unwrap();
+        let node = lb.select_node().await.expect("failed").unwrap();
         assert_eq!(node, NodeId::new("node-1"));
 
         // Increment connections for node-1
@@ -215,7 +215,7 @@ mod tests {
         lb.increment_connections(&NodeId::new("node-1")).await;
 
         // Now should select node-2 (fewer connections)
-        let node = lb.select_node().await.unwrap().unwrap();
+        let node = lb.select_node().await.expect("failed").unwrap();
         assert_eq!(node, NodeId::new("node-2"));
     }
 
@@ -235,7 +235,7 @@ mod tests {
         // Over 6 selections (one full cycle), we should see all nodes selected
         let mut selections = Vec::new();
         for _ in 0..6 {
-            let node = lb.select_node().await.unwrap().unwrap();
+            let node = lb.select_node().await.expect("failed").unwrap();
             selections.push(node);
         }
 
@@ -250,7 +250,7 @@ mod tests {
         let mut node3_count = 0;
 
         for _ in 0..18 {
-            let node = lb.select_node().await.unwrap().unwrap();
+            let node = lb.select_node().await.expect("failed").unwrap();
             if node == NodeId::new("node-1") {
                 node1_count += 1;
             } else if node == NodeId::new("node-2") {

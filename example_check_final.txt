@@ -1,0 +1,338 @@
+warning: cli_agent_logs_demo v0.1.0 (C:\Users\Aditya RS\mofa\examples\cli_agent_logs_demo) ignoring invalid dependency `mofa-cli` which is missing a lib target
+warning: cli_cicd_integration v0.1.0 (C:\Users\Aditya RS\mofa\examples\cli_cicd_integration) ignoring invalid dependency `mofa-cli` which is missing a lib target
+warning: cli_plugin_lifecycle v0.1.0 (C:\Users\Aditya RS\mofa\examples\cli_plugin_lifecycle) ignoring invalid dependency `mofa-cli` which is missing a lib target
+warning: custom_plugin_install v0.1.0 (C:\Users\Aditya RS\mofa\examples\custom_plugin_install) ignoring invalid dependency `mofa-cli` which is missing a lib target
+warning: log_rotation_handling v0.1.0 (C:\Users\Aditya RS\mofa\examples\log_rotation_handling) ignoring invalid dependency `mofa-cli` which is missing a lib target
+    Checking adversarial_testing_demo v0.1.0 (C:\Users\Aditya RS\mofa\examples\adversarial_testing_demo)
+warning: unused import: `AdmissionOutcome`
+  --> memory_scheduler_demo\src\main.rs:11:34
+   |
+11 | use mofa_foundation::scheduler::{AdmissionOutcome, MemoryBudget, MemoryPolicy, MemoryScheduler};
+   |                                  ^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unexpected `cfg` condition value: `compression-cache`
+  --> compression_examples\src\main.rs:11:7
+   |
+11 | #[cfg(feature = "compression-cache")]
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: remove the condition
+   |
+   = note: no expected values for `feature`
+   = help: consider adding `compression-cache` as a feature in `Cargo.toml`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+   = note: `#[warn(unexpected_cfgs)]` on by default
+
+warning: unexpected `cfg` condition value: `compression-cache`
+  --> compression_examples\src\main.rs:42:19
+   |
+42 |             #[cfg(feature = "compression-cache")]
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: remove the condition
+   |
+   = note: no expected values for `feature`
+   = help: consider adding `compression-cache` as a feature in `Cargo.toml`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unexpected `cfg` condition value: `compression-cache`
+  --> compression_examples\src\main.rs:57:15
+   |
+57 |         #[cfg(feature = "compression-cache")]
+   |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: remove the condition
+   |
+   = note: no expected values for `feature`
+   = help: consider adding `compression-cache` as a feature in `Cargo.toml`
+   = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: unreachable `pub` item
+ --> compression_examples\src\customer_support.rs:6:1
+  |
+6 | pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
+  | ---^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  | |
+  | help: consider restricting its visibility: `pub(crate)`
+  |
+  = help: or consider exporting it for use by other crates
+  = note: requested on the command line with `-W unreachable-pub`
+
+warning: unreachable `pub` item
+ --> compression_examples\src\code_review.rs:6:1
+  |
+6 | pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
+  | ---^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  | |
+  | help: consider restricting its visibility: `pub(crate)`
+  |
+  = help: or consider exporting it for use by other crates
+
+warning: unreachable `pub` item
+ --> compression_examples\src\research_assistant.rs:6:1
+  |
+6 | pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
+  | ---^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  | |
+  | help: consider restricting its visibility: `pub(crate)`
+  |
+  = help: or consider exporting it for use by other crates
+
+warning: unreachable `pub` item
+ --> compression_examples\src\ecommerce.rs:6:1
+  |
+6 | pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
+  | ---^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  | |
+  | help: consider restricting its visibility: `pub(crate)`
+  |
+  = help: or consider exporting it for use by other crates
+
+warning: unreachable `pub` item
+ --> compression_examples\src\hybrid_strategy.rs:6:1
+  |
+6 | pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
+  | ---^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  | |
+  | help: consider restricting its visibility: `pub(crate)`
+  |
+  = help: or consider exporting it for use by other crates
+
+warning: unreachable `pub` item
+ --> compression_examples\src\integration.rs:3:1
+  |
+3 | pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
+  | ---^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  | |
+  | help: consider restricting its visibility: `pub(crate)`
+  |
+  = help: or consider exporting it for use by other crates
+
+warning: unreachable `pub` item
+ --> compression_examples\src\performance_comparison.rs:6:1
+  |
+6 | pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
+  | ---^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  | |
+  | help: consider restricting its visibility: `pub(crate)`
+  |
+  = help: or consider exporting it for use by other crates
+
+warning: unreachable `pub` item
+ --> compression_examples\src\helpers.rs:5:1
+  |
+5 | pub fn make_msg(role: &str, content: &str) -> ChatMessage {
+  | ---^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  | |
+  | help: consider restricting its visibility: `pub(crate)`
+  |
+  = help: or consider exporting it for use by other crates
+
+warning: unreachable `pub` item
+  --> compression_examples\src\helpers.rs:14:1
+   |
+14 |   pub fn print_compression_stats(
+   |   ^--
+   |   |
+   |  _help: consider restricting its visibility: `pub(crate)`
+   | |
+15 | |     original: &[ChatMessage],
+16 | |     compressed: &[ChatMessage],
+17 | |     compressor_name: &str,
+18 | | ) {
+   | |_^
+   |
+   = help: or consider exporting it for use by other crates
+
+warning: `memory_scheduler_demo` (bin "memory_scheduler_demo") generated 1 warning (run `cargo fix --bin "memory_scheduler_demo" -p memory_scheduler_demo` to apply 1 suggestion)
+warning: `codex_compression_practical` (bin "codex_compression_practical") generated 12 warnings (run `cargo fix --bin "codex_compression_practical" -p codex_compression_practical` to apply 9 suggestions)
+    Checking llm_fallback_chain v0.1.0 (C:\Users\Aditya RS\mofa\examples\llm_fallback_chain)
+warning: unused import: `mofa_kernel::AgentPlugin`
+ --> cloud_voice_demo\src\main.rs:1:5
+  |
+1 | use mofa_kernel::AgentPlugin;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: `cloud_voice_demo` (bin "cloud_voice_demo") generated 1 warning
+    Checking mofa-runtime v0.1.0 (C:\Users\Aditya RS\mofa\crates\mofa-runtime)
+    Checking mofa-sdk v0.1.0 (C:\Users\Aditya RS\mofa\crates\mofa-sdk)
+    Checking mofa-gateway v0.1.0 (C:\Users\Aditya RS\mofa\crates\mofa-gateway)
+    Checking runtime_periodic_runner v0.1.0 (C:\Users\Aditya RS\mofa\examples\runtime_periodic_runner)
+    Checking cron_scheduler v0.1.0 (C:\Users\Aditya RS\mofa\examples\cron_scheduler)
+    Checking native_dataflow v0.1.0 (C:\Users\Aditya RS\mofa\examples\native_dataflow)
+    Checking tool_routing v0.1.0 (C:\Users\Aditya RS\mofa\examples\tool_routing)
+    Checking secretary_agent v0.1.0 (C:\Users\Aditya RS\mofa\examples\secretary_agent)
+    Checking config v0.1.0 (C:\Users\Aditya RS\mofa\examples\config)
+    Checking multi_agent_coordination v0.1.0 (C:\Users\Aditya RS\mofa\examples\multi_agent_coordination)
+    Checking hitl_secretary v0.1.0 (C:\Users\Aditya RS\mofa\examples\hitl_secretary)
+    Checking monitoring_dashboard v0.1.0 (C:\Users\Aditya RS\mofa\examples\monitoring_dashboard)
+    Checking task_analyzer v0.1.0 (C:\Users\Aditya RS\mofa\examples\task_analyzer)
+    Checking agent_builder v0.1.0 (C:\Users\Aditya RS\mofa\examples\agent_builder)
+    Checking financial_compliance_agent v0.1.0 (C:\Users\Aditya RS\mofa\examples\financial_compliance_agent)
+    Checking rhai_hot_reload v0.1.0 (C:\Users\Aditya RS\mofa\examples\rhai_hot_reload)
+    Checking runtime_example v0.1.0 (C:\Users\Aditya RS\mofa\examples\runtime_example)
+    Checking reflection_agent v0.1.0 (C:\Users\Aditya RS\mofa\examples\reflection_agent)
+    Checking adaptive_collaboration_agent v0.1.0 (C:\Users\Aditya RS\mofa\examples\adaptive_collaboration_agent)
+    Checking workflow_orchestration v0.1.0 (C:\Users\Aditya RS\mofa\examples\workflow_orchestration)
+    Checking llm_tts_streaming v0.1.0 (C:\Users\Aditya RS\mofa\examples\llm_tts_streaming)
+warning: unused import: `HashSet`
+ --> task_analyzer\src\main.rs:2:33
+  |
+2 | use std::collections::{HashMap, HashSet};
+  |                                 ^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+    Checking streaming_persistence v0.1.0 (C:\Users\Aditya RS\mofa\examples\streaming_persistence)
+    Checking workflow_dsl v0.1.0 (C:\Users\Aditya RS\mofa\examples\workflow_dsl)
+    Checking agent_from_database_streaming v0.1.0 (C:\Users\Aditya RS\mofa\examples\agent_from_database_streaming)
+    Checking wasm_plugin v0.1.0 (C:\Users\Aditya RS\mofa\examples\wasm_plugin)
+    Checking rhai_scripting v0.1.0 (C:\Users\Aditya RS\mofa\examples\rhai_scripting)
+    Checking streaming_manual_persistence v0.1.0 (C:\Users\Aditya RS\mofa\examples\streaming_manual_persistence)
+warning: variable does not need to be mutable
+  --> tool_routing\src\main.rs:45:9
+   |
+45 |     let mut routing_plugin = ToolRoutingPlugin::new();
+   |         ----^^^^^^^^^^^^^^
+   |         |
+   |         help: remove this `mut`
+   |
+   = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `agent`
+  --> tool_routing\src\main.rs:33:9
+   |
+33 |     let agent = Arc::new(simple_llm_agent(
+   |         ^^^^^ help: if this is intentional, prefix it with an underscore: `_agent`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `tool_executor`
+  --> tool_routing\src\main.rs:41:9
+   |
+41 |     let tool_executor = ExampleToolExecutor::new();
+   |         ^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_tool_executor`
+
+warning: method `remove_rule` is never used
+  --> tool_routing\src\route_rules.rs:83:12
+   |
+63 | impl RouteRuleManager {
+   | --------------------- method in this implementation
+...
+83 |     pub fn remove_rule(&self, rule_name: &str) {
+   |            ^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+    Checking chat_stream v0.1.0 (C:\Users\Aditya RS\mofa\examples\chat_stream)
+    Checking runtime_message_bus_backpressure v0.1.0 (C:\Users\Aditya RS\mofa\examples\runtime_message_bus_backpressure)
+    Checking plugin_system v0.1.0 (C:\Users\Aditya RS\mofa\examples\plugin_system)
+warning: unexpected `cfg` condition value: `openai`
+   --> workflow_dsl\src\main.rs:114:19
+    |
+114 |             #[cfg(feature = "openai")]
+    |                   ^^^^^^^^^^^^^^^^^^ help: remove the condition
+    |
+    = note: no expected values for `feature`
+    = help: consider adding `openai` as a feature in `Cargo.toml`
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+    = note: `#[warn(unexpected_cfgs)]` on by default
+
+warning: unexpected `cfg` condition value: `openai`
+   --> workflow_dsl\src\main.rs:139:23
+    |
+139 |             #[cfg(not(feature = "openai"))]
+    |                       ^^^^^^^^^^^^^^^^^^ help: remove the condition
+    |
+    = note: no expected values for `feature`
+    = help: consider adding `openai` as a feature in `Cargo.toml`
+    = note: see <https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html> for more information about checking conditional configuration
+
+warning: `tool_routing` (bin "tool_routing") generated 4 warnings (run `cargo fix --bin "tool_routing" -p tool_routing` to apply 3 suggestions)
+    Checking react_agent v0.1.0 (C:\Users\Aditya RS\mofa\examples\react_agent)
+warning: unused import: `Role`
+  --> streaming_persistence\src\main.rs:31:22
+   |
+31 |     llm::{LLMResult, Role},
+   |                      ^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `std::sync::Arc`
+  --> agent_from_database_streaming\src\main.rs:83:5
+   |
+83 | use std::sync::Arc;
+   |     ^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: `task_analyzer` (bin "task_analyzer") generated 1 warning (run `cargo fix --bin "task_analyzer" -p task_analyzer` to apply 1 suggestion)
+    Checking agent_with_plugins_and_rhai v0.1.0 (C:\Users\Aditya RS\mofa\examples\agent_with_plugins_and_rhai)
+warning: variable does not need to be mutable
+   --> workflow_orchestration\src\main.rs:821:13
+    |
+821 |         let mut response = input.as_str().unwrap_or("").to_lowercase();
+    |             ----^^^^^^^^
+    |             |
+    |             help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: `workflow_dsl` (bin "workflow_dsl") generated 2 warnings
+warning: `streaming_persistence` (bin "streaming_persistence") generated 1 warning (run `cargo fix --bin "streaming_persistence" -p streaming_persistence` to apply 1 suggestion)
+warning: missing documentation for the crate
+  --> chat_stream\src\main.rs:1:1
+   |
+ 1 | / use mofa_sdk::llm::{LLMAgentBuilder, OpenAIProvider};
+ 2 | | use tokio_stream::StreamExt;
+ 3 | | use tracing::{info, Level};
+...  |
+83 | |     Ok(())
+84 | | }
+   | |_^
+   |
+   = note: requested on the command line with `-W missing-docs`
+
+warning: `chat_stream` (bin "chat_stream") generated 1 warning
+warning: static `WORKER_ID_RE` is never used
+  --> multi_agent_coordination\src\main.rs:62:8
+   |
+62 | static WORKER_ID_RE: LazyLock<regex::Regex> =
+   |        ^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: fields `llm_client` and `assignment_history` are never read
+   --> multi_agent_coordination\src\main.rs:157:5
+    |
+142 | pub struct MasterAgent {
+    |            ----------- fields in this struct
+...
+157 |     llm_client: Arc<LLMClient>,
+    |     ^^^^^^^^^^
+...
+163 |     assignment_history: Arc<RwLock<Vec<TaskAssignment>>>,
+    |     ^^^^^^^^^^^^^^^^^^
+
+warning: methods `assign_task_with_llm`, `parse_worker_id`, `handle_task_request`, and `handle_task_completion` are never used
+   --> multi_agent_coordination\src\main.rs:211:14
+    |
+166 | impl MasterAgent {
+    | ---------------- methods in this implementation
+...
+211 |     async fn assign_task_with_llm(&self, task: &TaskRequest) -> Result<String, Box<dyn std::error::Error>> {
+    |              ^^^^^^^^^^^^^^^^^^^^
+...
+287 |     async fn parse_worker_id(
+    |              ^^^^^^^^^^^^^^^
+...
+328 |     async fn handle_task_request(&self, task: TaskRequest) -> Result<(String, TaskRequest), Box<dyn std::error::Error>> {
+    |              ^^^^^^^^^^^^^^^^^^^
+...
+363 |     async fn handle_task_completion(&self, worker_id: String, task_id: String) {
+    |              ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `agent_from_database_streaming` (bin "agent_from_database_streaming") generated 1 warning (run `cargo fix --bin "agent_from_database_streaming" -p agent_from_database_streaming` to apply 1 suggestion)
+warning: `multi_agent_coordination` (bin "multi_agent_coordination") generated 3 warnings
+warning: `workflow_orchestration` (bin "workflow_orchestration") generated 1 warning (run `cargo fix --bin "workflow_orchestration" -p workflow_orchestration` to apply 1 suggestion)
+    Checking control_plane v0.1.0 (C:\Users\Aditya RS\mofa\examples\control_plane)
+    Checking claw_demo v0.1.0 (C:\Users\Aditya RS\mofa\examples\claw_demo)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 28.34s

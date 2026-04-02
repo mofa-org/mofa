@@ -808,7 +808,7 @@ mod tests {
         let counter = registry.register_counter(counter).await;
         counter.inc();
 
-        let retrieved = registry.get_counter("requests_total").await.unwrap();
+        let retrieved = registry.get_counter("requests_total").await.expect("failed");
         assert_eq!(retrieved.get(), 1);
     }
 

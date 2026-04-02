@@ -597,7 +597,7 @@ mod tests {
             ])
         });
 
-        let reloaded = registry.hot_reload_plugin(path).await.unwrap();
+        let reloaded = registry.hot_reload_plugin(path).await.expect("failed");
         assert_eq!(reloaded.len(), 2);
         assert!(reloaded.iter().any(|n| n == "new_plugin_tool_a"));
         assert!(reloaded.iter().any(|n| n == "new_plugin_tool_b"));

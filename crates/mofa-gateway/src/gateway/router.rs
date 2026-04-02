@@ -127,7 +127,7 @@ mod tests {
         let node_id = NodeId::new("node-1");
         lb.add_node(node_id.clone()).await;
         hc.register_node(node_id.clone()).await;
-        hc.check_node(&node_id).await.unwrap();
+        hc.check_node(&node_id).await.expect("failed");
 
         let router = GatewayRouter::new(lb, hc, cb);
         let metadata = RequestMetadata {
@@ -138,7 +138,7 @@ mod tests {
             extra: std::collections::HashMap::new(),
         };
 
-        let routed = router.route(&metadata).await.unwrap();
+        let routed = router.route(&metadata).await.expect("failed");
         assert_eq!(routed, node_id);
     }
 }

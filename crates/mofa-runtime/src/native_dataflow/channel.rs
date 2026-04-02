@@ -401,13 +401,13 @@ mod tests {
     #[tokio::test]
     async fn test_p2p_send_receive() {
         let ch = NativeChannel::new(ChannelConfig::default());
-        ch.register_agent("a").await.unwrap();
-        ch.register_agent("b").await.unwrap();
+        ch.register_agent("a").await.expect("failed");
+        ch.register_agent("b").await.expect("failed");
 
         let env = MessageEnvelope::new("a", b"hello".to_vec()).to("b");
-        ch.send_p2p(env).await.unwrap();
+        ch.send_p2p(env).await.expect("failed");
 
-        let received = ch.try_receive_p2p("b").await.unwrap();
+        let received = ch.try_receive_p2p("b").await.expect("failed");
         assert!(received.is_some());
         assert_eq!(received.unwrap().payload, b"hello");
     }
@@ -415,16 +415,16 @@ mod tests {
     #[tokio::test]
     async fn test_pubsub() {
         let ch = NativeChannel::new(ChannelConfig::default());
-        ch.register_agent("pub").await.unwrap();
-        ch.register_agent("sub").await.unwrap();
-        ch.subscribe("sub", "events").await.unwrap();
+        ch.register_agent("pub").await.expect("failed");
+        ch.register_agent("sub").await.expect("failed");
+        ch.subscribe("sub", "events").await.expect("failed");
 
-        let mut rx = ch.subscribe_topic("events").await.unwrap();
+        let mut rx = ch.subscribe_topic("events").await.expect("failed");
 
         let env = MessageEnvelope::new("pub", b"data".to_vec()).with_topic("events");
-        ch.publish(env).await.unwrap();
+        ch.publish(env).await.expect("failed");
 
-        let msg = rx.recv().await.unwrap();
+        let msg = rx.recv().await.expect("failed");
         assert_eq!(msg.payload, b"data");
     }
 
@@ -434,9 +434,9 @@ mod tests {
         let mut rx = ch.subscribe_broadcast();
 
         let env = MessageEnvelope::new("src", b"broadcast".to_vec());
-        ch.broadcast(env).await.unwrap();
+        ch.broadcast(env).await.expect("failed");
 
-        let msg = rx.recv().await.unwrap();
+        let msg = rx.recv().await.expect("failed");
         assert_eq!(msg.payload, b"broadcast");
     }
 
@@ -457,7 +457,7 @@ mod tests {
             message_timeout: Duration::from_millis(500),
             ..ChannelConfig::default()
         }));
-        ch.register_agent("reader").await.unwrap();
+        ch.register_agent("reader").await.expect("failed");
 
         let ch2 = ch.clone();
         let reader_task = tokio::spawn(async move {
@@ -466,10 +466,10 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(20)).await;
 
         let start = std::time::Instant::now();
-        ch.register_agent("new_agent").await.unwrap();
+        ch.register_agent("new_agent").await.expect("failed");
         let elapsed = start.elapsed();
 
-        reader_task.await.unwrap();
+        reader_task.await.expect("failed");
         assert!(
             elapsed < Duration::from_millis(400),
             "register_agent was blocked for {:?}",

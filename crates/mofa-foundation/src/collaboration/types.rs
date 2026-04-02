@@ -937,9 +937,9 @@ mod tests {
             CollaborationMode::RequestResponse,
         );
 
-        manager.send_message(msg).await.unwrap();
+        manager.send_message(msg).await.expect("failed");
 
-        let received = manager.receive_message().await.unwrap();
+        let received = manager.receive_message().await.expect("failed");
         assert!(received.is_some());
         assert_eq!(received.unwrap().sender, "agent_001");
     }

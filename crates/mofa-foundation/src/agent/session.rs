@@ -467,8 +467,8 @@ mod tests {
         let storage = MemorySessionStorage::new();
         let session = Session::new("test:memory");
 
-        storage.save(&session).await.unwrap();
-        let loaded = storage.load("test:memory").await.unwrap();
+        storage.save(&session).await.expect("failed");
+        let loaded = storage.load("test:memory").await.expect("failed");
         assert!(loaded.is_some());
         assert_eq!(loaded.unwrap().key, "test:memory");
     }
@@ -476,14 +476,14 @@ mod tests {
     #[tokio::test]
     async fn test_jsonl_storage() {
         let temp_dir = TempDir::new().unwrap();
-        let storage = JsonlSessionStorage::new(temp_dir.path()).await.unwrap();
+        let storage = JsonlSessionStorage::new(temp_dir.path()).await.expect("failed");
 
         let mut session = Session::new("test:jsonl");
         session.add_message("user", "Hello");
 
-        storage.save(&session).await.unwrap();
+        storage.save(&session).await.expect("failed");
 
-        let loaded = storage.load("test:jsonl").await.unwrap();
+        let loaded = storage.load("test:jsonl").await.expect("failed");
         assert!(loaded.is_some());
         let loaded_session = loaded.unwrap();
         assert_eq!(loaded_session.key, "test:jsonl");
@@ -493,12 +493,12 @@ mod tests {
     #[tokio::test]
     async fn test_session_manager() {
         let temp_dir = TempDir::new().unwrap();
-        let manager = SessionManager::with_jsonl(temp_dir.path()).await.unwrap();
+        let manager = SessionManager::with_jsonl(temp_dir.path()).await.expect("failed");
 
         let session = manager.get_or_create("test:manager").await;
         assert_eq!(session.key, "test:manager");
 
-        manager.save(&session).await.unwrap();
+        manager.save(&session).await.expect("failed");
 
         // Reload
         let loaded = manager.get_or_create("test:manager").await;
@@ -508,22 +508,22 @@ mod tests {
     #[tokio::test]
     async fn test_session_get_returns_none_for_missing() {
         let temp_dir = TempDir::new().unwrap();
-        let manager = SessionManager::with_jsonl(temp_dir.path()).await.unwrap();
+        let manager = SessionManager::with_jsonl(temp_dir.path()).await.expect("failed");
 
-        let result = manager.get("nonexistent").await.unwrap();
+        let result = manager.get("nonexistent").await.expect("failed");
         assert!(result.is_none());
     }
 
     #[tokio::test]
     async fn test_session_get_returns_some_for_existing() {
         let temp_dir = TempDir::new().unwrap();
-        let manager = SessionManager::with_jsonl(temp_dir.path()).await.unwrap();
+        let manager = SessionManager::with_jsonl(temp_dir.path()).await.expect("failed");
 
         let mut session = Session::new("exists");
         session.add_message("user", "hello");
-        manager.save(&session).await.unwrap();
+        manager.save(&session).await.expect("failed");
 
-        let result = manager.get("exists").await.unwrap();
+        let result = manager.get("exists").await.expect("failed");
         assert!(result.is_some());
         assert_eq!(result.unwrap().len(), 1);
     }
@@ -531,21 +531,21 @@ mod tests {
     #[tokio::test]
     async fn test_session_get_does_not_create() {
         let temp_dir = TempDir::new().unwrap();
-        let manager = SessionManager::with_jsonl(temp_dir.path()).await.unwrap();
+        let manager = SessionManager::with_jsonl(temp_dir.path()).await.expect("failed");
 
-        let _ = manager.get("phantom").await.unwrap();
-        let keys = manager.list().await.unwrap();
+        let _ = manager.get("phantom").await.expect("failed");
+        let keys = manager.list().await.expect("failed");
         assert!(!keys.contains(&"phantom".to_string()));
     }
 
     #[tokio::test]
     async fn test_session_storage_path_no_double_nesting() {
         let temp_dir = TempDir::new().unwrap();
-        let manager = SessionManager::with_jsonl(temp_dir.path()).await.unwrap();
+        let manager = SessionManager::with_jsonl(temp_dir.path()).await.expect("failed");
 
         let mut session = Session::new("nesting-test");
         session.add_message("user", "hello");
-        manager.save(&session).await.unwrap();
+        manager.save(&session).await.expect("failed");
 
         assert!(
             temp_dir
@@ -560,13 +560,13 @@ mod tests {
     #[tokio::test]
     async fn test_session_list_preserves_underscore_keys() {
         let temp_dir = TempDir::new().unwrap();
-        let manager = SessionManager::with_jsonl(temp_dir.path()).await.unwrap();
+        let manager = SessionManager::with_jsonl(temp_dir.path()).await.expect("failed");
 
         let mut session = Session::new("team_alpha");
         session.add_message("user", "hello");
-        manager.save(&session).await.unwrap();
+        manager.save(&session).await.expect("failed");
 
-        let keys = manager.list().await.unwrap();
+        let keys = manager.list().await.expect("failed");
         assert!(keys.contains(&"team_alpha".to_string()));
         assert!(!keys.contains(&"team:alpha".to_string()));
     }
@@ -574,7 +574,7 @@ mod tests {
     #[tokio::test]
     async fn test_session_list_prefers_header_key_without_loading_whole_file() {
         let temp_dir = TempDir::new().unwrap();
-        let manager = SessionManager::with_jsonl(temp_dir.path()).await.unwrap();
+        let manager = SessionManager::with_jsonl(temp_dir.path()).await.expect("failed");
 
         let sessions_dir = temp_dir.path().join("sessions");
         tokio::fs::write(
@@ -584,7 +584,7 @@ mod tests {
         .await
         .unwrap();
 
-        let keys = manager.list().await.unwrap();
+        let keys = manager.list().await.expect("failed");
         assert!(keys.contains(&"canonical:key".to_string()));
         assert!(!keys.contains(&"alias".to_string()));
     }

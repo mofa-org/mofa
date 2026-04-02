@@ -95,7 +95,7 @@ impl EventHandlingEngine {
     pub async fn process_next_event(&self) -> PluginResult<Option<Event>> {
         // Acquire a semaphore permit
         let semaphore = self.semaphore.clone();
-        let _permit = semaphore.acquire().await.unwrap();
+        let _permit = semaphore.acquire().await.expect("failed");
 
         // Pop the next event and immediately release the write lock so that
         // concurrent calls to submit_event() are not blocked for the entire

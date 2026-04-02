@@ -149,9 +149,9 @@ mod tests {
         ];
         let mut s = adapter_for_provider("openai").adapt(Box::pin(futures::stream::iter(chunks)));
 
-        assert_eq!(s.next().await.unwrap().unwrap().delta, "Hello");
-        assert_eq!(s.next().await.unwrap().unwrap().delta, " world");
-        let done = s.next().await.unwrap().unwrap();
+        assert_eq!(s.next().await.expect("failed").unwrap().delta, "Hello");
+        assert_eq!(s.next().await.expect("failed").unwrap().delta, " world");
+        let done = s.next().await.expect("failed").unwrap();
         assert!(done.is_done());
         assert_eq!(
             done.finish_reason,
@@ -199,10 +199,10 @@ mod tests {
             Ok(usage_chunk),
         ])));
 
-        let tc = s.next().await.unwrap().unwrap();
+        let tc = s.next().await.expect("failed").unwrap();
         assert_eq!(tc.tool_calls.as_ref().unwrap()[0].id.as_deref(), Some("tc"));
 
-        let u = s.next().await.unwrap().unwrap();
+        let u = s.next().await.expect("failed").unwrap();
         let usage = u.usage.unwrap();
         assert_eq!(usage.prompt_tokens, Some(10));
         assert_eq!(usage.total_tokens, Some(30));
@@ -216,8 +216,8 @@ mod tests {
         ];
         let mut s = adapter_for_provider("ollama").adapt(Box::pin(futures::stream::iter(chunks)));
 
-        assert!(s.next().await.unwrap().is_ok());
-        match s.next().await.unwrap().unwrap_err() {
+        assert!(s.next().await.expect("failed").is_ok());
+        match s.next().await.expect("failed").unwrap_err() {
             StreamError::Connection(msg) => assert_eq!(msg, "reset"),
             other => panic!("expected Connection, got {:?}", other),
         }
@@ -256,7 +256,7 @@ mod tests {
                     done_chunk(src, None),
                 )])));
             assert_eq!(
-                s.next().await.unwrap().unwrap().finish_reason,
+                s.next().await.expect("failed").unwrap().finish_reason,
                 Some(expected)
             );
         }

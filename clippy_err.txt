@@ -1,0 +1,635 @@
+ Downloading crates ...
+  Downloaded aws-smithy-observability v0.2.5
+  Downloaded lazycell v1.3.0
+  Downloaded signature v1.6.4
+  Downloaded aws-smithy-eventstream v0.60.19
+  Downloaded xmlparser v0.13.6
+  Downloaded aws-smithy-http v0.63.5
+  Downloaded vsimd v0.8.0
+  Downloaded aws-smithy-json v0.62.4
+  Downloaded aws-smithy-runtime-api v1.11.5
+  Downloaded regex-lite v0.1.9
+  Downloaded tracing-opentelemetry v0.28.0
+  Downloaded lz4-sys v1.11.1+lz4-1.10.0
+  Downloaded bindgen v0.72.1
+  Downloaded aws-sdk-sts v1.99.0
+  Downloaded aws-smithy-http v0.62.6
+  Downloaded spki v0.6.0
+  Downloaded outref v0.5.2
+  Downloaded pkcs8 v0.9.0
+  Downloaded elliptic-curve v0.12.3
+  Downloaded clang-sys v1.8.1
+  Downloaded aws-types v1.3.13
+  Downloaded aws-smithy-json v0.61.9
+  Downloaded aws-smithy-checksums v0.63.12
+  Downloaded group v0.12.1
+  Downloaded tiktoken-rs v0.5.9
+  Downloaded crypto-bigint v0.4.9
+  Downloaded p256 v0.11.1
+  Downloaded der v0.6.1
+  Downloaded aws-runtime v1.7.1
+  Downloaded opentelemetry-semantic-conventions v0.27.0
+  Downloaded rocksdb v0.22.0
+  Downloaded opentelemetry-proto v0.27.0
+  Downloaded crc-fast v1.6.0
+  Downloaded aws-smithy-xml v0.60.14
+  Downloaded bindgen v0.69.5
+  Downloaded opentelemetry-otlp v0.27.0
+  Downloaded aws-lc-rs v1.16.0
+  Downloaded opentelemetry-http v0.27.0
+  Downloaded ff v0.12.1
+  Downloaded ecdsa v0.14.8
+  Downloaded base16ct v0.1.1
+  Downloaded sec1 v0.3.0
+  Downloaded rfc6979 v0.3.1
+  Downloaded aws-sdk-ssooidc v1.97.0
+  Downloaded aws-config v1.8.14
+  Downloaded opentelemetry_sdk v0.27.1
+  Downloaded crypto-bigint v0.5.5
+  Downloaded aws-smithy-runtime v1.10.2
+  Downloaded aws-smithy-http-client v1.1.11
+  Downloaded aws-sigv4 v1.4.1
+  Downloaded aws-sdk-sso v1.95.0
+  Downloaded opentelemetry v0.27.1
+  Downloaded fancy-regex v0.12.0
+  Downloaded aws-smithy-types v1.4.5
+  Downloaded aws-smithy-async v1.2.13
+  Downloaded aws-credential-types v1.2.13
+  Downloaded rustc-hash v1.1.0
+  Downloaded cmake v0.1.57
+  Downloaded cexpr v0.6.0
+  Downloaded bytes-utils v0.1.4
+  Downloaded base64-simd v0.8.0
+  Downloaded aws-smithy-query v0.60.14
+  Downloaded aws-sdk-s3 v1.119.0
+  Downloaded librocksdb-sys v0.16.0+8.10.0
+  Downloaded aws-lc-sys v0.37.1
+    Checking subtle v2.6.1
+    Checking bytes v1.11.1
+    Checking num-integer v0.1.46
+    Checking rand_chacha v0.3.1
+    Checking regex-automata v0.4.14
+    Checking digest v0.10.7
+    Checking tokio v1.49.0
+    Checking http v1.4.0
+   Compiling cmake v0.1.57
+   Compiling fs_extra v1.3.0
+   Compiling dunce v1.0.5
+   Compiling aws-lc-rs v1.16.0
+    Checking ahash v0.8.12
+   Compiling rustls v0.23.37
+    Checking num-bigint v0.4.6
+    Checking http-body v1.0.1
+   Compiling zerocopy v0.8.40
+    Checking rand_distr v0.5.1
+    Checking rand v0.8.5
+   Compiling aws-lc-sys v0.37.1
+    Checking num-iter v0.1.45
+    Checking http-body-util v0.1.3
+    Checking hashbrown v0.14.5
+   Compiling clang-sys v1.8.1
+   Compiling libc v0.2.180
+    Checking sha2 v0.10.9
+   Compiling libloading v0.8.9
+   Compiling cexpr v0.6.0
+    Checking hmac v0.12.1
+    Checking sha1 v0.10.6
+    Checking half v2.7.1
+   Compiling bindgen v0.72.1
+   Compiling itertools v0.13.0
+    Checking num-rational v0.4.2
+   Compiling zstd-sys v2.0.16+zstd.1.5.7
+    Checking num v0.4.3
+    Checking ordered-multimap v0.7.3
+    Checking hashlink v0.8.4
+    Checking regex v1.12.3
+    Checking md-5 v0.10.6
+    Checking rust-ini v0.20.0
+    Checking yaml-rust2 v0.8.1
+    Checking config v0.14.1
+    Checking gemm-common v0.18.2
+    Checking gemm-common v0.17.1
+    Checking num-bigint-dig v0.8.6
+   Compiling ppv-lite86 v0.2.21
+    Checking signature v2.2.0
+    Checking rhai v1.24.0
+    Checking ndarray v0.16.1
+    Checking rsa v0.9.10
+    Checking chinese-number v0.7.8
+    Checking gemm-f32 v0.18.2
+    Checking bstr v1.12.1
+    Checking prost v0.13.5
+    Checking gemm-f32 v0.17.1
+    Checking gemm-c32 v0.18.2
+    Checking gemm-c64 v0.18.2
+    Checking gemm-f64 v0.18.2
+   Compiling num_enum_derive v0.7.5
+    Checking gemm-f16 v0.18.2
+    Checking tungstenite v0.28.0
+    Checking axum-core v0.4.5
+    Checking gemm-f16 v0.17.1
+    Checking gemm-c32 v0.17.1
+    Checking gemm-c64 v0.17.1
+    Checking gemm-f64 v0.17.1
+    Checking gemm v0.18.2
+    Checking axum-core v0.5.6
+   Compiling sqlx-postgres v0.8.6
+    Checking ug v0.1.0
+    Checking hkdf v0.12.4
+    Checking prost-types v0.13.5
+    Checking fancy-regex v0.11.0
+    Checking gemm v0.17.1
+    Checking num_enum v0.7.5
+    Checking fancy-regex v0.12.0
+    Checking fancy-regex v0.13.0
+    Checking ort v2.0.0-rc.10
+    Checking zip v1.1.4
+    Checking fraction v0.13.1
+    Checking dashmap v6.1.0
+   Compiling sqlx-mysql v0.8.6
+    Checking rustc-hash v1.1.0
+    Checking jsonschema v0.17.1
+    Checking dashmap v5.5.3
+    Checking metrics v0.22.4
+    Checking tiktoken-rs v0.5.9
+    Checking tungstenite v0.24.0
+    Checking zenoh-collections v1.7.2
+    Checking matchers v0.2.0
+   Compiling zstd-safe v7.2.4
+    Checking arrow-buffer v54.3.1
+    Checking keyed-set v1.1.0
+    Checking uhlc v0.8.2
+    Checking zenoh-buffers v1.7.2
+    Checking tracing-subscriber v0.3.22
+    Checking zenoh-keyexpr v1.7.2
+   Compiling zstd v0.13.3
+    Checking fastbloom v0.14.1
+   Compiling include-flate-compress v0.3.1
+    Checking arrow-data v54.3.1
+    Checking der-parser v10.0.0
+   Compiling libz-sys v1.1.24
+    Checking tokio-util v0.7.18
+    Checking tower v0.5.3
+    Checking tokio-stream v0.1.18
+    Checking async-compression v0.4.41
+    Checking tokio-native-tls v0.3.1
+    Checking mofa-kernel v0.1.0 (C:\Users\Aditya RS\mofa\crates\mofa-kernel)
+   Compiling include-flate-codegen v0.3.1
+    Checking backoff v0.4.0
+    Checking tokio-tungstenite v0.28.0
+    Checking process-wrap v9.0.3
+    Checking sqlx-core v0.8.6
+    Checking ractor v0.15.10
+    Checking axum v0.7.9
+    Checking tokio-tungstenite v0.24.0
+    Checking candle-core v0.8.4
+    Checking zenoh-protocol v1.7.2
+   Compiling zenoh-macros v1.7.2
+    Checking h2 v0.4.13
+    Checking tower-http v0.6.8
+    Checking tower v0.4.13
+    Checking arrow-array v54.3.1
+    Checking rmcp v0.16.0
+    Checking zenoh-runtime v1.7.2
+    Checking zenoh-codec v1.7.2
+   Compiling sqlx-macros-core v0.8.6
+    Checking x509-parser v0.18.1
+    Checking sqlx-sqlite v0.8.6
+    Checking candle-nn v0.8.4
+    Checking zenoh-core v1.7.2
+    Checking arrow-select v54.3.1
+    Checking candle-transformers v0.8.4
+    Checking hyper v1.8.1
+    Checking opentelemetry v0.27.1
+    Checking zenoh-util v1.7.2
+    Checking mofa-extra v0.1.0 (C:\Users\Aditya RS\mofa\crates\mofa-extra)
+    Checking http v0.2.12
+    Checking arrow-cast v54.3.1
+    Checking opentelemetry_sdk v0.27.1
+    Checking zenoh-sync v1.7.2
+    Checking zenoh-config v1.7.2
+   Compiling stabby-macros v72.1.1
+    Checking http-body v0.4.6
+    Checking hyper-util v0.1.20
+    Checking rust-embed-utils v8.11.0
+    Checking sha3 v0.10.8
+    Checking arrow-ipc v54.3.1
+    Checking arrow-csv v54.3.1
+    Checking arrow-json v54.3.1
+   Compiling sqlx-macros v0.8.6
+   Compiling libssh2-sys v0.3.1
+    Checking arrow-ord v54.3.1
+    Checking arrow-string v54.3.1
+    Checking arrow-arith v54.3.1
+    Checking arrow-row v54.3.1
+    Checking hyper-tls v0.6.0
+    Checking hyper-timeout v0.5.2
+    Checking axum v0.8.8
+    Checking vsimd v0.8.0
+    Checking outref v0.5.2
+    Checking zenoh-crypto v1.7.2
+    Checking zenoh-task v1.7.2
+    Checking bytes-utils v0.1.4
+    Checking arrow v54.3.1
+    Checking dora-message v0.7.0
+    Checking shared_memory_extended v0.13.0
+    Checking raw_sync_2 v0.1.5
+    Checking base64-simd v0.8.0
+    Checking dora-arrow-convert v0.4.1
+    Checking process-wrap v8.2.1
+   Compiling bzip2-sys v0.1.13+1.0.8
+    Checking shared-memory-server v0.4.1
+    Checking aws-smithy-types v1.4.5
+    Checking dora-operator-api-types v0.4.1
+    Checking aws-smithy-async v1.2.13
+    Checking der v0.6.1
+   Compiling rustls v0.21.12
+   Compiling bindgen v0.69.5
+    Checking stabby-abi v72.1.1
+    Checking aws-smithy-runtime-api v1.11.5
+    Checking crypto-bigint v0.4.9
+    Checking dora-operator-api v0.4.1
+   Compiling itertools v0.10.5
+    Checking spki v0.6.0
+    Checking ff v0.12.1
+    Checking pkcs8 v0.9.0
+   Compiling lz4-sys v1.11.1+lz4-1.10.0
+    Checking base16ct v0.1.1
+   Compiling lazycell v1.3.0
+    Checking group v0.12.1
+    Checking sec1 v0.3.0
+    Checking sqlx v0.8.6
+    Checking h2 v0.3.27
+    Checking rfc6979 v0.3.1
+    Checking elliptic-curve v0.12.3
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+warning: zstd-sys@2.0.16+zstd.1.5.7: cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+error: failed to run custom build command for `zstd-sys v2.0.16+zstd.1.5.7`
+
+Caused by:
+  process didn't exit successfully: `C:\Users\Aditya RS\mofa\target\debug\build\zstd-sys-0682559a55d19cc1\build-script-build` (exit code: 101)
+  --- stdout
+  cargo:rerun-if-env-changed=ZSTD_SYS_USE_PKG_CONFIG
+  OUT_DIR = Some(C:\Users\Aditya RS\mofa\target\debug\build\zstd-sys-ebec6efe934c8bda\out)
+  OPT_LEVEL = Some(0)
+  TARGET = Some(x86_64-pc-windows-msvc)
+  CARGO_ENCODED_RUSTFLAGS = Some()
+  cargo:rerun-if-env-changed=VCINSTALLDIR
+  VCINSTALLDIR = None
+  cargo:rerun-if-env-changed=VSTEL_MSBuildProjectFullPath
+  VSTEL_MSBuildProjectFullPath = None
+  cargo:rerun-if-env-changed=VCToolsVersion
+  VCToolsVersion = None
+  cargo:rerun-if-env-changed=VSCMD_ARG_VCVARS_SPECTRE
+  VSCMD_ARG_VCVARS_SPECTRE = None
+  cargo:rerun-if-env-changed=WindowsSdkDir
+  WindowsSdkDir = None
+  cargo:rerun-if-env-changed=WindowsSDKVersion
+  WindowsSDKVersion = None
+  cargo:rerun-if-env-changed=LIB
+  LIB = None
+  PATH = Some(C:\Users\Aditya RS\mofa\target\debug\deps;C:\Users\Aditya RS\.rustup\toolchains\stable-x86_64-pc-windows-msvc\lib\rustlib\x86_64-pc-windows-msvc\lib;C:\miniforge3;C:\miniforge3\Library\mingw-w64\bin;C:\miniforge3\Library\usr\bin;C:\miniforge3\Library\bin;C:\miniforge3\Scripts;C:\miniforge3\bin;C:\Program Files\Common Files\Oracle\Java\javapath;C:\Program Files (x86)\Common Files\Oracle\Java\java8path;C:\Program Files (x86)\Common Files\Oracle\Java\javapath;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0;C:\WINDOWS\System32\OpenSSH;C:\Program Files\Java\jdk-23\bin;C:\buildtool\apache-maven-3.9.9\bin;C:\Users\Aditya RS\AppData\Local\nvm;C:\nvm4w\nodejs;C:\Program Files\nodejs;C:\Program Files\Git\cmd;C:\Users\Aditya RS\Downloads\mongodb-windows-x86_64-8.2.0-signed.msi;C:\Program Files\Vagrant\bin;C:\Program Files\CMake\bin;C:\Program Files (x86)\Windows Kits\10\Windows Performance Toolkit;C:\Program Files\Cloudflare\Cloudflare WARP;C:\Users\Aditya RS\.pixi\bin;C:\Users\Aditya RS\.cargo\bin;C:\Users\Aditya RS\AppData\Roaming\Python\Python312\Scripts;C:\miniforge3;C:\miniforge3\Library\mingw-w64\bin;C:\miniforge3\Library\usr\bin;C:\miniforge3\Library\bin;C:\miniforge3\Scripts;C:\miniforge3\bin;C:\Program Files\Common Files\Oracle\Java\javapath;C:\Program Files (x86)\Common Files\Oracle\Java\java8path;C:\Program Files (x86)\Common Files\Oracle\Java\javapath;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0;C:\WINDOWS\System32\OpenSSH;C:\Program Files\Java\jdk-23\bin;C:\buildtool\apache-maven-3.9.9\bin;C:\Users\Aditya RS\AppData\Local\nvm;C:\nvm4w\nodejs;C:\Program Files\nodejs;C:\Program Files\Git\cmd;C:\Users\Aditya RS\Downloads\mongodb-windows-x86_64-8.2.0-signed.msi;C:\Program Files\Cloudflare\Cloudflare WARP;C:\Program Files\Vagrant\bin;C:\Users\Aditya RS\AppData\Local\Programs\Python\Python39\Scripts;C:\Users\Aditya RS\AppData\Local\Programs\Python\Python39;C:\Program Files\MySQL\MySQL Shell 8.0\bin;C:\Users\Aditya RS\AppData\Local\Microsoft\WindowsApps;C:\Users\Aditya RS\AppData\Local\Programs\Microsoft VS Code\bin;C:\Program Files\JetBrains\IntelliJ IDEA Community Edition 2024.3.2.1\bin;.;C:\msys64\mingw64\bin;C:\MinGW\bin;C:\Program Files\Git\bin;C:\Program Files\Apache\Maven\bin;C:\Users\Aditya RS\AppData\Local\Programs\cursor\resources\app\bin;C:\Users\Aditya RS\Downloads\apache-maven-3.9.9-bin\apache-maven-3.9.9\bin;C:\Users\Aditya RS\AppData\Local\nvm;C:\nvm4w\nodejs;C:\Users\Aditya RS\AppData\Roaming\npm;C:\Program Files\nodejs;C:\Users\Aditya RS\AppData\Local\Programs\Windsurf\bin;C:\miniforge3;C:\miniforge3\Scripts;C:\miniforge3\condabin;C:\Users\Aditya RS\AppData\Local\Python\bin;C:\Users\Aditya RS\AppData\Local\Programs\Antigravity\bin;C:\Users\Aditya RS\AppData\Roaming\Python\Python312\Scripts;C:\Users\Aditya RS\.rustup\toolchains\stable-x86_64-pc-windows-msvc\bin)
+  cargo:rerun-if-env-changed=INCLUDE
+  INCLUDE = None
+  HOST = Some(x86_64-pc-windows-msvc)
+  cargo:rerun-if-env-changed=CC_x86_64-pc-windows-msvc
+  CC_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=CC_x86_64_pc_windows_msvc
+  CC_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=HOST_CC
+  HOST_CC = None
+  cargo:rerun-if-env-changed=CC
+  CC = None
+  cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+  CRATE_CC_NO_DEFAULTS = None
+  CARGO_CFG_TARGET_FEATURE = Some(cmpxchg16b,fxsr,sse,sse2,sse3)
+  DEBUG = Some(true)
+  cargo:rerun-if-env-changed=CFLAGS
+  CFLAGS = None
+  cargo:rerun-if-env-changed=HOST_CFLAGS
+  HOST_CFLAGS = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64_pc_windows_msvc
+  CFLAGS_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64-pc-windows-msvc
+  CFLAGS_x86_64-pc-windows-msvc = None
+  OUT_DIR = Some(C:\Users\Aditya RS\mofa\target\debug\build\zstd-sys-ebec6efe934c8bda\out)
+  cargo:rerun-if-env-changed=CC_ENABLE_DEBUG_OUTPUT
+  cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+  CRATE_CC_NO_DEFAULTS = None
+  TARGET = Some(x86_64-pc-windows-msvc)
+  CARGO_CFG_TARGET_FEATURE = Some(cmpxchg16b,fxsr,sse,sse2,sse3)
+  HOST = Some(x86_64-pc-windows-msvc)
+  cargo:rerun-if-env-changed=CFLAGS
+  CFLAGS = None
+  cargo:rerun-if-env-changed=HOST_CFLAGS
+  HOST_CFLAGS = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64_pc_windows_msvc
+  CFLAGS_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64-pc-windows-msvc
+  CFLAGS_x86_64-pc-windows-msvc = None
+  OUT_DIR = Some(C:\Users\Aditya RS\mofa\target\debug\build\zstd-sys-ebec6efe934c8bda\out)
+  cargo:rerun-if-env-changed=CC_ENABLE_DEBUG_OUTPUT
+  cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+  CRATE_CC_NO_DEFAULTS = None
+  TARGET = Some(x86_64-pc-windows-msvc)
+  CARGO_CFG_TARGET_FEATURE = Some(cmpxchg16b,fxsr,sse,sse2,sse3)
+  HOST = Some(x86_64-pc-windows-msvc)
+  cargo:rerun-if-env-changed=CFLAGS
+  CFLAGS = None
+  cargo:rerun-if-env-changed=HOST_CFLAGS
+  HOST_CFLAGS = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64_pc_windows_msvc
+  CFLAGS_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64-pc-windows-msvc
+  CFLAGS_x86_64-pc-windows-msvc = None
+  OUT_DIR = Some(C:\Users\Aditya RS\mofa\target\debug\build\zstd-sys-ebec6efe934c8bda\out)
+  cargo:rerun-if-env-changed=CC_ENABLE_DEBUG_OUTPUT
+  cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+  CRATE_CC_NO_DEFAULTS = None
+  TARGET = Some(x86_64-pc-windows-msvc)
+  CARGO_CFG_TARGET_FEATURE = Some(cmpxchg16b,fxsr,sse,sse2,sse3)
+  HOST = Some(x86_64-pc-windows-msvc)
+  cargo:rerun-if-env-changed=CFLAGS
+  CFLAGS = None
+  cargo:rerun-if-env-changed=HOST_CFLAGS
+  HOST_CFLAGS = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64_pc_windows_msvc
+  CFLAGS_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64-pc-windows-msvc
+  CFLAGS_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=CC_ENABLE_DEBUG_OUTPUT
+  debug.c
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  
+  entropy_common.c
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  
+  error_private.c
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  
+  fse_decompress.c
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  
+  pool.c
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  
+  threading.c
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  
+  zstd_common.c
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  
+  fse_compress.c
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  
+  hist.c
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  
+  huf_compress.c
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  
+  exit code: 0
+  exit code: 0
+  exit code: 0
+  exit code: 0
+  exit code: 0
+  exit code: 0
+  exit code: 0
+  exit code: 0
+  exit code: 0
+  zstd_compress.c
+  exit code: cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  
+  zstd_compress_literals.c
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  
+  zstd_compress_sequences.c
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  
+  zstd_compress_superblock.c
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  
+  zstd_double_fast.c
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  zstd_fast.c
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  
+  zstd_lazy.c
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  
+  zstd_ldm.c
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  
+  zstd_opt.c
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  
+  zstd_preSplit.c
+  0
+  exit code: 0
+  exit code: 0
+  exit code: 0
+  exit code: 0
+  exit code: 0
+  exit code: 0
+  exit code: 0
+  exit code: 0
+  exit code: 0
+  zstdmt_compress.c
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  huf_decompress.c
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  
+  zstd_ddict.c
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  
+  zstd_decompress.c
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  
+  zstd_decompress_block.c
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  
+  cover.c
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  
+  divsufsort.c
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  
+  fastcover.c
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  
+  zdict.c
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  
+  exit code: 0
+  exit code: 0
+  exit code: 0
+  exit code: 0
+  exit code: 0
+  exit code: 0
+  exit code: 0
+  exit code: 0
+  exit code: 0
+  zstd_v01.c
+  exit code: cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  
+  zstd_v02.c
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  
+  zstd_v03.c
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  
+  zstd_v04.c
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  
+  zstd_v05.c
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  
+  zstd_v06.c
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  zstd_v07.c
+  cargo:warning=cl : Command line warning D9002 : ignoring unknown option '-fvisibility=hidden'
+  
+  0
+  exit code: 0
+  exit code: 0
+  exit code: 0
+  exit code: 0
+  exit code: 0
+  exit code: 0
+  exit code: 0
+  cargo:rerun-if-env-changed=AR_x86_64-pc-windows-msvc
+  AR_x86_64-pc-windows-msvc = None
+  cargo:rerun-if-env-changed=AR_x86_64_pc_windows_msvc
+  AR_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=HOST_AR
+  HOST_AR = None
+  cargo:rerun-if-env-changed=AR
+  AR = None
+  cargo:rerun-if-env-changed=ARFLAGS
+  ARFLAGS = None
+  cargo:rerun-if-env-changed=HOST_ARFLAGS
+  HOST_ARFLAGS = None
+  cargo:rerun-if-env-changed=ARFLAGS_x86_64_pc_windows_msvc
+  ARFLAGS_x86_64_pc_windows_msvc = None
+  cargo:rerun-if-env-changed=ARFLAGS_x86_64-pc-windows-msvc
+  ARFLAGS_x86_64-pc-windows-msvc = None
+  cargo:rustc-link-lib=static=zstd
+  cargo:rustc-link-search=native=C:\Users\Aditya RS\mofa\target\debug\build\zstd-sys-ebec6efe934c8bda\out
+  cargo:root=C:\Users\Aditya RS\mofa\target\debug\build\zstd-sys-ebec6efe934c8bda\out
+  cargo:include=C:\Users\Aditya RS\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\zstd-sys-2.0.16+zstd.1.5.7\zstd/lib
+
+  --- stderr
+
+  thread 'main' (15388) panicked at C:\Users\Aditya RS\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\bindgen-0.72.1\lib.rs:616:27:
+  Unable to find libclang: "couldn't find any valid shared libraries matching: ['clang.dll', 'libclang.dll'], set the `LIBCLANG_PATH` environment variable to a path where one of these files can be found (invalid: [])"
+  note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+warning: build failed, waiting for other jobs to finish...

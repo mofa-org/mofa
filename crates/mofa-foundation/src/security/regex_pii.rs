@@ -339,18 +339,18 @@ mod tests {
     async fn detect_credit_card_with_luhn() {
         let detector = RegexPiiDetector::with_categories(vec![SensitiveDataCategory::CreditCard]);
         // Valid Visa test number
-        let matches = detector.detect("Card: 4111 1111 1111 1111").await.unwrap();
+        let matches = detector.detect("Card: 4111 1111 1111 1111").await.expect("failed");
         assert_eq!(matches.len(), 1);
 
         // Invalid number should not match
-        let matches = detector.detect("Card: 4111 1111 1111 1112").await.unwrap();
+        let matches = detector.detect("Card: 4111 1111 1111 1112").await.expect("failed");
         assert_eq!(matches.len(), 0);
     }
 
     #[tokio::test]
     async fn detect_ssn() {
         let detector = RegexPiiDetector::with_categories(vec![SensitiveDataCategory::Ssn]);
-        let matches = detector.detect("SSN: 123-45-6789").await.unwrap();
+        let matches = detector.detect("SSN: 123-45-6789").await.expect("failed");
         assert_eq!(matches.len(), 1);
         assert_eq!(matches[0].original, "123-45-6789");
     }

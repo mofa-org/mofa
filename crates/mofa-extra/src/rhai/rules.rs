@@ -1014,7 +1014,7 @@ mod tests {
             .then_return(serde_json::json!("high"))
             .build();
 
-        engine.register_rule(rule).await.unwrap();
+        engine.register_rule(rule).await.expect("failed");
 
         assert_eq!(engine.rule_count().await, 1);
     }
@@ -1028,7 +1028,7 @@ mod tests {
             .then_execute(r#"value * 2"#)
             .build();
 
-        engine.register_rule(rule).await.unwrap();
+        engine.register_rule(rule).await.expect("failed");
 
         let mut context = ScriptContext::new().with_variable("value", 150).unwrap();
 
@@ -1052,7 +1052,7 @@ mod tests {
             .then_return(serde_json::json!("high"))
             .build();
 
-        engine.register_rule(rule).await.unwrap();
+        engine.register_rule(rule).await.expect("failed");
 
         let mut context = ScriptContext::new().with_variable("value", 50).unwrap();
 
@@ -1087,14 +1087,14 @@ mod tests {
                 .build(),
         ];
 
-        engine.register_rules(rules).await.unwrap();
+        engine.register_rules(rules).await.expect("failed");
 
         // Create rule group
         let group = RuleGroupDefinition::new("value_checker", "Value Checker")
             .with_match_mode(RuleMatchMode::FirstMatch)
             .with_rules(vec!["rule_high", "rule_medium", "rule_low"]);
 
-        engine.register_group(group).await.unwrap();
+        engine.register_group(group).await.expect("failed");
 
         // Test high value
         let mut context = ScriptContext::new().with_variable("value", 150).unwrap();
@@ -1127,7 +1127,7 @@ mod tests {
             .then_return(serde_json::json!("positive"))
             .build();
 
-        engine.register_rule(rule).await.unwrap();
+        engine.register_rule(rule).await.expect("failed");
 
         let group = RuleGroupDefinition::new("number_group", "Number Group")
             .with_rules(vec!["positive_rule"])
@@ -1135,7 +1135,7 @@ mod tests {
                 value: serde_json::json!("non_positive"),
             });
 
-        engine.register_group(group).await.unwrap();
+        engine.register_group(group).await.expect("failed");
 
         // Test negative value, should use default action
         let mut context = ScriptContext::new().with_variable("value", -10).unwrap();
@@ -1158,7 +1158,7 @@ mod tests {
             .then_set("status", serde_json::json!("processed"))
             .build();
 
-        engine.register_rule(rule).await.unwrap();
+        engine.register_rule(rule).await.expect("failed");
 
         let mut context = ScriptContext::new();
         let result = engine
@@ -1334,7 +1334,7 @@ mod tests {
             metadata: HashMap::new(),
         };
 
-        engine.register_rule(rule).await.unwrap();
+        engine.register_rule(rule).await.expect("failed");
 
         let mut context = ScriptContext::new();
         let result = engine
@@ -1379,7 +1379,7 @@ mod tests {
             metadata: HashMap::new(),
         };
 
-        engine.register_rule(rule).await.unwrap();
+        engine.register_rule(rule).await.expect("failed");
 
         let mut context = ScriptContext::new();
         let result = engine

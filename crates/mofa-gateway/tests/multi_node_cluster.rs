@@ -92,7 +92,7 @@ impl TestCluster {
     async fn start_all(&self) {
         // Start nodes with small delays to prevent simultaneous candidate transitions
         for (idx, (node_id, cp)) in self.nodes.iter().enumerate() {
-            cp.start().await.unwrap();
+            cp.start().await.expect("failed");
             tracing::debug!("Started node {}", node_id);
             // Small delay between starts to stagger election timeouts
             if idx < self.nodes.len() - 1 {
@@ -274,7 +274,7 @@ async fn test_leader_failover() {
     tracing::info!("Initial leader: {}", leader_id);
 
     // Stop the leader
-    leader_cp.stop().await.unwrap();
+    leader_cp.stop().await.expect("failed");
     tracing::info!("Stopped leader {}", leader_id);
 
     // Wait for new leader election - check multiple times

@@ -96,7 +96,7 @@ async fn test_registry_register_and_query() {
         .build();
     let agent = Arc::new(RwLock::new(TestAgent::new("agent-1", "Agent One", caps)));
 
-    registry.register(agent).await.unwrap();
+    registry.register(agent).await.expect("failed");
 
     assert!(registry.contains("agent-1").await);
     assert_eq!(registry.count().await, 1);
@@ -116,8 +116,8 @@ async fn test_registry_find_by_capabilities() {
     let agent_a = Arc::new(RwLock::new(TestAgent::new("agent-a", "Planner", caps_a)));
     let agent_b = Arc::new(RwLock::new(TestAgent::new("agent-b", "Writer", caps_b)));
 
-    registry.register(agent_a).await.unwrap();
-    registry.register(agent_b).await.unwrap();
+    registry.register(agent_a).await.expect("failed");
+    registry.register(agent_b).await.expect("failed");
 
     let requirements = AgentRequirements::builder().require_tag("writer").build();
     let matched = registry.find_by_capabilities(&requirements).await;
@@ -160,12 +160,12 @@ async fn test_registry_concurrent_register() {
                 &format!("Batch Agent {i}"),
                 caps,
             )));
-            reg.register(agent).await.unwrap();
+            reg.register(agent).await.expect("failed");
         }));
     }
 
     for handle in handles {
-        handle.await.unwrap();
+        handle.await.expect("failed");
     }
 
     assert_eq!(registry.count().await, 5);

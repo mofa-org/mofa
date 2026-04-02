@@ -539,13 +539,13 @@ mod tests {
 
         assert_eq!(dataflow.state().await, DataflowState::Running);
 
-        dataflow.pause().await.unwrap();
+        dataflow.pause().await.expect("failed");
         assert_eq!(dataflow.state().await, DataflowState::Paused);
 
-        dataflow.resume().await.unwrap();
+        dataflow.resume().await.expect("failed");
         assert_eq!(dataflow.state().await, DataflowState::Running);
 
-        dataflow.stop().await.unwrap();
+        dataflow.stop().await.expect("failed");
         assert_eq!(dataflow.state().await, DataflowState::Stopped);
     }
 

@@ -28,7 +28,7 @@
 use std::io::Write;
 use futures::StreamExt;
 use mofa_sdk::{
-    llm::{LLMResult, Role},
+    llm::LLMResult,
     persistence::quick_agent_with_postgres,
 };
 use tracing::{info, Level};

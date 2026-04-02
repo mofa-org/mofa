@@ -17,7 +17,7 @@ async fn last_call_returns_most_recent_call() {
     tool.execute(ToolInput::from_json(json!({"id": 1}))).await;
     tool.execute(ToolInput::from_json(json!({"id": 2}))).await;
 
-    let last = tool.last_call().await.unwrap();
+    let last = tool.last_call().await.expect("failed");
     assert_eq!(last.arguments, json!({"id": 2}));
 }
 
@@ -27,7 +27,7 @@ async fn nth_call_returns_first_call() {
     tool.execute(ToolInput::from_json(json!({"id": 1}))).await;
     tool.execute(ToolInput::from_json(json!({"id": 2}))).await;
 
-    let first = tool.nth_call(0).await.unwrap();
+    let first = tool.nth_call(0).await.expect("failed");
     assert_eq!(first.arguments, json!({"id": 1}));
 }
 
@@ -51,8 +51,8 @@ async fn nth_call_works_after_interleaved_failures() {
     let res2 = tool.execute(ToolInput::from_json(json!({"id": 2}))).await;
     assert!(res2.success);
 
-    let first = tool.nth_call(0).await.unwrap();
-    let second = tool.nth_call(1).await.unwrap();
+    let first = tool.nth_call(0).await.expect("failed");
+    let second = tool.nth_call(1).await.expect("failed");
 
     assert_eq!(first.arguments, json!({"id": 1}));
     assert_eq!(second.arguments, json!({"id": 2}));

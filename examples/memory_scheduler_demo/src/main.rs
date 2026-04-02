@@ -8,7 +8,7 @@
 //!
 //! Run: `cargo run -p memory_scheduler_demo`
 
-use mofa_foundation::scheduler::{AdmissionOutcome, MemoryBudget, MemoryPolicy, MemoryScheduler};
+use mofa_foundation::scheduler::{MemoryBudget, MemoryPolicy, MemoryScheduler};
 
 fn main() {
     println!("=== Memory-Budgeted Scheduler Demo ===\n");

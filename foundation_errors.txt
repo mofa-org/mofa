@@ -1,0 +1,7 @@
+    Blocking waiting for file lock on artifact directory
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 57.15s
+  Executable unittests src\lib.rs (target\debug\deps\mofa_foundation-f1b3d3d861f785a4.exe)
+  Executable tests\hitl_integration.rs (target\debug\deps\hitl_integration-ddbb1f1442585ee0.exe)
+  Executable tests\mcp_integration.rs (target\debug\deps\mcp_integration-d82c19c948e7ef05.exe)
+  Executable tests\rag_streaming_integration.rs (target\debug\deps\rag_streaming_integration-69b953fa0f80f780.exe)
+  Executable tests\swarm_scheduler_integration.rs (target\debug\deps\swarm_scheduler_integration-9ef788ee7404ae04.exe)

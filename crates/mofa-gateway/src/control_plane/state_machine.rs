@@ -236,7 +236,7 @@ mod tests {
             metadata: metadata.clone(),
         };
 
-        sm.apply(command).await.unwrap();
+        sm.apply(command).await.expect("failed");
 
         let registry = sm.get_agent_registry().await;
         assert!(registry.contains_key("agent-1"));
@@ -252,12 +252,12 @@ mod tests {
             agent_id: "agent-1".to_string(),
             metadata,
         };
-        sm.apply(register_cmd).await.unwrap();
+        sm.apply(register_cmd).await.expect("failed");
 
         let unregister_cmd = StateMachineCommand::UnregisterAgent {
             agent_id: "agent-1".to_string(),
         };
-        sm.apply(unregister_cmd).await.unwrap();
+        sm.apply(unregister_cmd).await.expect("failed");
 
         let registry = sm.get_agent_registry().await;
         assert!(!registry.contains_key("agent-1"));
@@ -276,7 +276,7 @@ mod tests {
             node_id: node_id.clone(),
             address: address.clone(),
         };
-        sm.apply(add_cmd).await.unwrap();
+        sm.apply(add_cmd).await.expect("failed");
 
         let membership_arc = sm.membership();
         let membership = membership_arc.read().await;
@@ -284,7 +284,7 @@ mod tests {
         drop(membership);
 
         let remove_cmd = StateMachineCommand::RemoveNode { node_id };
-        sm.apply(remove_cmd).await.unwrap();
+        sm.apply(remove_cmd).await.expect("failed");
 
         let membership_arc = sm.membership();
         let membership = membership_arc.read().await;

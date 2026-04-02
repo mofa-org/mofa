@@ -19,9 +19,9 @@ mod tests {
         let coordinator =
             AgentCoordinator::new(bus.clone(), CoordinationStrategy::PeerToPeer).await;
 
-        coordinator.register_role("peer_1", "peer").await.unwrap();
-        coordinator.register_role("peer_2", "peer").await.unwrap();
-        coordinator.register_role("peer_3", "peer").await.unwrap();
+        coordinator.register_role("peer_1", "peer").await.expect("failed");
+        coordinator.register_role("peer_2", "peer").await.expect("failed");
+        coordinator.register_role("peer_3", "peer").await.expect("failed");
 
         let task_msg = in_memory_message();
         let bus_1 = bus.clone();
@@ -121,9 +121,9 @@ mod tests {
         }
 
         let coordinator = AgentCoordinator::new(bus.clone(), CoordinationStrategy::Pipeline).await;
-        coordinator.register_role("stage1", "stage1").await.unwrap();
-        coordinator.register_role("stage2", "stage2").await.unwrap();
-        coordinator.register_role("stage3", "stage3").await.unwrap();
+        coordinator.register_role("stage1", "stage1").await.expect("failed");
+        coordinator.register_role("stage2", "stage2").await.expect("failed");
+        coordinator.register_role("stage3", "stage3").await.expect("failed");
 
         // Each stage echoes the same root task id back to the coordinator
         let root_task_id = "pipeline-root-123".to_string();
@@ -224,9 +224,9 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(stage1.await.unwrap(), expected_task_id);
-        assert_eq!(stage2.await.unwrap(), expected_task_id);
-        assert_eq!(stage3.await.unwrap(), expected_task_id);
+        assert_eq!(stage1.await.expect("failed"), expected_task_id);
+        assert_eq!(stage2.await.expect("failed"), expected_task_id);
+        assert_eq!(stage3.await.expect("failed"), expected_task_id);
     }
 
     #[tokio::test]
@@ -240,9 +240,9 @@ mod tests {
         register_point_to_point_channel(&bus, "coordinator", "stage3").await;
 
         let coordinator = AgentCoordinator::new(bus.clone(), CoordinationStrategy::Pipeline).await;
-        coordinator.register_role("stage1", "stage1").await.unwrap();
-        coordinator.register_role("stage2", "stage2").await.unwrap();
-        coordinator.register_role("stage3", "stage3").await.unwrap();
+        coordinator.register_role("stage1", "stage1").await.expect("failed");
+        coordinator.register_role("stage2", "stage2").await.expect("failed");
+        coordinator.register_role("stage3", "stage3").await.expect("failed");
 
         let bus_stage1 = bus.clone();
         tokio::spawn(async move {
@@ -308,9 +308,9 @@ mod tests {
         }
 
         let coordinator = AgentCoordinator::new(bus.clone(), CoordinationStrategy::Pipeline).await;
-        coordinator.register_role("stage1", "stage1").await.unwrap();
-        coordinator.register_role("stage2", "stage2").await.unwrap();
-        coordinator.register_role("stage3", "stage3").await.unwrap();
+        coordinator.register_role("stage1", "stage1").await.expect("failed");
+        coordinator.register_role("stage2", "stage2").await.expect("failed");
+        coordinator.register_role("stage3", "stage3").await.expect("failed");
 
         let bus_stage1 = bus.clone();
         tokio::spawn(async move {

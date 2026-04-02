@@ -16,14 +16,14 @@ async fn test_gateway_startup() {
         enable_circuit_breakers: true,
     };
 
-    let mut gateway = Gateway::new(config).await.unwrap();
-    gateway.start().await.unwrap();
+    let mut gateway = Gateway::new(config).await.expect("failed");
+    gateway.start().await.expect("failed");
 
     // Gateway should start successfully
     // Note: We can't easily test the HTTP server without making actual requests,
     // but we can verify it starts without errors
 
-    gateway.stop().await.unwrap();
+    gateway.stop().await.expect("failed");
 }
 
 #[tokio::test]
@@ -35,8 +35,8 @@ async fn test_gateway_metrics_endpoint() {
         enable_circuit_breakers: true,
     };
 
-    let mut gateway = Gateway::new(config).await.unwrap();
-    gateway.start().await.unwrap();
+    let mut gateway = Gateway::new(config).await.expect("failed");
+    gateway.start().await.expect("failed");
 
     // Get metrics
     let metrics = gateway.metrics();
@@ -52,7 +52,7 @@ async fn test_gateway_metrics_endpoint() {
         "Should contain node metrics"
     );
 
-    gateway.stop().await.unwrap();
+    gateway.stop().await.expect("failed");
 }
 
 #[tokio::test]
@@ -66,11 +66,11 @@ async fn test_gateway_with_control_plane() {
         enable_circuit_breakers: true,
     };
 
-    let mut gateway = Gateway::with_control_plane(config, None).await.unwrap();
-    gateway.start().await.unwrap();
+    let mut gateway = Gateway::with_control_plane(config, None).await.expect("failed");
+    gateway.start().await.expect("failed");
 
     // Gateway should work with or without control plane
-    gateway.stop().await.unwrap();
+    gateway.stop().await.expect("failed");
 }
 
 #[tokio::test]
@@ -85,9 +85,9 @@ async fn test_load_balancer_algorithms() {
     lb_rr.add_node(node1.clone()).await;
     lb_rr.add_node(node2.clone()).await;
 
-    let selected1 = lb_rr.select_node().await.unwrap().unwrap();
-    let selected2 = lb_rr.select_node().await.unwrap().unwrap();
-    let selected3 = lb_rr.select_node().await.unwrap().unwrap();
+    let selected1 = lb_rr.select_node().await.expect("failed").unwrap();
+    let selected2 = lb_rr.select_node().await.expect("failed").unwrap();
+    let selected3 = lb_rr.select_node().await.expect("failed").unwrap();
 
     // Round-robin should cycle through nodes
     assert_eq!(selected1, node1);
@@ -100,7 +100,7 @@ async fn test_load_balancer_algorithms() {
     lb_lc.add_node(node2.clone()).await;
 
     // Initially should select first node
-    let selected = lb_lc.select_node().await.unwrap().unwrap();
+    let selected = lb_lc.select_node().await.expect("failed").unwrap();
     assert_eq!(selected, node1);
 
     // Increment connections for node1
@@ -108,7 +108,7 @@ async fn test_load_balancer_algorithms() {
     lb_lc.increment_connections(&node1).await;
 
     // Now should select node2 (fewer connections)
-    let selected = lb_lc.select_node().await.unwrap().unwrap();
+    let selected = lb_lc.select_node().await.expect("failed").unwrap();
     assert_eq!(selected, node2);
 }
 
@@ -124,7 +124,7 @@ async fn test_circuit_breaker_integration() {
     let breaker = registry.get_or_create(&node_id).await;
 
     // Initially closed
-    assert!(breaker.try_acquire().await.unwrap());
+    assert!(breaker.try_acquire().await.expect("failed"));
 
     // Record failures
     for _ in 0..3 {
@@ -132,15 +132,15 @@ async fn test_circuit_breaker_integration() {
     }
 
     // Should be open now
-    assert!(!breaker.try_acquire().await.unwrap());
+    assert!(!breaker.try_acquire().await.expect("failed"));
 
     // Wait for timeout (longer than 50ms to ensure transition)
     tokio::time::sleep(Duration::from_millis(100)).await;
 
     // Should transition to half-open
-    assert!(breaker.try_acquire().await.unwrap());
+    assert!(breaker.try_acquire().await.expect("failed"));
 
     // Success should close it
     breaker.record_success().await;
-    assert!(breaker.try_acquire().await.unwrap());
+    assert!(breaker.try_acquire().await.expect("failed"));
 }

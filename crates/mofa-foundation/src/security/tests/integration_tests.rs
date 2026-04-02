@@ -143,17 +143,17 @@ async fn test_public_chatbot_moderation() {
 
     // Legitimate query - should pass
     let query1 = "What is the weather forecast for tomorrow?";
-    let result1 = moderator.moderate(query1, &policy).await.unwrap();
+    let result1 = moderator.moderate(query1, &policy).await.expect("failed");
     assert!(matches!(result1, ModerationVerdict::Allow));
 
     // Toxic content - should be blocked
     let query2 = "This is hate speech content";
-    let result2 = moderator.moderate(query2, &policy).await.unwrap();
+    let result2 = moderator.moderate(query2, &policy).await.expect("failed");
     assert!(result2.is_blocked());
 
     // Borderline content - should be flagged but allowed
     let query3 = "I have a concern about the service";
-    let result3 = moderator.moderate(query3, &policy).await.unwrap();
+    let result3 = moderator.moderate(query3, &policy).await.expect("failed");
     assert!(matches!(result3, ModerationVerdict::Flag { .. }));
     assert!(!result3.is_blocked()); // Flagged but not blocked
 }
@@ -179,7 +179,7 @@ async fn test_llm_agent_injection_defense() {
     ];
 
     for query in legitimate_queries {
-        let result = guard.check_prompt(query).await.unwrap();
+        let result = guard.check_prompt(query).await.expect("failed");
         assert!(
             result.is_allowed(),
             "Legitimate query '{}' should not be flagged",
@@ -197,7 +197,7 @@ async fn test_llm_agent_injection_defense() {
     ];
 
     for attempt in injection_attempts {
-        let result = guard.check_prompt(attempt).await.unwrap();
+        let result = guard.check_prompt(attempt).await.expect("failed");
         // Injection attempts should be blocked
         assert!(
             result.is_blocked(),
@@ -328,23 +328,23 @@ async fn test_role_inheritance_hierarchy() {
 async fn test_edge_cases_and_error_handling() {
     // Empty text
     let detector = RegexPiiDetector::new();
-    let detections = detector.detect("").await.unwrap();
+    let detections = detector.detect("").await.expect("failed");
     assert_eq!(detections.len(), 0);
 
     // Very long text (performance test)
     let long_text = "user@example.com ".repeat(1000);
-    let detections = detector.detect(&long_text).await.unwrap();
+    let detections = detector.detect(&long_text).await.expect("failed");
     assert!(detections.len() > 0);
 
     // Overlapping PII (email in credit card format)
     let tricky_text = "Contact 4111-1111-1111-1111@example.com";
-    let detections = detector.detect(tricky_text).await.unwrap();
+    let detections = detector.detect(tricky_text).await.expect("failed");
     // Should detect both patterns
     assert!(detections.len() >= 1);
 
     // Unicode and special characters
     let unicode_text = "Email: 用户@例子.com, Phone: +1-555-123-4567";
-    let detections = detector.detect(unicode_text).await.unwrap();
+    let detections = detector.detect(unicode_text).await.expect("failed");
     // Should still detect phone number
     assert!(detections.iter().any(|d| matches!(
         d.category,
@@ -377,7 +377,7 @@ async fn test_performance_under_load() {
     // Benchmark detection
     let start = Instant::now();
     for _ in 0..100 {
-        let _ = detector.detect(&test_text).await.unwrap();
+        let _ = detector.detect(&test_text).await.expect("failed");
     }
     let detection_time = start.elapsed();
     println!("Detection: {:?} for 100 iterations", detection_time);
@@ -405,7 +405,7 @@ async fn test_performance_under_load() {
     let policy = ContentPolicy::default();
     let start = Instant::now();
     for _ in 0..100 {
-        let _ = moderator.moderate(&test_text, &policy).await.unwrap();
+        let _ = moderator.moderate(&test_text, &policy).await.expect("failed");
     }
     let moderation_time = start.elapsed();
     println!("Moderation: {:?} for 100 iterations", moderation_time);

@@ -223,25 +223,25 @@ mod tests {
         let runtime = NativeRuntime::new();
         assert_eq!(runtime.state().await, RuntimeState::Idle);
 
-        let df = simple_dataflow("df1").await.unwrap();
-        runtime.register_dataflow(df).await.unwrap();
+        let df = simple_dataflow("df1").await.expect("failed");
+        runtime.register_dataflow(df).await.expect("failed");
 
-        runtime.start().await.unwrap();
+        runtime.start().await.expect("failed");
         assert_eq!(runtime.state().await, RuntimeState::Running);
 
-        runtime.stop().await.unwrap();
+        runtime.stop().await.expect("failed");
         assert_eq!(runtime.state().await, RuntimeState::Stopped);
     }
 
     #[tokio::test]
     async fn test_double_start_fails() {
         let runtime = NativeRuntime::new();
-        let df = simple_dataflow("df2").await.unwrap();
-        runtime.register_dataflow(df).await.unwrap();
+        let df = simple_dataflow("df2").await.expect("failed");
+        runtime.register_dataflow(df).await.expect("failed");
 
-        runtime.start().await.unwrap();
+        runtime.start().await.expect("failed");
         assert!(runtime.start().await.is_err());
-        runtime.stop().await.unwrap();
+        runtime.stop().await.expect("failed");
     }
 
     #[tokio::test]
@@ -260,7 +260,7 @@ mod tests {
             .await
             .unwrap();
 
-        runtime.register_dataflow(df1).await.unwrap();
+        runtime.register_dataflow(df1).await.expect("failed");
         assert!(runtime.register_dataflow(df2).await.is_err());
     }
 
@@ -274,7 +274,7 @@ mod tests {
             .await
             .unwrap();
 
-        runtime.register_dataflow(df).await.unwrap();
+        runtime.register_dataflow(df).await.expect("failed");
 
         let found = runtime.get_dataflow("my-id").await;
         assert!(found.is_some());

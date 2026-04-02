@@ -383,9 +383,9 @@ mod tests {
 
         let snapshot = StateSnapshot::new("plugin-1", "1.0.0").with_data("state", &"active");
 
-        manager.save_snapshot(snapshot.clone()).await.unwrap();
+        manager.save_snapshot(snapshot.clone()).await.expect("failed");
 
-        let loaded = manager.load_snapshot("plugin-1").await.unwrap();
+        let loaded = manager.load_snapshot("plugin-1").await.expect("failed");
         assert_eq!(loaded.plugin_id, "plugin-1");
         assert_eq!(loaded.get::<String>("state"), Some("active".to_string()));
     }
@@ -396,22 +396,22 @@ mod tests {
 
         // Save first snapshot
         let snapshot1 = StateSnapshot::new("plugin-1", "1.0.0").with_data("version", &1);
-        manager.save_snapshot(snapshot1).await.unwrap();
+        manager.save_snapshot(snapshot1).await.expect("failed");
 
         // Save second snapshot (moves first to history)
         let snapshot2 = StateSnapshot::new("plugin-1", "1.0.0").with_data("version", &2);
-        manager.save_snapshot(snapshot2).await.unwrap();
+        manager.save_snapshot(snapshot2).await.expect("failed");
 
         // Current should be version 2
-        let current = manager.load_snapshot("plugin-1").await.unwrap();
+        let current = manager.load_snapshot("plugin-1").await.expect("failed");
         assert_eq!(current.get::<i32>("version"), Some(2));
 
         // Rollback to version 1
-        let rolled_back = manager.rollback("plugin-1").await.unwrap();
+        let rolled_back = manager.rollback("plugin-1").await.expect("failed");
         assert_eq!(rolled_back.get::<i32>("version"), Some(1));
 
         // Current should now be version 1
-        let current = manager.load_snapshot("plugin-1").await.unwrap();
+        let current = manager.load_snapshot("plugin-1").await.expect("failed");
         assert_eq!(current.get::<i32>("version"), Some(1));
     }
 }

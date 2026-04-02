@@ -303,7 +303,7 @@ mod tests {
 
     /// Collect all SSE `data:` lines from a response body.
     async fn collect_sse_data(resp: Response) -> Vec<String> {
-        let bytes = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let bytes = to_bytes(resp.into_body(), usize::MAX).await.expect("failed");
         let text = String::from_utf8(bytes.to_vec()).unwrap();
         text.lines()
             .filter_map(|line| line.strip_prefix("data: ").map(str::to_string))

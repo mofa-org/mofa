@@ -277,7 +277,7 @@ impl Default for LLMAgentConfig {
 ///
 /// // 获取所有会话ID
 /// // Get all session IDs
-/// let sessions = agent.list_sessions().await;
+/// let sessions: Result<_, _> = agent.list_sessions().await;
 /// ```
 ///
 /// # TTS 支持

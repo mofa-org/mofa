@@ -594,14 +594,14 @@ mod tests {
     #[tokio::test]
     async fn test_echo_tool() {
         let tool = EchoTool;
-        let result = tool.execute("hello").await.unwrap();
+        let result = tool.execute("hello").await.expect("failed");
         assert_eq!(result, "Echo: hello");
     }
 
     #[tokio::test]
     async fn test_string_tool() {
         let tool = StringTool;
-        let result = tool.execute("upper:hello").await.unwrap();
+        let result = tool.execute("upper:hello").await.expect("failed");
         assert_eq!(result, "HELLO");
     }
 }

@@ -99,7 +99,7 @@ mod tests {
             make_doc("c", 0.7),
             make_doc("d", 0.1),
         ];
-        let result = reranker.rerank("query", docs).await.unwrap();
+        let result = reranker.rerank("query", docs).await.expect("failed");
         assert_eq!(result.len(), 2);
         assert_eq!(result[0].document.id, "a");
         assert_eq!(result[1].document.id, "c");
@@ -109,7 +109,7 @@ mod tests {
     async fn sorts_by_score_descending() {
         let reranker = ScoreReranker::default();
         let docs = vec![make_doc("a", 0.3), make_doc("b", 0.9), make_doc("c", 0.6)];
-        let result = reranker.rerank("query", docs).await.unwrap();
+        let result = reranker.rerank("query", docs).await.expect("failed");
         assert_eq!(result[0].document.id, "b");
         assert_eq!(result[1].document.id, "c");
         assert_eq!(result[2].document.id, "a");
@@ -124,7 +124,7 @@ mod tests {
             make_doc("c", 0.5),
             make_doc("d", 0.3),
         ];
-        let result = reranker.rerank("query", docs).await.unwrap();
+        let result = reranker.rerank("query", docs).await.expect("failed");
         assert_eq!(result.len(), 2);
     }
 
@@ -137,7 +137,7 @@ mod tests {
             make_doc("c", 0.5),
             make_doc("d", 0.3),
         ];
-        let result = reranker.rerank("query", docs).await.unwrap();
+        let result = reranker.rerank("query", docs).await.expect("failed");
         // d is filtered by threshold (0.3 < 0.4), then sorted to [a, b, c] and top-2 are taken
         assert_eq!(result.len(), 2);
         assert!(result.iter().all(|d| d.score >= 0.4));
@@ -146,7 +146,7 @@ mod tests {
     #[tokio::test]
     async fn empty_input() {
         let reranker = ScoreReranker::default();
-        let result = reranker.rerank("query", vec![]).await.unwrap();
+        let result = reranker.rerank("query", vec![]).await.expect("failed");
         assert!(result.is_empty());
     }
 
@@ -154,7 +154,7 @@ mod tests {
     async fn all_filtered_out() {
         let reranker = ScoreReranker::with_threshold(0.99);
         let docs = vec![make_doc("a", 0.5), make_doc("b", 0.3)];
-        let result = reranker.rerank("query", docs).await.unwrap();
+        let result = reranker.rerank("query", docs).await.expect("failed");
         assert!(result.is_empty());
     }
 }

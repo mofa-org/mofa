@@ -76,15 +76,15 @@ mod tests {
     #[tokio::test]
     async fn list_runs_without_error() {
         let temp = TempDir::new().unwrap();
-        let ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
+        let ctx = CliContext::with_temp_dir(temp.path()).await.expect("failed");
 
-        list(&ctx).await.unwrap();
+        list(&ctx).await.expect("failed");
     }
 
     #[tokio::test]
     async fn add_persists_repository() {
         let temp = TempDir::new().unwrap();
-        let ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
+        let ctx = CliContext::with_temp_dir(temp.path()).await.expect("failed");
 
         add(
             &ctx,

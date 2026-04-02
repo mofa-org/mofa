@@ -75,7 +75,7 @@ mod tests {
         };
 
         // Run completion
-        let response = bridge.run_chat_completion(request).await.unwrap();
+        let response = bridge.run_chat_completion(request).await.expect("failed");
 
         // Verify response format
         assert!(response.id.starts_with("chatcmpl-"));

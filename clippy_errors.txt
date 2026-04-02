@@ -1,0 +1,177 @@
+﻿cargo :     Checking 
+mofa-foundation v0.1.0 
+(C:\Users\Aditya RS\mofa\c
+rates\mofa-foundation)
+At line:1 char:1
++ cargo clippy 
+--workspace -- -D 
+warnings 2>&1 | Out-File 
+-Encoding utf ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo        
+      : NotSpecified: (   
+     Checking mo...ofa-   
+ foundation):String) [    
+], RemoteException
+    + FullyQualifiedError 
+   Id : NativeCommandErr  
+  or
+ 
+error: this `if` 
+statement can be collapsed
+   --> crates\mofa-foundat
+ion\src\llm\google.rs:448:
+25
+    |
+448 | /                   
+      if let 
+Some(json_str) = buf.trim(
+).strip_prefix("data: ") {
+449 | |                   
+          if 
+json_str.trim() != 
+"[DONE]" {
+450 | |                   
+              if let 
+Ok(chunk) =
+451 | |                   
+                  serde_js
+on::from_str::<GeminiStrea
+mChunk>(json_str)
+...   |
+461 | |                   
+      }
+    | |___________________
+______^
+    |
+    = help: for further 
+information visit https://
+rust-lang.github.io/rust-c
+lippy/rust-1.93.0/index.ht
+ml#collapsible_if
+    = note: `-D 
+clippy::collapsible-if` 
+implied by `-D warnings`
+    = help: to override 
+`-D warnings` add `#[allow
+(clippy::collapsible_if)]`
+help: collapse nested if 
+block
+    |
+448 ~                     
+    if let Some(json_str) 
+= buf.trim().strip_prefix(
+"data: ")
+449 ~                     
+        && 
+json_str.trim() != 
+"[DONE]" {
+450 |                     
+            if let 
+Ok(chunk) =
+...
+459 |                     
+                }
+460 ~                     
+        }
+    |
+
+error: this `if` 
+statement can be collapsed
+   --> crates\mofa-foundat
+ion\src\llm\google.rs:449:
+29
+    |
+449 | / ...               
+    if json_str.trim() != 
+"[DONE]" {
+450 | | ...               
+        if let Ok(chunk) =
+451 | | ...               
+            serde_json::fr
+om_str::<GeminiStreamChunk
+>(json_str)
+...   |
+460 | | ...               
+    }
+    | 
+|_______________________^
+    |
+    = help: for further 
+information visit https://
+rust-lang.github.io/rust-c
+lippy/rust-1.93.0/index.ht
+ml#collapsible_if
+help: collapse nested if 
+block
+    |
+449 ~                     
+        if 
+json_str.trim() != 
+"[DONE]"
+450 ~                     
+            && let 
+Ok(chunk) =
+451 |                     
+                serde_json
+::from_str::<GeminiStreamC
+hunk>(json_str)
+...
+458 |                     
+                    ));
+459 ~                     
+                }
+    |
+
+error: this `if` 
+statement can be collapsed
+   --> crates\mofa-foundat
+ion\src\workflow\state_gra
+ph.rs:158:17
+    |
+158 | /                 
+if let Some(fallback) = se
+lf.policies.get(&node_id).
+and_then(|p| 
+p.fallback_node.as_ref()) 
+{
+159 | |                   
+  if fallback != END && !r
+eachable.contains(fallback
+) {
+160 | |                   
+      stack.push(fallback.
+to_string());
+161 | |                   
+  }
+162 | |                 }
+    | |_________________^
+    |
+    = help: for further 
+information visit https://
+rust-lang.github.io/rust-c
+lippy/rust-1.93.0/index.ht
+ml#collapsible_if
+help: collapse nested if 
+block
+    |
+158 ~                 if 
+let Some(fallback) = self.
+policies.get(&node_id).and
+_then(|p| 
+p.fallback_node.as_ref())
+159 ~                     
+&& fallback != END && !rea
+chable.contains(fallback) 
+{
+160 |                     
+    stack.push(fallback.to
+_string());
+161 ~                     
+}
+    |
+
+error: could not compile 
+`mofa-foundation` (lib) 
+due to 3 previous errors

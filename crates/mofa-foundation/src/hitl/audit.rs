@@ -327,18 +327,18 @@ mod tests {
         )
         .with_execution_id("exec-1");
 
-        store.record_event(&event1).await.unwrap();
-        store.record_event(&event2).await.unwrap();
+        store.record_event(&event1).await.expect("failed");
+        store.record_event(&event2).await.expect("failed");
 
         let query = AuditLogQuery {
             review_id: Some("review-1".to_string()),
             ..Default::default()
         };
 
-        let events = store.query_events(&query).await.unwrap();
+        let events = store.query_events(&query).await.expect("failed");
         assert_eq!(events.len(), 2);
 
-        let review_events = store.get_review_events("review-1").await.unwrap();
+        let review_events = store.get_review_events("review-1").await.expect("failed");
         assert_eq!(review_events.len(), 2);
     }
 }

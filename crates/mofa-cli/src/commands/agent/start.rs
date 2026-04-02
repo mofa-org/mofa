@@ -168,7 +168,7 @@ mod tests {
     #[tokio::test]
     async fn test_start_succeeds_with_default_factory() {
         let temp = TempDir::new().unwrap();
-        let ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
+        let ctx = CliContext::with_temp_dir(temp.path()).await.expect("failed");
 
         let result = run(&ctx, "test-agent", None, None, false).await;
         assert!(result.is_ok());
@@ -178,9 +178,9 @@ mod tests {
     #[tokio::test]
     async fn test_start_returns_err_for_duplicate_agent() {
         let temp = TempDir::new().unwrap();
-        let ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
+        let ctx = CliContext::with_temp_dir(temp.path()).await.expect("failed");
 
-        run(&ctx, "dup-agent", None, None, false).await.unwrap();
+        run(&ctx, "dup-agent", None, None, false).await.expect("failed");
         let result = run(&ctx, "dup-agent", None, None, false).await;
         assert!(result.is_err());
     }
@@ -188,7 +188,7 @@ mod tests {
     #[tokio::test]
     async fn test_start_returns_err_for_unknown_factory_type() {
         let temp = TempDir::new().unwrap();
-        let ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
+        let ctx = CliContext::with_temp_dir(temp.path()).await.expect("failed");
 
         let result = run(&ctx, "typed-agent", None, Some("missing-factory"), false).await;
         assert!(result.is_err());
@@ -198,7 +198,7 @@ mod tests {
     #[tokio::test]
     async fn test_start_succeeds_with_explicit_factory_type() {
         let temp = TempDir::new().unwrap();
-        let ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
+        let ctx = CliContext::with_temp_dir(temp.path()).await.expect("failed");
         let factory = ctx
             .agent_registry
             .list_factory_types()

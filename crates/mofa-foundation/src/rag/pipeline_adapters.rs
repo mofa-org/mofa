@@ -262,7 +262,7 @@ mod tests {
             scored("a", "rust retrieval", 1.0),
         ]);
 
-        let ranked = retriever.retrieve("rust", 2).await.unwrap();
+        let ranked = retriever.retrieve("rust", 2).await.expect("failed");
 
         assert_eq!(ranked[0].document.id, "a");
         assert_eq!(ranked[1].document.id, "b");

@@ -531,14 +531,14 @@ mod tests {
         let host = DefaultHostFunctions::new(ctx.clone());
 
         // Test logging (always allowed)
-        host.log(LogLevel::Info, "Test message").await.unwrap();
+        host.log(LogLevel::Info, "Test message").await.expect("failed");
 
         // Test now_ms (always allowed)
-        let ts = host.now_ms().await.unwrap();
+        let ts = host.now_ms().await.expect("failed");
         assert!(ts > 0);
 
         // Test sleep (requires Timer)
-        host.sleep_ms(1).await.unwrap();
+        host.sleep_ms(1).await.expect("failed");
 
         // Test storage should fail (no capability)
         let result = host.storage_get("key").await;

@@ -472,7 +472,7 @@ mod tests {
         ctx.emit_event(AgentEvent::<String>::new("test_event", "hello".to_string()))
             .await;
 
-        let event = rx.recv().await.unwrap();
+        let event = rx.recv().await.expect("failed");
         assert_eq!(event.event_type, "test_event");
     }
 
@@ -545,7 +545,7 @@ mod tests {
             "subscribe() was starved by emit()"
         );
 
-        emit_handle.await.unwrap();
+        emit_handle.await.expect("failed");
 
         // Drain so the test exits cleanly.
         for _ in 0u8..5 {

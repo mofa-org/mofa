@@ -79,15 +79,15 @@ mod tests {
     #[tokio::test]
     async fn test_uninstall_persists_disabled_plugin_spec() {
         let temp = TempDir::new().unwrap();
-        let ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
+        let ctx = CliContext::with_temp_dir(temp.path()).await.expect("failed");
 
-        run(&ctx, "http-plugin", true).await.unwrap();
+        run(&ctx, "http-plugin", true).await.expect("failed");
 
         let spec = ctx.plugin_store.get("http-plugin").unwrap().unwrap();
         assert!(!spec.enabled);
 
         drop(ctx);
-        let ctx2 = CliContext::with_temp_dir(temp.path()).await.unwrap();
+        let ctx2 = CliContext::with_temp_dir(temp.path()).await.expect("failed");
         assert!(!ctx2.plugin_registry.contains("http-plugin"));
     }
 }

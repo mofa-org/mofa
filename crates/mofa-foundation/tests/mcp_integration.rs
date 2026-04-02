@@ -31,7 +31,7 @@ mod without_mcp_feature {
     #[tokio::test]
     async fn stub_returns_empty_list_without_panic() {
         let mut registry = ToolRegistry::new();
-        let result = registry.load_mcp_server("fake-endpoint").await;
+        let result: Result<_, _> = registry.load_mcp_server("fake-endpoint").await;
         assert!(result.is_ok(), "stub must not return an error");
         let names = result.unwrap();
         assert!(
@@ -63,7 +63,7 @@ mod without_mcp_feature {
         let mut registry = ToolRegistry::new();
         for i in 0..5 {
             let ep = format!("ep-{i}");
-            registry.load_mcp_server(&ep).await.unwrap();
+            registry.load_mcp_server(&ep).await.expect("failed");
         }
         assert_eq!(registry.mcp_endpoints().len(), 5);
     }
@@ -242,7 +242,7 @@ mod with_mcp_feature {
         );
         // Either an error (command not found) or success with 0 tools — both are fine.
         // The important invariant: it must not panic.
-        let _result = registry.load_mcp_server(config).await;
+        let _result: Result<_, _> = registry.load_mcp_server(config).await;
     }
 
     #[tokio::test]
@@ -287,7 +287,7 @@ mod with_mcp_feature {
 
         assert!(registry.contains("fake_mcp_tool"));
 
-        let removed = registry.unload_mcp_server("ep-1").await.unwrap();
+        let removed = registry.unload_mcp_server("ep-1").await.expect("failed");
         assert_eq!(removed, vec!["fake_mcp_tool"]);
         assert!(!registry.contains("fake_mcp_tool"));
     }
@@ -370,7 +370,7 @@ mod with_mcp_feature {
         );
 
         let mut registry = ToolRegistry::new();
-        let result = registry.load_mcp_server(config).await;
+        let result: Result<_, _> = registry.load_mcp_server(config).await;
         assert!(
             result.is_ok(),
             "connecting to filesystem MCP server must succeed: {:?}",
@@ -470,6 +470,6 @@ mod with_mcp_feature {
             "server name must be non-empty: {info:?}"
         );
 
-        mgr.disconnect("filesystem").await.unwrap();
+        mgr.disconnect("filesystem").await.expect("failed");
     }
 }

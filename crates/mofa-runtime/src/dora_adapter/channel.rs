@@ -458,17 +458,17 @@ mod tests {
 
         // 注册两个智能体
         // Register two agents
-        channel.register_agent("agent1").await.unwrap();
-        channel.register_agent("agent2").await.unwrap();
+        channel.register_agent("agent1").await.expect("failed");
+        channel.register_agent("agent2").await.expect("failed");
 
         // agent1 发送消息给 agent2
         // agent1 sends message to agent2
         let envelope = MessageEnvelope::new("agent1", b"Hello agent2".to_vec()).to("agent2");
-        channel.send_p2p(envelope).await.unwrap();
+        channel.send_p2p(envelope).await.expect("failed");
 
         // agent2 接收消息
         // agent2 receives message
-        let received = channel.try_receive_p2p("agent2").await.unwrap();
+        let received = channel.try_receive_p2p("agent2").await.expect("failed");
         assert!(received.is_some());
         assert_eq!(received.unwrap().payload, b"Hello agent2");
     }
@@ -477,26 +477,26 @@ mod tests {
     async fn test_pubsub() {
         let channel = DoraChannel::new(ChannelConfig::default());
 
-        channel.register_agent("publisher").await.unwrap();
-        channel.register_agent("subscriber").await.unwrap();
+        channel.register_agent("publisher").await.expect("failed");
+        channel.register_agent("subscriber").await.expect("failed");
 
         // 订阅主题
         // Subscribe to topic
-        channel.subscribe("subscriber", "news").await.unwrap();
+        channel.subscribe("subscriber", "news").await.expect("failed");
 
         // 获取主题接收器
         // Get topic receiver
-        let mut rx = channel.subscribe_topic("news").await.unwrap();
+        let mut rx = channel.subscribe_topic("news").await.expect("failed");
 
         // 发布消息
         // Publish message
         let envelope =
             MessageEnvelope::new("publisher", b"Breaking news".to_vec()).with_topic("news");
-        channel.publish(envelope).await.unwrap();
+        channel.publish(envelope).await.expect("failed");
 
         // 接收消息
         // Receive message
-        let received = rx.recv().await.unwrap();
+        let received = rx.recv().await.expect("failed");
         assert_eq!(received.payload, b"Breaking news");
     }
 
@@ -522,8 +522,8 @@ mod tests {
             message_timeout: Duration::from_millis(500),
             ..ChannelConfig::default()
         }));
-        channel.register_agent("reader").await.unwrap();
-        channel.register_agent("writer").await.unwrap();
+        channel.register_agent("reader").await.expect("failed");
+        channel.register_agent("writer").await.expect("failed");
 
         let channel_clone = channel.clone();
 
@@ -536,9 +536,9 @@ mod tests {
         let start_time = std::time::Instant::now();
 
         // registering a new agent.
-        channel.register_agent("new_agent").await.unwrap();
+        channel.register_agent("new_agent").await.expect("failed");
         let elapsed = start_time.elapsed();
-        reader_task.await.unwrap();
+        reader_task.await.expect("failed");
 
         // the bug exists if register_agent was blocked
         assert!(

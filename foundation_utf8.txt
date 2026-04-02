@@ -1,0 +1,101 @@
+﻿cargo :     Checking 
+mofa-kernel v0.1.0 
+(C:\Users\Aditya RS\mofa\c
+rates\mofa-kernel)
+At line:1 char:1
++ cargo clippy -p 
+mofa-foundation 
+--message-format short -- 
+-D warnings ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo        
+      : NotSpecified: (   
+     Checking mo...es\m   
+ ofa-kernel):String) [    
+], RemoteException
+    + FullyQualifiedError 
+   Id : NativeCommandErr  
+  or
+ 
+    Checking mofa-extra 
+v0.1.0 (C:\Users\Aditya 
+RS\mofa\crates\mofa-extra)
+    Checking mofa-plugins 
+v0.1.0 (C:\Users\Aditya RS
+\mofa\crates\mofa-plugins)
+    Checking 
+mofa-foundation v0.1.0 
+(C:\Users\Aditya RS\mofa\c
+rates\mofa-foundation)
+crates\mofa-foundation\src
+\llm\fallback.rs:93:9: 
+error: match expression 
+looks like `matches!` 
+macro: help: try: 
+`matches!((self, error), 
+(Self::RateLimited, 
+LLMError::RateLimited(_)) 
+| (Self::QuotaExceeded, LL
+MError::QuotaExceeded(_)) 
+| (Self::NetworkError, LLM
+Error::NetworkError(_)) | 
+(Self::Timeout, 
+LLMError::Timeout(_)) | 
+(Self::AuthError, 
+LLMError::AuthError(_)) | 
+(Self::ProviderUnavailable
+, LLMError::ProviderNotSup
+ported(_)) | (Self::Contex
+tLengthExceeded, LLMError:
+:ContextLengthExceeded(_))
+ | (Self::ModelNotFound, L
+LMError::ModelNotFound(_))
+)`
+crates\mofa-foundation\src
+\llm\fallback.rs:703:5: 
+error: method `add` can 
+be confused for the 
+standard trait method 
+`std::ops::Add::add`
+crates\mofa-foundation\src
+\llm\google.rs:448:25: 
+error: this `if` 
+statement can be collapsed
+crates\mofa-foundation\src
+\llm\google.rs:449:29: 
+error: this `if` 
+statement can be collapsed
+crates\mofa-foundation\src
+\llm\google.rs:450:33: 
+error: this `if` 
+statement can be collapsed
+crates\mofa-foundation\src
+\workflow\state_graph.rs:1
+58:17: error: this `if` 
+statement can be collapsed
+crates\mofa-foundation\src
+\workflow\state_graph.rs:1
+59:21: error: this `if` 
+statement can be collapsed
+crates\mofa-foundation\src
+\swarm\scheduler.rs:450:20
+: error: this `if` 
+statement can be collapsed
+crates\mofa-foundation\src
+\security\pii\patterns.rs:
+56:5: error: manual 
+implementation of 
+`.is_multiple_of()`: 
+help: replace with: 
+`sum.is_multiple_of(10)`
+crates\mofa-foundation\src
+\security\rbac\policy.rs:4
+2:14: error: use of 
+`or_insert_with` to 
+construct default value: 
+help: try: `or_default()`
+error: could not compile 
+`mofa-foundation` (lib) 
+due to 10 previous errors

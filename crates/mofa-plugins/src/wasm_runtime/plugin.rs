@@ -738,7 +738,7 @@ mod tests {
         assert_eq!(plugin.state().await, WasmPluginState::Created);
 
         // Initialize
-        plugin.initialize().await.unwrap();
+        plugin.initialize().await.expect("failed");
         assert_eq!(plugin.state().await, WasmPluginState::Ready);
 
         // Call functions
@@ -748,7 +748,7 @@ mod tests {
             .unwrap();
         assert_eq!(result, 7);
 
-        let result = plugin.call_i32("double", &[Val::I32(21)]).await.unwrap();
+        let result = plugin.call_i32("double", &[Val::I32(21)]).await.expect("failed");
         assert_eq!(result, 42);
 
         // Check metrics
@@ -757,7 +757,7 @@ mod tests {
         assert_eq!(metrics.success_count, 2);
 
         // Stop
-        plugin.stop().await.unwrap();
+        plugin.stop().await.expect("failed");
         assert_eq!(plugin.state().await, WasmPluginState::Stopped);
     }
 }

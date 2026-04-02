@@ -311,8 +311,8 @@ mod tests {
             access_count: 0,
         };
 
-        cache.save_metadata(&metadata).await.unwrap();
-        let loaded = cache.load_metadata("test/model").await.unwrap();
+        cache.save_metadata(&metadata).await.expect("failed");
+        let loaded = cache.load_metadata("test/model").await.expect("failed");
 
         assert!(loaded.is_some());
         let loaded = loaded.unwrap();

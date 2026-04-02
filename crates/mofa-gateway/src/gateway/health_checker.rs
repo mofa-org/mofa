@@ -262,7 +262,7 @@ mod tests {
         let node_id = NodeId::new("node-1");
         checker.register_node(node_id.clone()).await;
 
-        let is_healthy = checker.check_node(&node_id).await.unwrap();
+        let is_healthy = checker.check_node(&node_id).await.expect("failed");
         assert!(is_healthy);
 
         let status = checker.get_status(&node_id).await;

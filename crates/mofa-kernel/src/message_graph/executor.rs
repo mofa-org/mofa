@@ -719,7 +719,7 @@ mod tests {
         let envelope = MessageEnvelope::new("order.created", br#"{"id":"A-100"}"#.to_vec())
             .with_header("risk", "high");
 
-        let report = executor.execute(envelope.clone()).await.unwrap();
+        let report = executor.execute(envelope.clone()).await.expect("failed");
         assert_eq!(report.total_dead_letters(), 0);
         assert!(report.dispatches.iter().any(|d| d.to == "fraud_agent"));
         assert!(
@@ -784,7 +784,7 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(20)).await;
 
         let envelope = MessageEnvelope::new("order.cancelled", br#"{"id":"A-200"}"#.to_vec());
-        let report = executor.execute(envelope).await.unwrap();
+        let report = executor.execute(envelope).await.expect("failed");
         assert_eq!(report.total_dead_letters(), 1);
         assert!(matches!(
             report.dead_letters[0].reason,
@@ -870,7 +870,7 @@ mod tests {
 
         let compiled = graph.compile().unwrap();
         let executor = MessageGraphExecutor::new(compiled, bus.clone()).unwrap();
-        executor.set_node_capacity("worker_node", 0).await.unwrap();
+        executor.set_node_capacity("worker_node", 0).await.expect("failed");
 
         bus.register_channel(
             &test_agent_metadata("dlq-consumer"),

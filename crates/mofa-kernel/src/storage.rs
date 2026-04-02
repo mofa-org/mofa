@@ -93,8 +93,8 @@ pub trait Storage<K, V>: Send + Sync {
 /// use mofa_kernel::storage::ObjectStore;
 ///
 /// async fn upload_report(store: &dyn ObjectStore, name: &str, data: Vec<u8>) {
-///     store.put(name, data).await.unwrap();
-///     let url = store.presigned_get_url(name, 3600).await.unwrap();
+///     store.put(name, data).await.expect("failed");
+///     let url = store.presigned_get_url(name, 3600).await.expect("failed");
 ///     println!("download at: {url}");
 /// }
 /// ```
@@ -181,19 +181,19 @@ mod tests {
             .unwrap();
 
         // Load
-        let value = storage.load(&"key1".to_string()).await.unwrap();
+        let value = storage.load(&"key1".to_string()).await.expect("failed");
         assert_eq!(value, Some(vec![1, 2, 3]));
 
         // List
-        let keys = storage.list().await.unwrap();
+        let keys = storage.list().await.expect("failed");
         assert_eq!(keys, vec!["key1".to_string()]);
 
         // Delete
-        let deleted = storage.delete(&"key1".to_string()).await.unwrap();
+        let deleted = storage.delete(&"key1".to_string()).await.expect("failed");
         assert!(deleted);
 
         // Verify deletion
-        let value = storage.load(&"key1".to_string()).await.unwrap();
+        let value = storage.load(&"key1".to_string()).await.expect("failed");
         assert_eq!(value, None);
     }
 }

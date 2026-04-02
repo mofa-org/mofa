@@ -158,7 +158,7 @@ async fn integration_real_llm_streaming() {
         "The sky is blue",
         simple_embedding("The sky is blue", dims),
     );
-    store.upsert(doc).await.unwrap();
+    store.upsert(doc).await.expect("upsert failed");
 
     let retriever = Arc::new(SimpleRetriever::new(store, dims));
     let reranker = Arc::new(IdentityReranker);
@@ -225,7 +225,7 @@ async fn integration_concurrent_streaming_load() {
         .map(|q| {
             let p = pipeline.clone();
             tokio::spawn(async move {
-                let (_docs, mut s) = p.run_streaming(&q, 3).await.unwrap();
+                let (_docs, mut s) = p.run_streaming(&q, 3).await.expect("failed");
                 let mut buf = String::new();
                 while let Some(chunk) = s.next().await {
                     if let Ok(KernelGeneratorChunk::Text(text)) = chunk {
@@ -264,7 +264,7 @@ async fn integration_large_document_processing_performance() {
     let pipeline = RagPipeline::new(retriever, reranker, generator);
 
     let start = Instant::now();
-    let (_docs, mut s) = pipeline.run_streaming("hello", 5).await.unwrap();
+    let (_docs, mut s) = pipeline.run_streaming("hello", 5).await.expect("failed");
     while let Some(_) = s.next().await {}
     let elapsed = start.elapsed();
     println!("processed 1000 docs retrieval+stream in {:?}", elapsed);
@@ -307,7 +307,7 @@ async fn integration_error_recovery_stream() {
     }
 
     let pipeline = RagPipeline::new(retriever, reranker, Arc::new(BrokenGen));
-    let (_docs, mut s) = pipeline.run_streaming("x", 1).await.unwrap();
-    let first = s.next().await.unwrap();
+    let (_docs, mut s) = pipeline.run_streaming("x", 1).await.expect("failed");
+    let first = s.next().await.expect("failed");
     assert!(first.is_err());
 }

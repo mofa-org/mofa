@@ -1018,7 +1018,7 @@ mod tests {
     #[tokio::test]
     async fn test_agent_runner_new() {
         let agent = TestAgent::new("test-001", "Test Agent");
-        let runner = AgentRunner::new(agent).await.unwrap();
+        let runner = AgentRunner::new(agent).await.expect("failed");
 
         assert_eq!(runner.id(), "test-001");
         assert_eq!(runner.name(), "Test Agent");
@@ -1030,10 +1030,10 @@ mod tests {
     #[tokio::test]
     async fn test_agent_runner_execute() {
         let agent = TestAgent::new("test-002", "Test Agent");
-        let mut runner = AgentRunner::new(agent).await.unwrap();
+        let mut runner = AgentRunner::new(agent).await.expect("failed");
 
         let input = AgentInput::text("Hello");
-        let output = runner.execute(input).await.unwrap();
+        let output = runner.execute(input).await.expect("failed");
 
         assert_eq!(output.to_text(), "Echo: Hello");
 
@@ -1046,7 +1046,7 @@ mod tests {
     async fn test_run_agents_function() {
         let agent = TestAgent::new("test-003", "Test Agent");
         let inputs = vec![AgentInput::text("Test")];
-        let outputs = run_agents(agent, inputs).await.unwrap();
+        let outputs = run_agents(agent, inputs).await.expect("failed");
 
         assert_eq!(outputs[0].to_text(), "Echo: Test");
     }
@@ -1054,7 +1054,7 @@ mod tests {
     #[tokio::test]
     async fn test_agent_runner_run_periodic_executes_max_runs() {
         let agent = TestAgent::new("test-004", "Periodic Agent");
-        let mut runner = AgentRunner::new(agent).await.unwrap();
+        let mut runner = AgentRunner::new(agent).await.expect("failed");
 
         let outputs = runner
             .run_periodic(
@@ -1079,7 +1079,7 @@ mod tests {
     #[tokio::test]
     async fn test_agent_runner_run_periodic_initial_delay_when_not_immediate() {
         let agent = TestAgent::new("test-005", "Delayed Periodic Agent");
-        let mut runner = AgentRunner::new(agent).await.unwrap();
+        let mut runner = AgentRunner::new(agent).await.expect("failed");
 
         let started = Instant::now();
         let outputs = runner
@@ -1101,7 +1101,7 @@ mod tests {
     #[tokio::test]
     async fn test_agent_runner_run_periodic_rejects_invalid_config() {
         let agent = TestAgent::new("test-006", "Invalid Config Agent");
-        let mut runner = AgentRunner::new(agent).await.unwrap();
+        let mut runner = AgentRunner::new(agent).await.expect("failed");
 
         let err = runner
             .run_periodic(
@@ -1133,7 +1133,7 @@ mod tests {
     #[tokio::test]
     async fn test_agent_runner_run_periodic_cron_executes_max_runs() {
         let agent = TestAgent::new("test-007", "Cron Agent");
-        let mut runner = AgentRunner::new(agent).await.unwrap();
+        let mut runner = AgentRunner::new(agent).await.expect("failed");
         let expression = every_second_cron_expression();
 
         let outputs = runner
@@ -1160,7 +1160,7 @@ mod tests {
     #[tokio::test]
     async fn test_agent_runner_run_periodic_cron_rejects_invalid_config() {
         let agent = TestAgent::new("test-008", "Cron Invalid Config Agent");
-        let mut runner = AgentRunner::new(agent).await.unwrap();
+        let mut runner = AgentRunner::new(agent).await.expect("failed");
 
         let err = runner
             .run_periodic_cron(
@@ -1369,29 +1369,29 @@ mod tests {
     #[tokio::test]
     async fn test_pause_resume_success() {
         let agent = LifecycleTestAgent::new("lc-001", "Lifecycle Agent");
-        let mut runner = AgentRunner::new(agent).await.unwrap();
+        let mut runner = AgentRunner::new(agent).await.expect("failed");
 
         // Move the runner into Running state first.
-        runner.execute(AgentInput::text("warmup")).await.unwrap();
+        runner.execute(AgentInput::text("warmup")).await.expect("failed");
         assert_eq!(runner.state().await, RunnerState::Running);
 
         // Pause should succeed and transition to Paused.
-        runner.pause().await.unwrap();
+        runner.pause().await.expect("failed");
         assert_eq!(runner.state().await, RunnerState::Paused);
 
         // Resume should succeed and transition back to Running.
-        runner.resume().await.unwrap();
+        runner.resume().await.expect("failed");
         assert_eq!(runner.state().await, RunnerState::Running);
     }
 
     #[tokio::test]
     async fn test_resume_failure_preserves_paused_state() {
         let agent = LifecycleTestAgent::new("lc-002", "Failing Resume Agent").with_failing_resume();
-        let mut runner = AgentRunner::new(agent).await.unwrap();
+        let mut runner = AgentRunner::new(agent).await.expect("failed");
 
         // Move into Running, then pause.
-        runner.execute(AgentInput::text("warmup")).await.unwrap();
-        runner.pause().await.unwrap();
+        runner.execute(AgentInput::text("warmup")).await.expect("failed");
+        runner.pause().await.expect("failed");
         assert_eq!(runner.state().await, RunnerState::Paused);
 
         // Resume fails — the runner must stay Paused.
@@ -1407,10 +1407,10 @@ mod tests {
     #[tokio::test]
     async fn test_pause_failure_preserves_running_state() {
         let agent = LifecycleTestAgent::new("lc-003", "Failing Pause Agent").with_failing_pause();
-        let mut runner = AgentRunner::new(agent).await.unwrap();
+        let mut runner = AgentRunner::new(agent).await.expect("failed");
 
         // Move into Running.
-        runner.execute(AgentInput::text("warmup")).await.unwrap();
+        runner.execute(AgentInput::text("warmup")).await.expect("failed");
         assert_eq!(runner.state().await, RunnerState::Running);
 
         // Pause fails — the runner must stay Running.
@@ -1426,7 +1426,7 @@ mod tests {
     #[tokio::test]
     async fn test_resume_rejected_when_not_paused() {
         let agent = LifecycleTestAgent::new("lc-004", "Not Paused Agent");
-        let mut runner = AgentRunner::new(agent).await.unwrap();
+        let mut runner = AgentRunner::new(agent).await.expect("failed");
 
         // Runner starts in Created state — resume should be rejected.
         let err = runner.resume().await.unwrap_err();
@@ -1436,7 +1436,7 @@ mod tests {
     #[tokio::test]
     async fn test_pause_rejected_when_not_running() {
         let agent = LifecycleTestAgent::new("lc-005", "Not Running Agent");
-        let mut runner = AgentRunner::new(agent).await.unwrap();
+        let mut runner = AgentRunner::new(agent).await.expect("failed");
 
         // Runner starts in Created state — pause should be rejected.
         let err = runner.pause().await.unwrap_err();

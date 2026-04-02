@@ -541,7 +541,7 @@ mod tests {
 
         // Serve in background
         tokio::spawn(async move {
-            axum::serve(listener, router).await.unwrap();
+            axum::serve(listener, router).await.expect("failed");
         });
 
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
@@ -601,7 +601,7 @@ mod tests {
         let addr = listener.local_addr().unwrap();
 
         tokio::spawn(async move {
-            axum::serve(listener, router).await.unwrap();
+            axum::serve(listener, router).await.expect("failed");
         });
 
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;

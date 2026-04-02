@@ -28,7 +28,7 @@ async fn sequential_scheduler_executes_via_pattern_and_marks_completed() {
     dag.add_dependency(idx_a, idx_b).unwrap();
 
     let scheduler = CoordinationPattern::Sequential.into_scheduler();
-    let _summary = scheduler.execute(&mut dag, ok_executor()).await.unwrap();
+    let _summary = scheduler.execute(&mut dag, ok_executor()).await.expect("failed");
 
     assert_eq!(
         dag.get_task(idx_a).unwrap().status,
@@ -61,7 +61,7 @@ async fn parallel_scheduler_executes_via_pattern_and_respects_dependencies() {
     });
 
     let scheduler = CoordinationPattern::Parallel.into_scheduler();
-    let _summary = scheduler.execute(&mut dag, exec).await.unwrap();
+    let _summary = scheduler.execute(&mut dag, exec).await.expect("failed");
 
     for (idx, task) in dag.all_tasks() {
         assert_eq!(
@@ -97,7 +97,7 @@ async fn parallel_fail_fast_cascades_skip() {
     let mut config = SwarmSchedulerConfig::default();
     config.failure_policy = FailurePolicy::FailFastCascade;
     let scheduler = ParallelScheduler::with_config(config);
-    let _summary = scheduler.execute(&mut dag, exec).await.unwrap();
+    let _summary = scheduler.execute(&mut dag, exec).await.expect("failed");
 
     assert!(matches!(
         dag.get_task(idx_a).unwrap().status,

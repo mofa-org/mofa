@@ -1052,7 +1052,7 @@ mod tests {
             .add_last_shared(p2)
             .build();
 
-        let result = chain.chat(request()).await.unwrap();
+        let result = chain.chat(request()).await.expect("failed");
         assert_eq!(result.content().unwrap(), "hello");
         assert_eq!(p1_ref.calls(), 1);
         assert_eq!(p2_ref.calls(), 0);
@@ -1065,7 +1065,7 @@ mod tests {
 
         let chain = FallbackChain::builder().add_provider(p1).add_last(p2).build();
 
-        let result = chain.chat(request()).await.unwrap();
+        let result = chain.chat(request()).await.expect("failed");
         assert_eq!(result.content().unwrap(), "from-p2");
     }
 
@@ -1081,7 +1081,7 @@ mod tests {
             .add_last(p3)
             .build();
 
-        let result = chain.chat(request()).await.unwrap();
+        let result = chain.chat(request()).await.expect("failed");
         assert_eq!(result.content().unwrap(), "p3-ok");
     }
 
@@ -1147,7 +1147,7 @@ mod tests {
             .add_last(AlwaysHealthy)
             .build();
 
-        assert!(chain.health_check().await.unwrap());
+        assert!(chain.health_check().await.expect("failed"));
     }
 
     #[tokio::test]
@@ -1172,7 +1172,7 @@ mod tests {
             .add_last(AlwaysUnhealthy)
             .build();
 
-        assert!(!chain.health_check().await.unwrap());
+        assert!(!chain.health_check().await.expect("failed"));
     }
 
     #[test]
@@ -1243,15 +1243,15 @@ mod tests {
             .build();
 
         // Call 1: p1 fails → fallback to p2
-        let r1 = chain.chat(request()).await.unwrap();
+        let r1 = chain.chat(request()).await.expect("failed");
         assert_eq!(r1.content().unwrap(), "p2-fallback-1");
 
         // Call 2: p1 fails → circuit opens → fallback to p2
-        let r2 = chain.chat(request()).await.unwrap();
+        let r2 = chain.chat(request()).await.expect("failed");
         assert_eq!(r2.content().unwrap(), "p2-fallback-2");
 
         // Call 3: p1 circuit is open → skipped → goes straight to p2
-        let r3 = chain.chat(request()).await.unwrap();
+        let r3 = chain.chat(request()).await.expect("failed");
         assert_eq!(r3.content().unwrap(), "p2-while-p1-open");
         // p1 was never called on the third request
         assert_eq!(p1_ref.calls(), 2);
@@ -1271,9 +1271,9 @@ mod tests {
         let chain = FallbackChain::builder().add_provider(p1).add_last(p2).build();
 
         // Request 1: p1 fails → fallback to p2
-        chain.chat(request()).await.unwrap();
+        chain.chat(request()).await.expect("failed");
         // Request 2: p1 succeeds
-        chain.chat(request()).await.unwrap();
+        chain.chat(request()).await.expect("failed");
 
         let snap = chain.metrics();
         assert_eq!(snap.requests_total, 2);

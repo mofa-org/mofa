@@ -322,9 +322,9 @@ mod tests {
         let log_file = temp_dir.path().join("test.log");
 
         // Write test content
-        let mut file = File::create(&log_file).await.unwrap();
-        file.write_all(b"Line 1\nLine 2\nLine 3\n").await.unwrap();
-        file.flush().await.unwrap();
+        let mut file = File::create(&log_file).await.expect("failed");
+        file.write_all(b"Line 1\nLine 2\nLine 3\n").await.expect("failed");
+        file.flush().await.expect("failed");
         drop(file);
 
         // Test reading
@@ -346,12 +346,12 @@ mod tests {
     #[tokio::test]
     async fn test_logs_command_with_existing_file() {
         let temp = TempDir::new().unwrap();
-        let ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
+        let ctx = CliContext::with_temp_dir(temp.path()).await.expect("failed");
 
         // Create an agent in registry
         use crate::state::agent_state::AgentMetadata;
         let metadata = AgentMetadata::new("test-agent".to_string(), "Test Agent".to_string());
-        ctx.persistent_agents.register(metadata).await.unwrap();
+        ctx.persistent_agents.register(metadata).await.expect("failed");
 
         // Create log file with content
         let log_file = get_agent_log_path(&ctx.data_dir, "test-agent");
@@ -370,7 +370,7 @@ mod tests {
     #[tokio::test]
     async fn test_logs_command_missing_agent() {
         let temp = TempDir::new().unwrap();
-        let ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
+        let ctx = CliContext::with_temp_dir(temp.path()).await.expect("failed");
 
         // Try to read logs for non-existent agent
         let result = run(&ctx, "nonexistent-agent", false, None, None, None, false).await;
@@ -381,12 +381,12 @@ mod tests {
     #[tokio::test]
     async fn test_logs_command_no_logs_yet() {
         let temp = TempDir::new().unwrap();
-        let ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
+        let ctx = CliContext::with_temp_dir(temp.path()).await.expect("failed");
 
         // Create an agent in registry
         use crate::state::agent_state::AgentMetadata;
         let metadata = AgentMetadata::new("new-agent".to_string(), "New Agent".to_string());
-        ctx.persistent_agents.register(metadata).await.unwrap();
+        ctx.persistent_agents.register(metadata).await.expect("failed");
 
         // Try to read logs for agent with no logs yet
         let result = run(&ctx, "new-agent", false, None, None, None, false).await;

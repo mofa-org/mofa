@@ -109,23 +109,23 @@ mod tests {
     #[tokio::test]
     async fn test_session_list_runs_with_saved_sessions() {
         let temp = TempDir::new().unwrap();
-        let ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
+        let ctx = CliContext::with_temp_dir(temp.path()).await.expect("failed");
 
         let mut session_a = Session::new("agent-a:1");
         session_a
             .metadata
             .insert("agent_id".to_string(), json!("agent-a"));
         session_a.add_message("user", "hello");
-        ctx.session_manager.save(&session_a).await.unwrap();
+        ctx.session_manager.save(&session_a).await.expect("failed");
 
         let mut session_b = Session::new("agent-b:1");
         session_b
             .metadata
             .insert("agent_id".to_string(), json!("agent-b"));
-        ctx.session_manager.save(&session_b).await.unwrap();
+        ctx.session_manager.save(&session_b).await.expect("failed");
 
-        run(&ctx, None, None).await.unwrap();
-        run(&ctx, Some("agent-a"), None).await.unwrap();
-        run(&ctx, Some("agent-b"), Some(1)).await.unwrap();
+        run(&ctx, None, None).await.expect("failed");
+        run(&ctx, Some("agent-a"), None).await.expect("failed");
+        run(&ctx, Some("agent-b"), Some(1)).await.expect("failed");
     }
 }

@@ -121,9 +121,9 @@ mod tests {
         ];
         let mut s: BoxTokenStream = Box::pin(futures::stream::iter(items));
 
-        assert_eq!(s.next().await.unwrap().unwrap().delta, "Hi");
-        assert!(s.next().await.unwrap().is_err());
-        assert!(s.next().await.unwrap().unwrap().is_done());
+        assert_eq!(s.next().await.expect("failed").unwrap().delta, "Hi");
+        assert!(s.next().await.expect("failed").is_err());
+        assert!(s.next().await.expect("failed").unwrap().is_done());
         assert!(s.next().await.is_none());
     }
 }
