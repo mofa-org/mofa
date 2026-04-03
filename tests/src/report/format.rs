@@ -7,6 +7,15 @@ pub trait ReportFormatter: Send + Sync {
     fn format(&self, report: &TestReport) -> String;
 }
 
+fn escape_xml(input: &str) -> String {
+    input
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&apos;")
+}
+
 /// Renders a report as a JSON object.
 pub struct JsonFormatter;
 
@@ -99,6 +108,98 @@ impl ReportFormatter for TextFormatter {
             report.total_duration.as_millis(),
         ));
 
+        buf
+    }
+}
+
+/// Renders a report as a JUnit XML testsuite.
+pub struct JUnitFormatter;
+
+impl ReportFormatter for JUnitFormatter {
+    fn format(&self, report: &TestReport) -> String {
+        let mut buf = String::new();
+        let tests = report.total();
+        let failures = report.failed();
+        let skipped = report.skipped();
+        let time_secs = report.total_duration.as_secs_f64();
+
+        buf.push_str("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
+        buf.push_str(&format!(
+            "<testsuite name=\"{}\" tests=\"{}\" failures=\"{}\" skipped=\"{}\" time=\"{:.3}\" timestamp=\"{}\">\n",
+            escape_xml(&report.suite_name),
+            tests,
+            failures,
+            skipped,
+            time_secs,
+            report.timestamp
+        ));
+
+        for result in &report.results {
+            buf.push_str(&format!(
+                "  <testcase name=\"{}\" time=\"{:.3}\">",
+                escape_xml(&result.name),
+                result.duration.as_secs_f64()
+            ));
+
+            match result.status {
+                TestStatus::Passed => {
+                    if !result.metadata.is_empty() {
+                        buf.push('\n');
+                        buf.push_str("    <properties>\n");
+                        for (key, value) in &result.metadata {
+                            buf.push_str(&format!(
+                                "      <property name=\"{}\" value=\"{}\"/>\n",
+                                escape_xml(key),
+                                escape_xml(value)
+                            ));
+                        }
+                        buf.push_str("    </properties>\n");
+                        buf.push_str("  </testcase>\n");
+                    } else {
+                        buf.push_str("</testcase>\n");
+                    }
+                }
+                TestStatus::Failed => {
+                    buf.push('\n');
+                    if !result.metadata.is_empty() {
+                        buf.push_str("    <properties>\n");
+                        for (key, value) in &result.metadata {
+                            buf.push_str(&format!(
+                                "      <property name=\"{}\" value=\"{}\"/>\n",
+                                escape_xml(key),
+                                escape_xml(value)
+                            ));
+                        }
+                        buf.push_str("    </properties>\n");
+                    }
+                    let message = result.error.as_deref().unwrap_or("test failed");
+                    buf.push_str(&format!(
+                        "    <failure message=\"{}\">{}</failure>\n",
+                        escape_xml(message),
+                        escape_xml(message)
+                    ));
+                    buf.push_str("  </testcase>\n");
+                }
+                TestStatus::Skipped => {
+                    buf.push('\n');
+                    if !result.metadata.is_empty() {
+                        buf.push_str("    <properties>\n");
+                        for (key, value) in &result.metadata {
+                            buf.push_str(&format!(
+                                "      <property name=\"{}\" value=\"{}\"/>\n",
+                                escape_xml(key),
+                                escape_xml(value)
+                            ));
+                        }
+                        buf.push_str("    </properties>\n");
+                    }
+                    buf.push_str("    <skipped/>\n");
+                    buf.push_str("  </testcase>\n");
+                }
+            }
+        }
+
+        buf.push_str("</testsuite>\n");
         buf
     }
 }

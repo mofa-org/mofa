@@ -2,8 +2,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use mofa_testing::{
-    JsonFormatter, MockClock, ReportFormatter, TestCaseResult, TestReport, TestReportBuilder,
-    TestStatus, TextFormatter,
+    JUnitFormatter, JsonFormatter, MockClock, ReportFormatter, TestCaseResult, TestReport,
+    TestReportBuilder, TestStatus, TextFormatter,
 };
 
 // ---------------------------------------------------------------------------
@@ -318,4 +318,84 @@ fn text_formatter_empty_report() {
     let output = TextFormatter.format(&r);
     assert!(output.contains("Total: 0"));
     assert!(output.contains("Pass rate: 100.0%"));
+}
+
+// ===========================================================================
+// JUnitFormatter
+// ===========================================================================
+
+#[test]
+fn junit_formatter_all_passing_suite() {
+    let report = TestReport {
+        suite_name: "passing".into(),
+        results: vec![
+            make_result("alpha", TestStatus::Passed, 10, None),
+            make_result("beta", TestStatus::Passed, 20, None),
+        ],
+        total_duration: Duration::from_millis(30),
+        timestamp: 123,
+    };
+
+    let output = JUnitFormatter.format(&report);
+    assert!(output.contains("<?xml version=\"1.0\" encoding=\"UTF-8\"?>"));
+    assert!(output.contains("<testsuite name=\"passing\" tests=\"2\" failures=\"0\" skipped=\"0\" time=\"0.030\" timestamp=\"123\">"));
+    assert!(output.contains("<testcase name=\"alpha\" time=\"0.010\"></testcase>"));
+    assert!(output.contains("<testcase name=\"beta\" time=\"0.020\"></testcase>"));
+}
+
+#[test]
+fn junit_formatter_mixed_status_suite() {
+    let report = mixed_report();
+    let output = JUnitFormatter.format(&report);
+
+    assert!(output.contains("<testsuite name=\"mixed\" tests=\"5\" failures=\"2\" skipped=\"1\" time=\"0.110\" timestamp=\"1000\">"));
+    assert!(output.contains("<failure message=\"boom\">boom</failure>"));
+    assert!(output.contains("<failure message=\"oops\">oops</failure>"));
+    assert!(output.contains("<skipped/>"));
+}
+
+#[test]
+fn junit_formatter_escapes_error_payload() {
+    let report = TestReport {
+        suite_name: "xml".into(),
+        results: vec![make_result(
+            "needs<escape>",
+            TestStatus::Failed,
+            1,
+            Some("bad <xml> & \"quotes\""),
+        )],
+        total_duration: Duration::from_millis(1),
+        timestamp: 1,
+    };
+
+    let output = JUnitFormatter.format(&report);
+    assert!(output.contains("name=\"needs&lt;escape&gt;\""));
+    assert!(output.contains("message=\"bad &lt;xml&gt; &amp; &quot;quotes&quot;\""));
+    assert!(output.contains(">bad &lt;xml&gt; &amp; &quot;quotes&quot;</failure>"));
+}
+
+#[test]
+fn junit_formatter_includes_metadata_as_properties() {
+    let mut tc = make_result("meta_case", TestStatus::Passed, 5, None);
+    tc.metadata.push(("browser".into(), "webkit".into()));
+    tc.metadata.push(("env".into(), "ci".into()));
+    let report = TestReport {
+        suite_name: "meta".into(),
+        results: vec![tc],
+        total_duration: Duration::from_millis(5),
+        timestamp: 9,
+    };
+
+    let output = JUnitFormatter.format(&report);
+    assert!(output.contains("<properties>"));
+    assert!(output.contains("<property name=\"browser\" value=\"webkit\"/>"));
+    assert!(output.contains("<property name=\"env\" value=\"ci\"/>"));
+}
+
+#[test]
+fn junit_formatter_is_deterministic() {
+    let report = mixed_report();
+    let first = JUnitFormatter.format(&report);
+    let second = JUnitFormatter.format(&report);
+    assert_eq!(first, second);
 }
