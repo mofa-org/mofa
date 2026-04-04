@@ -398,7 +398,18 @@ impl CronScheduler {
 
         tokio::spawn(async move {
             let mut timing = if let Some(cron_expr) = &cron_expression {
-                ScheduleTiming::Cron(Box::new(cron_expr.parse().unwrap()))
+                match cron_expr.parse::<Schedule>() {
+                    Ok(schedule) => ScheduleTiming::Cron(Box::new(schedule)),
+                    Err(e) => {
+                        tracing::error!(
+                            "Failed to parse cron expression '{}' for schedule {}: {}",
+                            cron_expr,
+                            schedule_id,
+                            e
+                        );
+                        return;
+                    }
+                }
             } else if let Some(ms) = interval_ms {
                 ScheduleTiming::Interval(interval(Duration::from_millis(ms)))
             } else {
