@@ -4,12 +4,17 @@
 //! simple agent tests without introducing a full DSL framework yet.
 
 use crate::agent_runner::{AgentRunResult, AgentRunnerError, AgentTestRunner};
+use crate::live_llm::{OpenAiCompatProvider, OpenAiCompatProviderConfig};
+use crate::replay::{ReplayError, Tape};
 use crate::tools::MockTool;
 use mofa_foundation::agent::context::prompt::AgentIdentity;
+use mofa_foundation::agent::executor::AgentExecutorConfig;
 use mofa_kernel::agent::components::tool::ToolResult;
+use mofa_kernel::agent::types::LLMProvider;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -23,6 +28,9 @@ pub enum DslError {
     #[error("runner error: {0}")]
     Runner(#[from] AgentRunnerError),
 
+    #[error("replay error: {0}")]
+    Replay(#[from] ReplayError),
+
     #[error("test case must define either `prompt` or `input`")]
     MissingPrompt,
 
@@ -34,6 +42,21 @@ pub enum DslError {
 
     #[error("run produced no text output")]
     MissingOutput,
+
+    #[error("provider-backed llm cannot be combined with inline responses, steps, or replay tape")]
+    ConflictingLlmConfig,
+
+    #[error("record_tape requires a provider-backed llm")]
+    MissingRecordProvider,
+
+    #[error("provider-backed llm requires record_tape")]
+    MissingRecordTape,
+
+    #[error("unsupported llm provider kind: {0}")]
+    UnsupportedProvider(String),
+
+    #[error("missing environment variable `{0}` for llm provider")]
+    MissingProviderEnv(String),
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -50,6 +73,8 @@ pub struct TestCaseDsl {
     pub llm: Option<LlmDsl>,
     #[serde(rename = "assert")]
     pub assertions: Option<AssertDsl>,
+    #[serde(skip)]
+    pub source_path: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -78,6 +103,24 @@ pub struct LlmDsl {
     pub responses: Vec<String>,
     #[serde(default)]
     pub steps: Vec<LlmStepDsl>,
+    pub tape: Option<String>,
+    pub record_tape: Option<String>,
+    pub provider: Option<LlmProviderDsl>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct LlmProviderDsl {
+    pub kind: LlmProviderKind,
+    pub base_url: Option<String>,
+    pub model: Option<String>,
+    pub api_key_env: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LlmProviderKind {
+    OpenAiCompatible,
+    Ollama,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -112,12 +155,17 @@ pub struct AssertionOutcome {
 
 impl TestCaseDsl {
     pub fn from_toml_str(input: &str) -> Result<Self, DslError> {
-        Ok(toml::from_str(input)?)
+        let mut case: Self = toml::from_str(input)?;
+        case.source_path = None;
+        Ok(case)
     }
 
     pub fn from_toml_file(path: impl AsRef<Path>) -> Result<Self, DslError> {
+        let path = path.as_ref();
         let input = std::fs::read_to_string(path)?;
-        Self::from_toml_str(&input)
+        let mut case: Self = toml::from_str(&input)?;
+        case.source_path = Some(path.to_path_buf());
+        Ok(case)
     }
 
     fn execution_input(&self) -> Result<&str, DslError> {
@@ -138,7 +186,7 @@ pub async fn run_test_case(case: &TestCaseDsl) -> Result<AgentRunResult, DslErro
 }
 
 pub async fn execute_test_case(case: &TestCaseDsl) -> Result<AgentRunResult, DslError> {
-    let mut runner = AgentTestRunner::new().await?;
+    let mut runner = build_runner(case).await?;
     configure_runner_from_test_case(case, &mut runner).await?;
     let result = runner.run_text(case.execution_input()?).await?;
     runner.shutdown().await?;
@@ -177,7 +225,13 @@ pub async fn configure_runner_from_test_case(
     // Queue deterministic LLM responses before execution so the DSL stays a thin
     // adapter over the existing runner harness.
     if let Some(llm) = &case.llm {
-        if !llm.steps.is_empty() {
+        if llm.provider.is_some() {
+            if !llm.steps.is_empty() || !llm.responses.is_empty() || llm.tape.is_some() {
+                return Err(DslError::ConflictingLlmConfig);
+            }
+        } else if llm.record_tape.is_some() {
+            return Err(DslError::MissingRecordProvider);
+        } else if !llm.steps.is_empty() {
             for step in &llm.steps {
                 match step.kind {
                     LlmStepKind::Text => {
@@ -198,6 +252,10 @@ pub async fn configure_runner_from_test_case(
                     }
                 }
             }
+        } else if let Some(tape_path) = &llm.tape {
+            let resolved = resolve_case_path(case, tape_path);
+            let tape = Tape::from_file(resolved)?;
+            let _responses = tape.responses()?;
         } else {
             for response in &llm.responses {
                 runner.mock_llm().add_response(response).await;
@@ -205,6 +263,107 @@ pub async fn configure_runner_from_test_case(
         }
     }
     Ok(())
+}
+
+// Build the appropriate runner (recording, replay, or mock) for this case.
+async fn build_runner(case: &TestCaseDsl) -> Result<AgentTestRunner, DslError> {
+    let config = AgentExecutorConfig::default();
+    let llm = case.llm.as_ref();
+    match llm.and_then(|item| item.provider.as_ref()) {
+        Some(provider) => {
+            let provider = build_live_provider(provider)?;
+            if let Some(record_tape) = llm.and_then(|item| item.record_tape.as_deref()) {
+                let tape_path = resolve_case_path(case, record_tape);
+                AgentTestRunner::with_recording_provider(provider, &case.name, tape_path, config)
+                    .await
+                    .map_err(DslError::from)
+            } else {
+                Err(DslError::MissingRecordTape)
+            }
+        }
+        None => {
+            if let Some(llm) = llm {
+                if let Some(tape_path) = &llm.tape {
+                    let tape = Tape::from_file(resolve_case_path(case, tape_path))?;
+                    return AgentTestRunner::with_replay_tape(tape, config)
+                        .await
+                        .map_err(DslError::from);
+                }
+            }
+            AgentTestRunner::with_config(config)
+                .await
+                .map_err(DslError::from)
+        }
+    }
+}
+
+// Instantiate an LLM provider implementation from the DSL settings.
+fn build_live_provider(provider: &LlmProviderDsl) -> Result<Arc<dyn LLMProvider>, DslError> {
+    match provider.kind {
+        LlmProviderKind::OpenAiCompatible => {
+            let api_key = read_provider_api_key(provider)?;
+            Ok(Arc::new(OpenAiCompatProvider::new(OpenAiCompatProviderConfig {
+                base_url: provider
+                    .base_url
+                    .clone()
+                    .ok_or_else(|| DslError::UnsupportedProvider("open_ai_compatible missing base_url".to_string()))?,
+                model: provider.model.clone().unwrap_or_else(|| "gpt-4o-mini".to_string()),
+                api_key,
+            })))
+        }
+        LlmProviderKind::Ollama => Ok(Arc::new(OpenAiCompatProvider::new(OpenAiCompatProviderConfig {
+            base_url: provider
+                .base_url
+                .clone()
+                .or_else(|| std::env::var("OLLAMA_BASE_URL").ok())
+                .unwrap_or_else(|| "http://127.0.0.1:11434/v1".to_string()),
+            model: provider
+                .model
+                .clone()
+                .or_else(|| std::env::var("OLLAMA_MODEL").ok())
+                .unwrap_or_else(|| "llama3".to_string()),
+            api_key: None,
+        }))),
+    }
+}
+
+// Read or validate the configured API key name for a provider.
+fn read_provider_api_key(provider: &LlmProviderDsl) -> Result<Option<String>, DslError> {
+    let env_name = provider
+        .api_key_env
+        .clone()
+        .unwrap_or_else(|| "OPENAI_API_KEY".to_string());
+    if env_name.is_empty() {
+        return Ok(None);
+    }
+
+    match std::env::var(&env_name) {
+        Ok(value) if value.is_empty() => Ok(None),
+        Ok(value) => Ok(Some(value)),
+        Err(std::env::VarError::NotPresent) => {
+            if provider.base_url.as_deref().map(|url| url.contains("127.0.0.1") || url.contains("localhost")).unwrap_or(false) {
+                Ok(None)
+            } else {
+                Err(DslError::MissingProviderEnv(env_name))
+            }
+        }
+        Err(err) => Err(DslError::MissingProviderEnv(format!("{env_name}: {err}"))),
+    }
+}
+
+fn resolve_case_path(case: &TestCaseDsl, tape_path: &str) -> PathBuf {
+    let path = Path::new(tape_path);
+    if path.is_absolute() {
+        return path.to_path_buf();
+    }
+
+    if let Some(source_path) = &case.source_path {
+        if let Some(parent) = source_path.parent() {
+            return parent.join(path);
+        }
+    }
+
+    path.to_path_buf()
 }
 
 fn agent_identity(agent: Option<&AgentDsl>) -> Option<AgentIdentity> {

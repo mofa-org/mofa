@@ -19,6 +19,7 @@ use mofa_kernel::agent::types::{ChatCompletionResponse, ToolCall};
 use mofa_kernel::agent::AgentCapabilities;
 use mofa_kernel::agent::AgentState;
 use mofa_runtime::runner::{AgentRunner, RunnerState, RunnerStats};
+use crate::replay::{RecordingLLMProvider, ReplayLLMProvider, Tape};
 use std::collections::VecDeque;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
@@ -383,9 +384,15 @@ pub struct AgentTestRunner {
     workspace: TempWorkspace,
     session_id: String,
     execution_id: String,
-    llm: Arc<MockAgentLLMProvider>,
+    llm: RunnerLlmHandle,
     runner: AgentRunner<SessionAwareExecutor>,
     mock_tools: Vec<MockTool>,
+}
+
+enum RunnerLlmHandle {
+    Mock(Arc<MockAgentLLMProvider>),
+    Recording(Arc<RecordingLLMProvider>),
+    Replay(Arc<ReplayLLMProvider>),
 }
 
 impl AgentTestRunner {
@@ -397,6 +404,44 @@ impl AgentTestRunner {
         let workspace = TempWorkspace::new("mofa-agent-test")?;
         let llm = Arc::new(MockAgentLLMProvider::new("mock-llm"));
         let executor = AgentExecutor::with_config(llm.clone(), workspace.path(), config).await?;
+        Self::with_workspace_and_handle(workspace, RunnerLlmHandle::Mock(llm), executor).await
+    }
+
+    // Build a runner backed by a live provider that records every interaction.
+    pub async fn with_recording_provider(
+        inner: Arc<dyn mofa_kernel::agent::types::LLMProvider>,
+        case_name: &str,
+        tape_path: impl Into<PathBuf>,
+        config: AgentExecutorConfig,
+    ) -> Result<Self, AgentRunnerError> {
+        let workspace = TempWorkspace::new("mofa-agent-test")?;
+        let llm = Arc::new(RecordingLLMProvider::new(
+            "recording-llm",
+            inner,
+            case_name,
+            tape_path,
+        ));
+        let executor = AgentExecutor::with_config(llm.clone(), workspace.path(), config).await?;
+        Self::with_workspace_and_handle(workspace, RunnerLlmHandle::Recording(llm), executor).await
+    }
+
+    // Build a runner that serves responses from a pre-recorded tape.
+    pub async fn with_replay_tape(
+        tape: Tape,
+        config: AgentExecutorConfig,
+    ) -> Result<Self, AgentRunnerError> {
+        let workspace = TempWorkspace::new("mofa-agent-test")?;
+        let llm = Arc::new(ReplayLLMProvider::new("replay-llm", tape));
+        let executor = AgentExecutor::with_config(llm.clone(), workspace.path(), config).await?;
+        Self::with_workspace_and_handle(workspace, RunnerLlmHandle::Replay(llm), executor).await
+    }
+
+    // Final assembly step that wires up the workspace, LLM handle, and executor.
+    async fn with_workspace_and_handle(
+        workspace: TempWorkspace,
+        llm: RunnerLlmHandle,
+        executor: AgentExecutor,
+    ) -> Result<Self, AgentRunnerError> {
         let agent = SessionAwareExecutor::new(executor);
 
         let execution_id = Uuid::now_v7().to_string();
@@ -428,7 +473,12 @@ impl AgentTestRunner {
     }
 
     pub fn mock_llm(&self) -> Arc<MockAgentLLMProvider> {
-        Arc::clone(&self.llm)
+        match &self.llm {
+            RunnerLlmHandle::Mock(provider) => Arc::clone(provider),
+            RunnerLlmHandle::Recording(_) | RunnerLlmHandle::Replay(_) => {
+                panic!("mock_llm is only available for mock-backed runners")
+            }
+        }
     }
 
     pub fn write_bootstrap_file(
@@ -529,8 +579,8 @@ impl AgentTestRunner {
         let session_snapshot = self.load_session_snapshot().await;
         let workspace_snapshot_after = self.workspace.snapshot();
         let tool_calls = self.collect_tool_calls().await;
-        let llm_last_request = self.llm.last_request().await;
-        let llm_last_response = self.llm.last_response().await;
+        let llm_last_request = self.last_request().await;
+        let llm_last_response = self.last_response().await;
 
         let (output, error) = match result {
             Ok(output) => (Some(output), None),
@@ -615,5 +665,21 @@ impl AgentTestRunner {
             }
         }
         records
+    }
+
+    async fn last_request(&self) -> Option<ChatCompletionRequest> {
+        match &self.llm {
+            RunnerLlmHandle::Mock(provider) => provider.last_request().await,
+            RunnerLlmHandle::Recording(provider) => provider.last_request().await,
+            RunnerLlmHandle::Replay(provider) => provider.last_request().await,
+        }
+    }
+
+    async fn last_response(&self) -> Option<ChatCompletionResponse> {
+        match &self.llm {
+            RunnerLlmHandle::Mock(provider) => provider.last_response().await,
+            RunnerLlmHandle::Recording(provider) => provider.last_response().await,
+            RunnerLlmHandle::Replay(provider) => provider.last_response().await,
+        }
     }
 }

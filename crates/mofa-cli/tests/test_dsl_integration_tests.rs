@@ -1,7 +1,9 @@
 //! Integration tests for `mofa test-dsl`.
 
+use axum::{Json, Router, routing::post};
 use assert_cmd::Command;
 use predicates::prelude::*;
+use serde_json::json;
 use tempfile::tempdir;
 
 #[test]
@@ -35,6 +37,22 @@ fn test_dsl_command_emits_json() {
         .stdout(predicate::str::contains("\"success\": true"))
         .stdout(predicate::str::contains("\"tool_calls\""))
         .stdout(predicate::str::contains("\"echo_tool\""));
+}
+
+#[test]
+fn test_dsl_command_runs_tape_backed_case() {
+    let case_path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../tests/examples/simple_agent_tape.toml"
+    );
+
+    Command::cargo_bin("mofa")
+        .expect("mofa bin")
+        .args(["test-dsl", case_path])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("status: passed"))
+        .stdout(predicate::str::contains("output: hello from tape"));
 }
 
 #[test]
@@ -275,4 +293,61 @@ fn test_dsl_command_fails_on_baseline_mismatch_when_flag_set() {
         ])
         .assert()
         .failure();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_dsl_command_records_tape_from_live_provider() {
+    async fn completions(Json(_request): Json<serde_json::Value>) -> Json<serde_json::Value> {
+        Json(json!({
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": "hello from live provider"
+                    }
+                }
+            ],
+            "usage": {
+                "prompt_tokens": 3,
+                "completion_tokens": 4,
+                "total_tokens": 7
+            }
+        }))
+    }
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind mock server");
+    let address = listener.local_addr().expect("local addr");
+    let server = tokio::spawn(async move {
+        axum::serve(listener, Router::new().route("/v1/chat/completions", post(completions)))
+            .await
+            .expect("mock server should run");
+    });
+
+    let temp = tempdir().expect("temp dir");
+    let tape_path = temp.path().join("recorded.tape.json");
+    let case_path = temp.path().join("record_case.toml");
+    std::fs::write(
+        &case_path,
+        format!(
+            "name = \"record_case\"\nprompt = \"hello\"\n\n[llm]\nrecord_tape = \"{}\"\n\n[llm.provider]\nkind = \"open_ai_compatible\"\nbase_url = \"http://{}/v1\"\nmodel = \"mock-model\"\n",
+            tape_path.display(),
+            address
+        ),
+    )
+    .expect("record case written");
+
+    Command::cargo_bin("mofa")
+        .expect("mofa bin")
+        .args(["test-dsl", case_path.to_str().expect("utf8 case path")])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("output: hello from live provider"));
+
+    let tape = std::fs::read_to_string(&tape_path).expect("tape file exists");
+    assert!(tape.contains("\"case_name\": \"record_case\""));
+    assert!(tape.contains("\"response\": \"hello from live provider\""));
+
+    server.abort();
 }

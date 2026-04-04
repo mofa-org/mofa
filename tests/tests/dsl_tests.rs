@@ -90,3 +90,19 @@ async fn toml_dsl_supports_tool_backed_runs() {
     assert!(system_message.contains("ToolAgent"));
     assert!(system_message.contains("Agent used to validate tool-aware DSL execution."));
 }
+
+#[tokio::test]
+async fn toml_dsl_supports_tape_backed_runs() {
+    let case = TestCaseDsl::from_toml_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/examples/simple_agent_tape.toml"
+    ))
+    .expect("tape-backed DSL example should parse");
+
+    let result = run_test_case(&case)
+        .await
+        .expect("tape-backed DSL case should run successfully");
+
+    assert!(result.is_success());
+    assert_eq!(result.output_text().as_deref(), Some("hello from tape"));
+}
