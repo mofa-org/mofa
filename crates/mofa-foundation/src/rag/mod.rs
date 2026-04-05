@@ -5,12 +5,13 @@
 
 pub mod chunker;
 pub mod embedding_adapter;
-pub mod retrieval;
+pub mod hybrid;
 pub mod indexing;
 pub mod loaders;
 pub mod pipeline_adapters;
 pub mod recursive_chunker;
 pub mod default_reranker;
+pub mod retrieval;
 pub mod score_reranker;
 pub mod similarity;
 pub mod streaming_generator;
@@ -24,8 +25,9 @@ pub use embedding_adapter::{
     deterministic_chunk_id, EmbeddingAdapterError, LlmEmbeddingAdapter, RagEmbeddingConfig,
     RagEmbeddingProvider,
 };
-pub use retrieval::{
-    query_documents, RagQueryConfig, RetrievalResult, RetrievedChunk,};
+pub use hybrid::{
+    GenericHybridRetriever, HybridRetrieverConfig, HybridSearchPipeline,
+};
 pub use indexing::{
     index_documents, IndexDocument, IndexMode, IndexResult, RagIndexConfig,
     RagOrchestrationError,
@@ -34,6 +36,9 @@ pub use loaders::{DocumentLoader, LoaderError, LoaderResult, MarkdownLoader, Tex
 pub use pipeline_adapters::{InMemoryRetriever, SimpleGenerator};
 pub use recursive_chunker::{RecursiveChunker, RecursiveChunkConfig};
 pub use default_reranker::IdentityReranker;
+pub use retrieval::{
+    query_documents, RagQueryConfig, RetrievalResult, RetrievedChunk,
+};
 pub use score_reranker::ScoreReranker;
 pub use similarity::compute_similarity;
 pub use streaming_generator::PassthroughStreamingGenerator;
@@ -44,7 +49,7 @@ pub use qdrant_store::{QdrantConfig, QdrantVectorStore};
 
 // Re-export kernel types for convenience
 pub use mofa_kernel::rag::{
-    Document, DocumentChunk, GenerateInput, Generator, GeneratorChunk, RagPipeline,
-    RagPipelineOutput, Reranker, Retriever, ScoredDocument, SearchResult, SimilarityMetric,
-    VectorStore,
+    Document, DocumentChunk, GenerateInput, Generator, GeneratorChunk, HybridRetriever,
+    RagPipeline, RagPipelineOutput, Reranker, Retriever, ScoredDocument, SearchResult,
+    SimilarityMetric, VectorStore,
 };
