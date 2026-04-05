@@ -416,7 +416,7 @@ mod tests {
         let monitor = TaskMonitor::new();
         monitor.start_monitoring("task_1", "agent_1").await;
 
-        let snapshot = monitor.get_task_snapshot("task_1").await.unwrap();
+        let snapshot = monitor.get_task_snapshot("task_1").await.expect("failed");
         assert_eq!(snapshot.task_id, "task_1");
         assert_eq!(snapshot.agent_id, "agent_1");
     }
@@ -430,7 +430,7 @@ mod tests {
             .update_task_status("task_1", TaskExecutionStatus::Executing, 50, None)
             .await;
 
-        let snapshot = monitor.get_task_snapshot("task_1").await.unwrap();
+        let snapshot = monitor.get_task_snapshot("task_1").await.expect("failed");
         assert_eq!(snapshot.progress, 50);
     }
 
@@ -450,7 +450,7 @@ mod tests {
 
         monitor.complete_task("task_1", result).await;
 
-        let snapshot = monitor.get_task_snapshot("task_1").await.unwrap();
+        let snapshot = monitor.get_task_snapshot("task_1").await.expect("failed");
         assert!(matches!(snapshot.status, TaskExecutionStatus::Completed));
         assert_eq!(snapshot.progress, 100);
     }

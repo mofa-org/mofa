@@ -1,0 +1,42 @@
+commit 36284d6c0994026aa5fc0d40f8abe1e067e674d2
+Merge: 56e5def8 e78bed45
+Author: AmosLi <lijingrs@gmail.com>
+Date:   Sat Feb 28 14:01:27 2026 +0800
+
+    Merge pull request #459 from adityars07/feature/multimodal-capabilities
+    
+    feat: Add multi-modal inputs and API mapping (Image, Audio, Video)
+
+ build_output.txt                                   |  14 ++++
+ compile_errors.txt                                 | Bin 0 -> 3702 bytes
+ crates/mofa-cli/src/commands/agent/stop.rs         |   8 +-
+ crates/mofa-cli/src/config/validator.rs            |   1 -
+ crates/mofa-extra/src/rhai/rules.rs                |   6 +-
+ crates/mofa-extra/src/rhai/workflow.rs             |   2 +-
+ crates/mofa-ffi/src/uniffi_bindings.rs             |   2 +-
+ crates/mofa-foundation/src/adapter/resolver.rs     |   8 +-
+ crates/mofa-foundation/src/llm/anthropic.rs        |  81 +++++++++++++++++----
+ crates/mofa-foundation/src/llm/google.rs           |  78 +++++++++++++++-----
+ crates/mofa-foundation/src/llm/openai.rs           |   5 ++
+ crates/mofa-foundation/src/llm/token_budget.rs     |   2 +
+ crates/mofa-foundation/src/llm/types.rs            |  55 ++++++++++++++
+ crates/mofa-foundation/src/rag/qdrant_store.rs     |   3 +-
+ crates/mofa-kernel/src/agent/types.rs              |   5 ++
+ crates/mofa-monitoring/src/dashboard/server.rs     |   1 -
+ crates/mofa-plugins/src/rhai_runtime/plugin.rs     |   8 +-
+ crates/mofa-plugins/src/tools/calculator.rs        |  16 ++--
+ crates/mofa-plugins/src/tools/datetime.rs          |  16 ++--
+ crates/mofa-plugins/src/tools/filesystem.rs        |   6 +-
+ crates/mofa-plugins/src/tools/http.rs              |   2 +-
+ crates/mofa-plugins/src/tools/json.rs              |  24 +++---
+ crates/mofa-plugins/src/tools/medical_knowledge.rs |   6 +-
+ .../mofa-plugins/src/tools/response_optimizer.rs   |   4 +-
+ crates/mofa-plugins/src/tools/shell.rs             |   2 +-
+ crates/mofa-plugins/src/tts.rs                     |  26 +++----
+ crates/mofa-plugins/src/wasm_runtime/manager.rs    |  14 ++--
+ errors.txt                                         |  33 +++++++++
+ examples/cli_production_smoke/src/lib.rs           |   5 ++
+ examples/output.log                                | Bin 0 -> 2490 bytes
+ examples/output.txt                                |  44 +++++++++++
+ examples/output2.txt                               |  32 ++++++++
+ 32 files changed, 401 insertions(+), 108 deletions(-)

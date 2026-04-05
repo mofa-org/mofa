@@ -35,8 +35,8 @@ use mofa_kernel::agent::components::memory::{
 };
 use mofa_kernel::agent::error::AgentResult;
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 /// A single stored episode — one message within a session, with ordering metadata.
 #[derive(Debug, Clone)]
@@ -199,8 +199,7 @@ impl Memory for EpisodicMemory {
 
     async fn clear_history(&mut self, session_id: &str) -> AgentResult<()> {
         self.sessions.remove(session_id);
-        self.all_episodes
-            .retain(|ep| ep.session_id != session_id);
+        self.all_episodes.retain(|ep| ep.session_id != session_id);
         Ok(())
     }
 
@@ -233,10 +232,14 @@ mod tests {
     async fn test_add_and_retrieve_history() {
         let mut mem = EpisodicMemory::new();
 
-        mem.add_to_history("s1", Message::user("hello")).await.unwrap();
-        mem.add_to_history("s1", Message::assistant("hi there")).await.unwrap();
+        mem.add_to_history("s1", Message::user("hello"))
+            .await
+            .unwrap();
+        mem.add_to_history("s1", Message::assistant("hi there"))
+            .await
+            .unwrap();
 
-        let history = mem.get_history("s1").await.unwrap();
+        let history = mem.get_history("s1").await.expect("failed");
         assert_eq!(history.len(), 2);
         assert_eq!(history[0].content, "hello");
         assert_eq!(history[1].content, "hi there");
@@ -278,7 +281,7 @@ mod tests {
             .await
             .unwrap();
 
-        let results = mem.search("rust", 10).await.unwrap();
+        let results = mem.search("rust", 10).await.expect("failed");
         assert_eq!(results.len(), 2);
     }
 
@@ -286,16 +289,20 @@ mod tests {
     async fn test_clear_history_for_session() {
         let mut mem = EpisodicMemory::new();
 
-        mem.add_to_history("s1", Message::user("msg1")).await.unwrap();
-        mem.add_to_history("s2", Message::user("msg2")).await.unwrap();
+        mem.add_to_history("s1", Message::user("msg1"))
+            .await
+            .unwrap();
+        mem.add_to_history("s2", Message::user("msg2"))
+            .await
+            .unwrap();
 
-        mem.clear_history("s1").await.unwrap();
+        mem.clear_history("s1").await.expect("failed");
 
-        let s1_history = mem.get_history("s1").await.unwrap();
+        let s1_history = mem.get_history("s1").await.expect("failed");
         assert!(s1_history.is_empty());
 
         // s2 should be unaffected
-        let s2_history = mem.get_history("s2").await.unwrap();
+        let s2_history = mem.get_history("s2").await.expect("failed");
         assert_eq!(s2_history.len(), 1);
 
         // cross-session store should also drop s1 episodes
@@ -306,8 +313,10 @@ mod tests {
     async fn test_kv_store() {
         let mut mem = EpisodicMemory::new();
 
-        mem.store("user_name", MemoryValue::text("Alice")).await.unwrap();
-        let val = mem.retrieve("user_name").await.unwrap();
+        mem.store("user_name", MemoryValue::text("Alice"))
+            .await
+            .unwrap();
+        let val = mem.retrieve("user_name").await.expect("failed");
         assert!(val.is_some());
         assert_eq!(val.unwrap().as_text(), Some("Alice"));
     }
@@ -316,11 +325,13 @@ mod tests {
     async fn test_stats() {
         let mut mem = EpisodicMemory::new();
 
-        mem.add_to_history("s1", Message::user("a")).await.unwrap();
-        mem.add_to_history("s1", Message::assistant("b")).await.unwrap();
-        mem.add_to_history("s2", Message::user("c")).await.unwrap();
+        mem.add_to_history("s1", Message::user("a")).await.expect("failed");
+        mem.add_to_history("s1", Message::assistant("b"))
+            .await
+            .unwrap();
+        mem.add_to_history("s2", Message::user("c")).await.expect("failed");
 
-        let stats = mem.stats().await.unwrap();
+        let stats = mem.stats().await.expect("failed");
         assert_eq!(stats.total_sessions, 2);
         assert_eq!(stats.total_messages, 3);
     }

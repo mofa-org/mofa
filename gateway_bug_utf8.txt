@@ -1,0 +1,23 @@
+﻿cargo :     Blocking 
+waiting for file lock on 
+build directory
+At line:1 char:1
++ cargo check --package 
+mofa-gateway --tests 2>&1 
+> gateway_bug.txt
++ ~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~
+    + CategoryInfo        
+      : NotSpecified: (   
+     Blocking wa...buil   
+ d directory:String) [    
+], RemoteException
+    + FullyQualifiedError 
+   Id : NativeCommandErr  
+  or
+ 
+    Finished `dev` 
+profile [unoptimized + 
+debuginfo] target(s) in 
+3m 28s

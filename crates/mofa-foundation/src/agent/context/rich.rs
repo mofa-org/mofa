@@ -5,7 +5,7 @@
 //! Provides business-specific functions to extend the kernel's CoreAgentContext
 
 use mofa_kernel::agent::context::AgentContext;
-use mofa_kernel::security::{Authorizer, AuthorizationResult, SecurityError, SecurityResult};
+use mofa_kernel::security::{AuthorizationResult, Authorizer, SecurityError, SecurityResult};
 use serde::{Serialize, de::DeserializeOwned};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -290,7 +290,7 @@ impl RichAgentContext {
         // For now, we'll check if there's an authorizer key in the context
         // In a real implementation, you might want to store the authorizer differently
         let authorizer_key: Option<String> = self.get("_authorizer_key").await;
-        
+
         if authorizer_key.is_none() {
             // No authorizer configured - allow by default (fail-open mode)
             // In production, you might want to fail-closed instead

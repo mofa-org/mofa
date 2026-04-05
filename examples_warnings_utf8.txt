@@ -1,0 +1,20 @@
+﻿cargo :     Finished 
+`dev` profile 
+[unoptimized + debuginfo] 
+target(s) in 4.69s
+At line:1 char:1
++ cargo check --examples 
+> examples_warnings.txt 
+2>&1
++ ~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+~
+    + CategoryInfo        
+      : NotSpecified: (   
+     Finished `d...get(   
+ s) in 4.69s:String) [    
+], RemoteException
+    + FullyQualifiedError 
+   Id : NativeCommandErr  
+  or
+ 

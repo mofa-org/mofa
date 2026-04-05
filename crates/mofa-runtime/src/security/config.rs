@@ -137,7 +137,7 @@ mod tests {
             .with_rbac_enabled(true)
             .with_pii_redaction_enabled(false)
             .with_fail_mode(SecurityFailMode::FailOpen);
-        
+
         assert!(config.rbac_enabled);
         assert!(!config.pii_redaction_enabled);
         assert_eq!(config.fail_mode, SecurityFailMode::FailOpen);

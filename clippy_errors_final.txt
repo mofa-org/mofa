@@ -1,0 +1,64 @@
+﻿cargo :     Checking 
+mofa-gateway v0.1.0 
+(C:\Users\Aditya RS\mofa\c
+rates\mofa-gateway)
+At line:1 char:1
++ cargo clippy 
+--workspace -- -D 
+warnings 2>&1 | Out-File 
+-Encoding utf ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo        
+      : NotSpecified: (   
+     Checking mo...s\mo   
+ fa-gateway):String) [    
+], RemoteException
+    + FullyQualifiedError 
+   Id : NativeCommandErr  
+  or
+ 
+error: this `impl` can be 
+derived
+   --> crates\mofa-gateway
+\src\types.rs:303:1
+    |
+303 | / impl Default for 
+Role {
+304 | |     fn default() 
+-> Self {
+305 | |         Role::User
+306 | |     }
+307 | | }
+    | |_^
+    |
+    = help: for further 
+information visit https://
+rust-lang.github.io/rust-c
+lippy/rust-1.93.0/index.ht
+ml#derivable_impls
+    = note: `-D 
+clippy::derivable-impls` 
+implied by `-D warnings`
+    = help: to override 
+`-D warnings` add `#[allow
+(clippy::derivable_impls)]
+`
+help: replace the manual 
+implementation with a 
+derive attribute and mark 
+the default variant
+    |
+292 + #[derive(Default)]
+293 | pub enum Role {
+294 |     /// System 
+message
+295 |     System,
+296 |     /// User message
+297 ~     #[default]
+298 ~     User,
+    |
+
+error: could not compile 
+`mofa-gateway` (lib) due 
+to 1 previous error

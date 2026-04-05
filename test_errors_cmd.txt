@@ -1,0 +1,2 @@
+    Blocking waiting for file lock on build directory
+    Checking mofa-foundation v0.1.0 (C:\Users\Aditya RS\mofa\crates\mofa-foundation)

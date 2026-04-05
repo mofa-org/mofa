@@ -551,9 +551,7 @@ impl ScriptToolRegistry {
             let path = entry.path();
             if let (Some(ext), Some(path_str)) = (path.extension(), path.to_str()) {
                 let id = match ext.to_str() {
-                    Some("yaml") | Some("yml") => {
-                        self.load_from_yaml(path_str).await.ok()
-                    }
+                    Some("yaml") | Some("yml") => self.load_from_yaml(path_str).await.ok(),
                     Some("json") => self.load_from_json(path_str).await.ok(),
                     _ => None,
                 };
@@ -852,7 +850,7 @@ mod tests {
             )
             .build();
 
-        registry.register(tool).await.unwrap();
+        registry.register(tool).await.expect("failed");
 
         assert_eq!(registry.tool_count().await, 1);
     }
@@ -872,13 +870,13 @@ mod tests {
         .with_parameter(ToolParameter::new("x", ParameterType::Integer).required())
         .with_parameter(ToolParameter::new("y", ParameterType::Integer).required());
 
-        registry.register(tool).await.unwrap();
+        registry.register(tool).await.expect("failed");
 
         let mut input = HashMap::new();
         input.insert("x".to_string(), serde_json::json!(6));
         input.insert("y".to_string(), serde_json::json!(7));
 
-        let result = registry.execute("multiply", input).await.unwrap();
+        let result = registry.execute("multiply", input).await.expect("failed");
 
         assert!(result.success);
         assert_eq!(result.result, serde_json::json!(42));
@@ -921,14 +919,14 @@ mod tests {
             ToolParameter::new("greeting", ParameterType::String).with_default("Hello"),
         );
 
-        registry.register(tool).await.unwrap();
+        registry.register(tool).await.expect("failed");
 
         // 不提供 greeting 参数，使用默认值
         // greeting parameter not provided, use default
         let mut input = HashMap::new();
         input.insert("name".to_string(), serde_json::json!("World"));
 
-        let result = registry.execute("greet", input).await.unwrap();
+        let result = registry.execute("greet", input).await.expect("failed");
 
         assert!(result.success);
         assert_eq!(result.result, serde_json::json!("Hello, World!"));

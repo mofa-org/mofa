@@ -229,7 +229,7 @@ mod tests {
         let generator = Arc::new(FakeGenerator);
         let pipeline = RagPipeline::new(retriever, reranker, generator);
 
-        let output = pipeline.run_with_top_k("hello", 1).await.unwrap();
+        let output = pipeline.run_with_top_k("hello", 1).await.expect("failed");
 
         assert_eq!(output.retrieved_docs.len(), 1);
         assert_eq!(output.reranked_docs.len(), 1);
@@ -250,7 +250,7 @@ mod tests {
             Arc::new(IdentityReranker),
             Arc::new(FakeGenerator),
         );
-        let _ = pipeline.run_with_top_k("hello", 2).await.unwrap();
+        let _ = pipeline.run_with_top_k("hello", 2).await.expect("failed");
 
         let seen = *top_k_ref.lock().unwrap();
         assert_eq!(seen, Some(2));
@@ -268,7 +268,7 @@ mod tests {
             Arc::new(FakeGenerator),
         );
 
-        let output = pipeline.run_with_top_k("hello", 2).await.unwrap();
+        let output = pipeline.run_with_top_k("hello", 2).await.expect("failed");
         assert_eq!(output.retrieved_docs[0].document.id, "a");
         assert_eq!(output.reranked_docs[0].document.id, "b");
     }
@@ -282,7 +282,7 @@ mod tests {
             Arc::new(FakeGenerator),
         );
 
-        let output = pipeline.run_with_top_k("hello", 1).await.unwrap();
+        let output = pipeline.run_with_top_k("hello", 1).await.expect("failed");
         assert_eq!(output.retrieved_docs.len(), 0);
         assert!(output.answer.contains("ctx=0"));
     }
@@ -311,7 +311,7 @@ mod tests {
             Arc::new(FakeGenerator),
         );
 
-        let (reranked_docs, mut stream) = pipeline.run_streaming("hello", 1).await.unwrap();
+        let (reranked_docs, mut stream) = pipeline.run_streaming("hello", 1).await.expect("failed");
         assert_eq!(reranked_docs.len(), 1);
         let mut collected = String::new();
         while let Some(chunk_result) = stream.next().await {
@@ -368,8 +368,8 @@ mod tests {
             Arc::new(FailingStreamGenerator),
         );
 
-        let (_docs, mut stream) = pipeline.run_streaming("hello", 1).await.unwrap();
-        let first: AgentResult<GeneratorChunk> = stream.next().await.unwrap();
+        let (_docs, mut stream) = pipeline.run_streaming("hello", 1).await.expect("failed");
+        let first: AgentResult<GeneratorChunk> = stream.next().await.expect("failed");
         assert!(first.is_err());
     }
 }

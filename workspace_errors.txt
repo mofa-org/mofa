@@ -1,0 +1,1140 @@
+   Compiling mofa-monitoring v0.1.0 (C:\Users\Aditya RS\mofa\crates\mofa-monitoring)
+   Compiling mofa-foundation v0.1.0 (C:\Users\Aditya RS\mofa\crates\mofa-foundation)
+   Compiling mofa-ffi v0.1.0 (C:\Users\Aditya RS\mofa\crates\mofa-ffi)
+   Compiling mofa-cli v0.1.0 (C:\Users\Aditya RS\mofa\crates\mofa-cli)
+   Compiling mofa-testing v0.1.0 (C:\Users\Aditya RS\mofa\tests)
+error[E0786]: found invalid metadata files for crate `mofa_foundation`
+ --> crates\mofa-monitoring\tests\visual_debug_integration.rs:8:5
+  |
+8 | use mofa_foundation::workflow::session_recorder::InMemorySessionRecorder;
+  |     ^^^^^^^^^^^^^^^
+  |
+  = note: failed to mmap file '\\?\C:\Users\Aditya RS\mofa\target\debug\deps\libmofa_foundation-48fa2e7510f8b03a.rlib': The paging file is too small for this operation to complete. (os error 1455)
+
+error[E0786]: found invalid metadata files for crate `mofa_monitoring`
+  --> crates\mofa-monitoring\tests\visual_debug_integration.rs:10:5
+   |
+10 | use mofa_monitoring::{DashboardConfig, DashboardServer};
+   |     ^^^^^^^^^^^^^^^
+   |
+   = note: failed to mmap file '\\?\C:\Users\Aditya RS\mofa\target\debug\deps\libmofa_monitoring-472a0b59bb067d9f.rlib': The paging file is too small for this operation to complete. (os error 1455)
+
+error[E0786]: found invalid metadata files for crate `serde_json`
+  --> crates\mofa-monitoring\tests\visual_debug_integration.rs:25:29
+   |
+25 |             state_snapshot: serde_json::json!({"count": 0}),
+   |                             ^^^^^^^^^^
+   |
+   = note: failed to mmap file '\\?\C:\Users\Aditya RS\mofa\target\debug\deps\libserde_json-5c916b61c34c300b.rlib': The paging file is too small for this operation to complete. (os error 1455)
+
+error[E0463]: can't find crate for `mofa_sdk`
+  --> crates\mofa-ffi\src\lib.rs:45:9
+   |
+45 | pub use mofa_sdk::*;
+   |         ^^^^^^^^ can't find crate
+
+For more information about this error, try `rustc --explain E0463`.
+error[E0463]: can't find crate for `mofa_foundation`
+  --> crates\mofa-foundation\tests\mcp_integration.rs:25:9
+   |
+25 |     use mofa_foundation::agent::tools::ToolRegistry;
+   |         ^^^^^^^^^^^^^^^ can't find crate
+
+error[E0463]: can't find crate for `mofa_runtime`
+ --> crates\mofa-cli\tests\agent_integration_tests.rs:7:5
+  |
+7 | use mofa_runtime::agent::capabilities::{AgentCapabilities, AgentRequirements};
+  |     ^^^^^^^^^^^^ can't find crate
+
+error[E0282]: type annotations needed
+  --> crates\mofa-monitoring\tests\visual_debug_integration.rs:80:5
+   |
+80 |     recorder.start_session(&session).await.unwrap();
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+  --> crates\mofa-monitoring\tests\visual_debug_integration.rs:85:9
+   |
+85 |         recorder.record_event(session_id, event).await.unwrap();
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+  --> crates\mofa-monitoring\tests\visual_debug_integration.rs:89:5
+   |
+89 |     recorder.end_session(session_id, "completed").await.unwrap();
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+  --> crates\mofa-monitoring\tests\visual_debug_integration.rs:97:20
+   |
+97 |     let sessions = recorder.list_sessions().await.unwrap();
+   |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error: could not compile `mofa-ffi` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error[E0282]: type annotations needed
+   --> crates\mofa-monitoring\tests\visual_debug_integration.rs:103:28
+    |
+103 |     let retrieved_events = recorder.get_events(session_id).await.unwrap();
+    |                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> crates\mofa-monitoring\tests\visual_debug_integration.rs:110:13
+    |
+110 |             event.timestamp_ms() >= prev_timestamp,
+    |             ^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> crates\mofa-monitoring\tests\visual_debug_integration.rs:117:29
+    |
+117 |     let retrieved_session = recorder.get_session(session_id).await.unwrap();
+    |                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0463]: can't find crate for `mofa_foundation`
+ --> tests\tests\failure_injection_tests.rs:3:5
+  |
+3 | use mofa_foundation::agent::components::tool::SimpleTool;
+  |     ^^^^^^^^^^^^^^^ can't find crate
+
+error[E0463]: can't find crate for `mofa_testing`
+  --> tests\tests\failure_injection_tests.rs:10:5
+   |
+10 | use mofa_testing::backend::MockLLMBackend;
+   |     ^^^^^^^^^^^^ can't find crate
+
+error[E0463]: can't find crate for `mofa_foundation`
+ --> tests\tests\assertion_macro_tests.rs:4:5
+  |
+4 | use mofa_foundation::agent::components::tool::SimpleTool;
+  |     ^^^^^^^^^^^^^^^ can't find crate
+
+error[E0463]: can't find crate for `mofa_testing`
+ --> tests\tests\assertion_macro_tests.rs:9:5
+  |
+9 | use mofa_testing::backend::MockLLMBackend;
+  |     ^^^^^^^^^^^^ can't find crate
+
+error[E0282]: type annotations needed
+   --> crates\mofa-monitoring\tests\visual_debug_integration.rs:130:18
+    |
+130 |     let result = recorder.get_session("non-existent").await.unwrap();
+    |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> crates\mofa-monitoring\tests\visual_debug_integration.rs:134:18
+    |
+134 |     let events = recorder.get_events("non-existent").await.unwrap();
+    |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+  --> crates\mofa-foundation\tests\mcp_integration.rs:34:13
+   |
+34 |         let result = registry.load_mcp_server("fake-endpoint").await;
+   |             ^^^^^^
+35 |         assert!(result.is_ok(), "stub must not return an error");
+   |                 ------ type must be known at this point
+   |
+help: consider giving `result` an explicit type
+   |
+34 |         let result: /* Type */ = registry.load_mcp_server("fake-endpoint").await;
+   |                   ++++++++++++
+
+error[E0282]: type annotations needed
+  --> crates\mofa-foundation\tests\mcp_integration.rs:48:9
+   |
+48 | /         registry
+49 | |             .load_mcp_server("http://localhost:9999")
+50 | |             .await
+   | |__________________^ cannot infer type
+
+error[E0282]: type annotations needed
+  --> crates\mofa-foundation\tests\mcp_integration.rs:66:13
+   |
+66 |             registry.load_mcp_server(&ep).await.unwrap();
+   |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+  --> tests\tests\failure_injection_tests.rs:38:5
+   |
+38 |     backend.register_model(make_config("m")).await.unwrap();
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+  --> tests\tests\failure_injection_tests.rs:39:5
+   |
+39 |     backend.load_model("m").await.unwrap();
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+  --> tests\tests\failure_injection_tests.rs:43:9
+   |
+43 |     let r1 = backend.infer("m", "hi").await;
+   |         ^^
+44 |     assert!(r1.is_err());
+   |             -- type must be known at this point
+   |
+help: consider giving `r1` an explicit type
+   |
+43 |     let r1: /* Type */ = backend.infer("m", "hi").await;
+   |           ++++++++++++
+
+error[E0282]: type annotations needed
+  --> tests\tests\assertion_macro_tests.rs:78:5
+   |
+78 |     backend.register_model(make_config("m")).await.unwrap();
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+  --> tests\tests\assertion_macro_tests.rs:79:5
+   |
+79 |     backend.load_model("m").await.unwrap();
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+  --> tests\tests\assertion_macro_tests.rs:80:5
+   |
+80 |     backend.infer("m", "hi").await.unwrap();
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+Some errors have detailed explanations: E0282, E0463.
+For more information about an error, try `rustc --explain E0282`.
+error: could not compile `mofa-testing` (test "assertion_macro_tests") due to 5 previous errors
+error[E0282]: type annotations needed
+  --> tests\tests\failure_injection_tests.rs:45:9
+   |
+45 |     let r2 = backend.infer("m", "hi").await;
+   |         ^^
+46 |     assert!(r2.is_err());
+   |             -- type must be known at this point
+   |
+help: consider giving `r2` an explicit type
+   |
+45 |     let r2: /* Type */ = backend.infer("m", "hi").await;
+   |           ++++++++++++
+
+error[E0282]: type annotations needed
+  --> tests\tests\failure_injection_tests.rs:48:9
+   |
+48 |     let r3 = backend.infer("m", "hi").await;
+   |         ^^
+49 |     assert_eq!(r3.unwrap(), "hello");
+   |                -- type must be known at this point
+   |
+help: consider giving `r3` an explicit type
+   |
+48 |     let r3: /* Type */ = backend.infer("m", "hi").await;
+   |           ++++++++++++
+
+error[E0282]: type annotations needed
+  --> tests\tests\failure_injection_tests.rs:56:5
+   |
+56 |     backend.register_model(make_config("m")).await.unwrap();
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+  --> tests\tests\failure_injection_tests.rs:57:5
+   |
+57 |     backend.load_model("m").await.unwrap();
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+  --> tests\tests\failure_injection_tests.rs:60:16
+   |
+60 |     assert_eq!(backend.infer("m", "x").await.unwrap(), "ok");
+   |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+  --> tests\tests\failure_injection_tests.rs:71:5
+   |
+71 |     backend.register_model(make_config("m")).await.unwrap();
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+  --> tests\tests\failure_injection_tests.rs:72:5
+   |
+72 |     backend.load_model("m").await.unwrap();
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+  --> tests\tests\failure_injection_tests.rs:76:9
+   |
+76 |     let err = backend.infer("m", "this is danger zone").await;
+   |         ^^^
+77 |     assert!(err.is_err());
+   |             --- type must be known at this point
+   |
+help: consider giving `err` an explicit type
+   |
+76 |     let err: /* Type */ = backend.infer("m", "this is danger zone").await;
+   |            ++++++++++++
+
+error[E0282]: type annotations needed
+  --> tests\tests\failure_injection_tests.rs:79:9
+   |
+79 |     let ok = backend.infer("m", "safe input").await;
+   |         ^^
+80 |     assert_eq!(ok.unwrap(), "ok");
+   |                -- type must be known at this point
+   |
+help: consider giving `ok` an explicit type
+   |
+79 |     let ok: /* Type */ = backend.infer("m", "safe input").await;
+   |           ++++++++++++
+
+error[E0282]: type annotations needed
+  --> tests\tests\failure_injection_tests.rs:86:5
+   |
+86 |     backend.register_model(make_config("m")).await.unwrap();
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+  --> tests\tests\failure_injection_tests.rs:87:5
+   |
+87 |     backend.load_model("m").await.unwrap();
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+  --> tests\tests\failure_injection_tests.rs:91:9
+   |
+91 |     let result = backend.infer("m", "something else").await;
+   |         ^^^^^^
+92 |     assert!(result.is_ok());
+   |             ------ type must be known at this point
+   |
+help: consider giving `result` an explicit type
+   |
+91 |     let result: /* Type */ = backend.infer("m", "something else").await;
+   |               ++++++++++++
+
+error[E0282]: type annotations needed
+   --> tests\tests\failure_injection_tests.rs:102:5
+    |
+102 |     backend.register_model(make_config("m")).await.unwrap();
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> tests\tests\failure_injection_tests.rs:103:5
+    |
+103 |     backend.load_model("m").await.unwrap();
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> tests\tests\failure_injection_tests.rs:108:15
+    |
+108 |     let err = backend.infer("m", "anything").await.unwrap_err();
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> tests\tests\failure_injection_tests.rs:122:5
+    |
+122 |     backend.register_model(make_config("m")).await.unwrap();
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> tests\tests\failure_injection_tests.rs:123:5
+    |
+123 |     backend.load_model("m").await.unwrap();
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> tests\tests\failure_injection_tests.rs:127:16
+    |
+127 |     assert_eq!(backend.infer("m", "greet me").await.unwrap(), "Hi!");
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> tests\tests\failure_injection_tests.rs:129:9
+    |
+129 |         backend.infer("m", "greet me").await.unwrap(),
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> tests\tests\failure_injection_tests.rs:132:16
+    |
+132 |     assert_eq!(backend.infer("m", "greet me").await.unwrap(), "Still here.");
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> tests\tests\failure_injection_tests.rs:134:16
+    |
+134 |     assert_eq!(backend.infer("m", "greet me").await.unwrap(), "Still here.");
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error: could not compile `mofa-foundation` (test "mcp_integration") due to 4 previous errors
+error[E0463]: can't find crate for `mofa_testing`
+ --> tests\tests\report_tests.rs:4:5
+  |
+4 | use mofa_testing::{
+  |     ^^^^^^^^^^^^ can't find crate
+
+error[E0282]: type annotations needed
+   --> tests\tests\failure_injection_tests.rs:140:5
+    |
+140 |     backend.register_model(make_config("m")).await.unwrap();
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> crates\mofa-monitoring\tests\visual_debug_integration.rs:151:9
+    |
+151 |         recorder.start_session(&session).await.unwrap();
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> tests\tests\failure_injection_tests.rs:141:5
+    |
+141 |     backend.load_model("m").await.unwrap();
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> tests\tests\failure_injection_tests.rs:146:16
+    |
+146 |     assert_eq!(backend.infer("m", "hello").await.unwrap(), "seq1");
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> tests\tests\failure_injection_tests.rs:147:16
+    |
+147 |     assert_eq!(backend.infer("m", "hello").await.unwrap(), "seq2");
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> tests\tests\failure_injection_tests.rs:149:16
+    |
+149 |     assert_eq!(backend.infer("m", "hello").await.unwrap(), "seq2");
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> tests\tests\failure_injection_tests.rs:155:5
+    |
+155 |     backend.register_model(make_config("m")).await.unwrap();
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> tests\tests\failure_injection_tests.rs:156:5
+    |
+156 |     backend.load_model("m").await.unwrap();
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> tests\tests\failure_injection_tests.rs:161:16
+    |
+161 |     assert_eq!(backend.infer("m", "other topic").await.unwrap(), "static");
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> tests\tests\failure_injection_tests.rs:171:5
+    |
+171 |     backend.register_model(make_config("m")).await.unwrap();
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> tests\tests\failure_injection_tests.rs:172:5
+    |
+172 |     backend.load_model("m").await.unwrap();
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> tests\tests\failure_injection_tests.rs:176:13
+    |
+176 |     assert!(backend.infer("m", "1").await.is_ok());
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> tests\tests\failure_injection_tests.rs:177:13
+    |
+177 |     assert!(backend.infer("m", "2").await.is_ok());
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> tests\tests\failure_injection_tests.rs:178:13
+    |
+178 |     assert!(backend.infer("m", "3").await.is_ok());
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> tests\tests\failure_injection_tests.rs:180:9
+    |
+180 |     let err = backend.infer("m", "4").await;
+    |         ^^^
+181 |     assert!(err.is_err());
+    |             --- type must be known at this point
+    |
+help: consider giving `err` an explicit type
+    |
+180 |     let err: /* Type */ = backend.infer("m", "4").await;
+    |            ++++++++++++
+
+error[E0282]: type annotations needed
+   --> tests\tests\failure_injection_tests.rs:187:5
+    |
+187 |     backend.register_model(make_config("m")).await.unwrap();
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> crates\mofa-monitoring\tests\visual_debug_integration.rs:159:9
+    |
+159 |         recorder.record_event(&session_id, &event).await.expect("failed");
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> crates\mofa-monitoring\tests\visual_debug_integration.rs:161:9
+    |
+161 | /         recorder
+162 | |             .end_session(&session_id, "completed")
+163 | |             .await
+    | |__________________^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> tests\tests\report_tests.rs:155:18
+    |
+155 |       let report = TestReportBuilder::new("pass-suite")
+    |  __________________^
+156 | |         .record("ok_test", || async { Ok(()) })
+157 | |         .await
+    | |______________^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> crates\mofa-monitoring\tests\visual_debug_integration.rs:168:20
+    |
+168 |     let sessions = recorder.list_sessions().await.unwrap();
+    |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> tests\tests\failure_injection_tests.rs:188:5
+    |
+188 |     backend.load_model("m").await.unwrap();
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> tests\tests\failure_injection_tests.rs:191:13
+    |
+191 |     assert!(backend.infer("m", "a").await.is_ok());
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> tests\tests\failure_injection_tests.rs:192:13
+    |
+192 |     assert!(backend.infer("m", "b").await.is_err());
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> tests\tests\failure_injection_tests.rs:195:13
+    |
+195 |     assert!(backend.infer("m", "c").await.is_ok());
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> tests\tests\failure_injection_tests.rs:205:5
+    |
+205 |     backend.register_model(make_config("m")).await.unwrap();
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> tests\tests\failure_injection_tests.rs:206:5
+    |
+206 |     backend.load_model("m").await.unwrap();
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> tests\tests\failure_injection_tests.rs:217:5
+    |
+217 |     backend.register_model(make_config("m")).await.unwrap();
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> tests\tests\failure_injection_tests.rs:218:5
+    |
+218 |     backend.load_model("m").await.unwrap();
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> tests\tests\failure_injection_tests.rs:229:5
+    |
+229 |     backend.register_model(make_config("m")).await.unwrap();
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> tests\tests\failure_injection_tests.rs:230:5
+    |
+230 |     backend.load_model("m").await.unwrap();
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error: could not compile `mofa-cli` (test "agent_integration_tests") due to 1 previous error
+error[E0282]: type annotations needed
+   --> tests\tests\report_tests.rs:168:18
+    |
+168 |       let report = TestReportBuilder::new("fail-suite")
+    |  __________________^
+169 | |         .record("bad_test", || async { Err("kaboom".into()) })
+170 | |         .await
+    | |______________^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> crates\mofa-monitoring\tests\visual_debug_integration.rs:174:22
+    |
+174 |         let events = recorder.get_events(&session_id).await.unwrap();
+    |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0463]: can't find crate for `mofa_testing`
+ --> tests\tests\adversarial_suite_tests.rs:1:5
+  |
+1 | use mofa_testing::adversarial::{
+  |     ^^^^^^^^^^^^ can't find crate
+
+error[E0282]: type annotations needed
+   --> tests\tests\report_tests.rs:203:18
+    |
+203 |       let report = TestReportBuilder::new("combo")
+    |  __________________^
+204 | |         .record("auto_pass", || async { Ok(()) })
+205 | |         .await
+    | |______________^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> tests\tests\report_tests.rs:203:18
+    |
+203 |       let report = TestReportBuilder::new("combo")
+    |  __________________^
+204 | |         .record("auto_pass", || async { Ok(()) })
+205 | |         .await
+206 | |         .add_result(make_result(
+...   |
+212 | |         .record("auto_fail", || async { Err("nope".into()) })
+213 | |         .await
+    | |______________^ cannot infer type
+
+Some errors have detailed explanations: E0282, E0786.
+error[E0282]: type annotations needed
+   --> tests\tests\failure_injection_tests.rs:359:9
+    |
+359 |     let history = tool.history().await;
+    |         ^^^^^^^
+360 |     assert_eq!(history.len(), 2);
+    |                ------- type must be known at this point
+    |
+help: consider giving `history` an explicit type
+    |
+359 |     let history: /* Type */ = tool.history().await;
+    |                ++++++++++++
+
+error[E0282]: type annotations needed
+   --> tests\tests\failure_injection_tests.rs:380:9
+    |
+380 |     let r1 = bus.send_and_capture("a", mode.clone(), msg.clone()).await;
+    |         ^^
+381 |     assert!(r1.is_err());
+    |             -- type must be known at this point
+    |
+help: consider giving `r1` an explicit type
+    |
+380 |     let r1: /* Type */ = bus.send_and_capture("a", mode.clone(), msg.clone()).await;
+    |           ++++++++++++
+
+error[E0282]: type annotations needed
+   --> tests\tests\failure_injection_tests.rs:383:9
+    |
+383 |     let r2 = bus.send_and_capture("a", mode.clone(), msg.clone()).await;
+    |         ^^
+384 |     assert!(r2.is_err());
+    |             -- type must be known at this point
+    |
+help: consider giving `r2` an explicit type
+    |
+383 |     let r2: /* Type */ = bus.send_and_capture("a", mode.clone(), msg.clone()).await;
+    |           ++++++++++++
+
+error[E0282]: type annotations needed
+   --> tests\tests\failure_injection_tests.rs:401:9
+    |
+401 |     let r1 = bus.send_and_capture("a", mode.clone(), msg.clone()).await;
+    |         ^^
+402 |     assert!(r1.is_err());
+    |             -- type must be known at this point
+    |
+help: consider giving `r1` an explicit type
+    |
+401 |     let r1: /* Type */ = bus.send_and_capture("a", mode.clone(), msg.clone()).await;
+    |           ++++++++++++
+
+error: could not compile `mofa-monitoring` (test "visual_debug_integration") due to 17 previous errors
+error[E0282]: type annotations needed
+   --> tests\tests\failure_injection_tests.rs:514:5
+    |
+514 |     backend.register_model(make_config("m")).await.unwrap();
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> tests\tests\failure_injection_tests.rs:515:5
+    |
+515 |     backend.load_model("m").await.unwrap();
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> tests\tests\failure_injection_tests.rs:521:9
+    |
+521 |     let r1 = backend.infer("m", "a").await;
+    |         ^^
+522 |     assert!(r1.is_err());
+    |             -- type must be known at this point
+    |
+help: consider giving `r1` an explicit type
+    |
+521 |     let r1: /* Type */ = backend.infer("m", "a").await;
+    |           ++++++++++++
+
+error[E0282]: type annotations needed
+   --> tests\tests\failure_injection_tests.rs:525:9
+    |
+525 |     let r2 = backend.infer("m", "b").await;
+    |         ^^
+526 |     assert!(r2.is_ok());
+    |             -- type must be known at this point
+    |
+help: consider giving `r2` an explicit type
+    |
+525 |     let r2: /* Type */ = backend.infer("m", "b").await;
+    |           ++++++++++++
+
+error[E0282]: type annotations needed
+   --> tests\tests\failure_injection_tests.rs:527:9
+    |
+527 |     let r3 = backend.infer("m", "c").await;
+    |         ^^
+528 |     assert!(r3.is_ok());
+    |             -- type must be known at this point
+    |
+help: consider giving `r3` an explicit type
+    |
+527 |     let r3: /* Type */ = backend.infer("m", "c").await;
+    |           ++++++++++++
+
+error[E0282]: type annotations needed
+   --> tests\tests\failure_injection_tests.rs:531:9
+    |
+531 |     let r4 = backend.infer("m", "d").await;
+    |         ^^
+532 |     assert!(r4.is_err());
+    |             -- type must be known at this point
+    |
+help: consider giving `r4` an explicit type
+    |
+531 |     let r4: /* Type */ = backend.infer("m", "d").await;
+    |           ++++++++++++
+
+error: could not compile `mofa-testing` (test "adversarial_suite_tests") due to 1 previous error
+error: could not compile `mofa-testing` (test "report_tests") due to 5 previous errors
+error: could not compile `mofa-testing` (test "failure_injection_tests") due to 61 previous errors
+error[E0463]: can't find crate for `mofa_foundation`
+ --> crates\mofa-foundation\tests\swarm_scheduler_integration.rs:9:5
+  |
+9 | use mofa_foundation::swarm::{
+  |     ^^^^^^^^^^^^^^^ can't find crate
+
+error[E0282]: type annotations needed
+  --> crates\mofa-foundation\tests\swarm_scheduler_integration.rs:31:20
+   |
+31 |     let _summary = scheduler.execute(&mut dag, ok_executor()).await.unwrap();
+   |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0463]: can't find crate for `mofa_testing`
+ --> tests\tests\adversarial_ci_gate_tests.rs:1:5
+  |
+1 | use mofa_testing::adversarial::{
+  |     ^^^^^^^^^^^^ can't find crate
+
+error[E0282]: type annotations needed
+  --> crates\mofa-foundation\tests\swarm_scheduler_integration.rs:64:20
+   |
+64 |     let _summary = scheduler.execute(&mut dag, exec).await.unwrap();
+   |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0463]: can't find crate for `mofa_foundation`
+ --> tests\tests\accessor_helpers_tests.rs:3:5
+  |
+3 | use mofa_foundation::agent::components::tool::SimpleTool;
+  |     ^^^^^^^^^^^^^^^ can't find crate
+
+error[E0463]: can't find crate for `mofa_testing`
+ --> tests\tests\accessor_helpers_tests.rs:5:5
+  |
+5 | use mofa_testing::tools::MockTool;
+  |     ^^^^^^^^^^^^ can't find crate
+
+error[E0282]: type annotations needed
+   --> crates\mofa-foundation\tests\swarm_scheduler_integration.rs:100:20
+    |
+100 |     let _summary = scheduler.execute(&mut dag, exec).await.unwrap();
+    |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error: could not compile `mofa-ffi` (lib test) due to 1 previous error
+error[E0282]: type annotations needed
+  --> tests\tests\accessor_helpers_tests.rs:11:13
+   |
+11 |     assert!(tool.last_call().await.is_none());
+   |             ^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error: could not compile `mofa-foundation` (test "swarm_scheduler_integration") due to 4 previous errors
+error[E0282]: type annotations needed
+  --> tests\tests\accessor_helpers_tests.rs:20:16
+   |
+20 |     let last = tool.last_call().await.unwrap();
+   |                ^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+  --> tests\tests\accessor_helpers_tests.rs:30:17
+   |
+30 |     let first = tool.nth_call(0).await.unwrap();
+   |                 ^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+  --> tests\tests\accessor_helpers_tests.rs:38:13
+   |
+38 |     assert!(tool.nth_call(1).await.is_none());
+   |             ^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+  --> tests\tests\accessor_helpers_tests.rs:54:17
+   |
+54 |     let first = tool.nth_call(0).await.unwrap();
+   |                 ^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+  --> tests\tests\accessor_helpers_tests.rs:55:18
+   |
+55 |     let second = tool.nth_call(1).await.unwrap();
+   |                  ^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error: could not compile `mofa-testing` (test "adversarial_ci_gate_tests") due to 1 previous error
+error: could not compile `mofa-testing` (test "accessor_helpers_tests") due to 8 previous errors
+error[E0463]: can't find crate for `mofa_foundation`
+ --> tests\tests\integration.rs:3:5
+  |
+3 | use mofa_foundation::agent::components::tool::SimpleTool;
+  |     ^^^^^^^^^^^^^^^ can't find crate
+
+error[E0463]: can't find crate for `mofa_testing`
+ --> tests\tests\integration.rs:6:5
+  |
+6 | use mofa_testing::backend::MockLLMBackend;
+  |     ^^^^^^^^^^^^ can't find crate
+
+error: crate `cpp_demangle` required to be available in rlib format, but was not found in this form
+
+error: crate `gimli` required to be available in rlib format, but was not found in this form
+
+error: crate `cobs` required to be available in rlib format, but was not found in this form
+
+error[E0282]: type annotations needed
+  --> tests\tests\integration.rs:32:5
+   |
+32 |     backend.register_model(config).await.unwrap();
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+  --> tests\tests\integration.rs:33:5
+   |
+33 |     backend.load_model("test-llm").await.unwrap();
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+  --> tests\tests\integration.rs:35:16
+   |
+35 |     let resp = backend.infer("test-llm", "say hello").await.unwrap();
+   |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+  --> tests\tests\integration.rs:38:16
+   |
+38 |       let resp = backend
+   |  ________________^
+39 | |         .infer("test-llm", "what is the weather?")
+40 | |         .await
+   | |______________^ cannot infer type
+
+error[E0282]: type annotations needed
+  --> tests\tests\integration.rs:50:16
+   |
+50 |     let resp = backend.infer("any", "random input").await.unwrap();
+   |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+  --> tests\tests\integration.rs:61:16
+   |
+61 |     let resp = backend.infer("x", "hello world").await.unwrap();
+   |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+  --> tests\tests\integration.rs:79:5
+   |
+79 |     backend.register_model(config).await.unwrap();
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+  --> tests\tests\integration.rs:83:5
+   |
+83 |     backend.load_model("model-a").await.unwrap();
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+  --> tests\tests\integration.rs:91:5
+   |
+91 |     backend.unload_model("model-a").await.unwrap();
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+  --> tests\tests\integration.rs:94:5
+   |
+94 |     backend.unregister_model("model-a").await.unwrap();
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> tests\tests\integration.rs:101:9
+    |
+101 |     let result = backend.load_model("nonexistent").await;
+    |         ^^^^^^
+102 |     assert!(result.is_err());
+    |             ------ type must be known at this point
+    |
+help: consider giving `result` an explicit type
+    |
+101 |     let result: /* Type */ = backend.load_model("nonexistent").await;
+    |               ++++++++++++
+
+error[E0282]: type annotations needed
+   --> tests\tests\integration.rs:120:5
+    |
+120 |     backend.register_model(config).await.unwrap();
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> tests\tests\integration.rs:121:5
+    |
+121 |     backend.load_model("m").await.unwrap();
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> tests\tests\integration.rs:140:5
+    |
+140 |     backend.register_model(config).await.unwrap();
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> tests\tests\integration.rs:141:5
+    |
+141 |     backend.load_model("m").await.unwrap();
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> tests\tests\integration.rs:143:19
+    |
+143 |     let evicted = backend.trigger_eviction(0).await.unwrap();
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> tests\tests\integration.rs:151:5
+    |
+151 |     backend.set_memory_threshold(1024).await.unwrap();
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> tests\tests\integration.rs:158:5
+    |
+158 |     backend.set_idle_timeout_secs(60).await.unwrap();
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0463]: can't find crate for `mofa_foundation`
+ --> crates\mofa-foundation\tests\rag_streaming_integration.rs:6:5
+  |
+6 | use mofa_foundation::rag::{
+  |     ^^^^^^^^^^^^^^^ can't find crate
+
+error[E0282]: type annotations needed
+   --> tests\tests\integration.rs:206:13
+    |
+206 |     assert!(tool.history().await.is_empty());
+    |             ^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> tests\tests\integration.rs:220:9
+    |
+220 |     let history = tool.history().await;
+    |         ^^^^^^^
+221 |     assert_eq!(history.len(), 1);
+    |                ------- type must be known at this point
+    |
+help: consider giving `history` an explicit type
+    |
+220 |     let history: /* Type */ = tool.history().await;
+    |                ++++++++++++
+
+error: could not compile `mofa-testing` (test "integration") due to 22 previous errors
+error: could not compile `mofa-monitoring` (test "metrics_export_integration") due to 3 previous errors
+error[E0282]: type annotations needed
+  --> crates\mofa-foundation\tests\rag_streaming_integration.rs:87:26
+   |
+87 |           let mut stream = self
+   |  __________________________^
+88 | |             .agent
+89 | |             .chat_stream(prompt)
+90 | |             .await
+   | |__________________^ cannot infer type
+
+error[E0282]: type annotations needed
+  --> crates\mofa-foundation\tests\rag_streaming_integration.rs:91:23
+   |
+91 |             .map_err(|e| AgentError::ExecutionFailed(e.to_string()))?;
+   |                       ^                              - type must be known at this point
+   |
+help: consider giving this closure parameter an explicit type
+   |
+91 |             .map_err(|e: /* Type */| AgentError::ExecutionFailed(e.to_string()))?;
+   |                        ++++++++++++
+
+error[E0282]: type annotations needed
+  --> crates\mofa-foundation\tests\rag_streaming_integration.rs:94:25
+   |
+94 |             let chunk = res.map_err(|e| AgentError::ExecutionFailed(e.to_string()))?;
+   |                         ^^^ cannot infer type
+
+error[E0282]: type annotations needed
+  --> crates\mofa-foundation\tests\rag_streaming_integration.rs:94:38
+   |
+94 |             let chunk = res.map_err(|e| AgentError::ExecutionFailed(e.to_string()))?;
+   |                                      ^                              - type must be known at this point
+   |
+help: consider giving this closure parameter an explicit type
+   |
+94 |             let chunk = res.map_err(|e: /* Type */| AgentError::ExecutionFailed(e.to_string()))?;
+   |                                       ++++++++++++
+
+error[E0282]: type annotations needed
+   --> crates\mofa-foundation\tests\rag_streaming_integration.rs:116:22
+    |
+116 |           let stream = self
+    |  ______________________^
+117 | |             .agent
+118 | |             .chat_stream(prompt)
+119 | |             .await
+    | |__________________^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> crates\mofa-foundation\tests\rag_streaming_integration.rs:120:23
+    |
+120 |             .map_err(|e| AgentError::ExecutionFailed(e.to_string()))?;
+    |                       ^                              - type must be known at this point
+    |
+help: consider giving this closure parameter an explicit type
+    |
+120 |             .map_err(|e: /* Type */| AgentError::ExecutionFailed(e.to_string()))?;
+    |                        ++++++++++++
+
+error[E0282]: type annotations needed
+   --> crates\mofa-foundation\tests\rag_streaming_integration.rs:121:34
+    |
+121 |         let mapped = stream.map(|r| {
+    |                                  ^
+122 |             r.map(KernelGeneratorChunk::Text)
+    |             - type must be known at this point
+    |
+help: consider giving this closure parameter an explicit type
+    |
+121 |         let mapped = stream.map(|r: /* Type */| {
+    |                                   ++++++++++++
+
+error[E0282]: type annotations needed
+   --> crates\mofa-foundation\tests\rag_streaming_integration.rs:123:27
+    |
+123 |                 .map_err(|e| AgentError::ExecutionFailed(e.to_string()))
+    |                           ^                              - type must be known at this point
+    |
+help: consider giving this closure parameter an explicit type
+    |
+123 |                 .map_err(|e: /* Type */| AgentError::ExecutionFailed(e.to_string()))
+    |                            ++++++++++++
+
+error[E0282]: type annotations needed
+   --> crates\mofa-foundation\tests\rag_streaming_integration.rs:161:5
+    |
+161 |     store.upsert(doc).await.expect("upsert failed");
+    |     ^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> crates\mofa-foundation\tests\rag_streaming_integration.rs:172:30
+    |
+172 |       let (docs, mut stream) = pipeline
+    |  ______________________________^
+173 | |         .run_streaming("What color is the sky?", 1)
+174 | |         .await
+    | |______________^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> crates\mofa-foundation\tests\rag_streaming_integration.rs:176:14
+    |
+176 |     assert!(!docs.is_empty());
+    |              ^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> crates\mofa-foundation\tests\rag_streaming_integration.rs:179:29
+    |
+179 |     while let Some(chunk) = stream.next().await {
+    |                             ^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> crates\mofa-foundation\tests\rag_streaming_integration.rs:208:9
+    |
+208 | /         store
+209 | |             .upsert(DocumentChunk::new(&format!("d{}", i), &text, emb))
+210 | |             .await
+    | |__________________^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> crates\mofa-foundation\tests\rag_streaming_integration.rs:228:38
+    |
+228 |                 let (_docs, mut s) = p.run_streaming(&q, 3).await.unwrap();
+    |                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> crates\mofa-foundation\tests\rag_streaming_integration.rs:230:41
+    |
+230 |                 while let Some(chunk) = s.next().await {
+    |                                         ^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> crates\mofa-foundation\tests\rag_streaming_integration.rs:256:9
+    |
+256 | /         store
+257 | |             .upsert(DocumentChunk::new(&format!("d{}", i), &text, emb))
+258 | |             .await
+    | |__________________^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> crates\mofa-foundation\tests\rag_streaming_integration.rs:267:26
+    |
+267 |     let (_docs, mut s) = pipeline.run_streaming("hello", 5).await.unwrap();
+    |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> crates\mofa-foundation\tests\rag_streaming_integration.rs:268:25
+    |
+268 |     while let Some(_) = s.next().await {}
+    |                         ^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> crates\mofa-foundation\tests\rag_streaming_integration.rs:310:26
+    |
+310 |     let (_docs, mut s) = pipeline.run_streaming("x", 1).await.unwrap();
+    |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> crates\mofa-foundation\tests\rag_streaming_integration.rs:311:17
+    |
+311 |     let first = s.next().await.unwrap();
+    |                 ^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> crates\mofa-foundation\tests\rag_streaming_integration.rs:311:17
+    |
+311 |     let first = s.next().await.unwrap();
+    |                 ^^^^^^^^^^^^^^ cannot infer type
+
+error: could not compile `mofa-foundation` (test "rag_streaming_integration") due to 22 previous errors

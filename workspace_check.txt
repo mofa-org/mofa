@@ -1,0 +1,20 @@
+    Checking mofa-plugins v0.1.0 (C:\Users\Aditya RS\mofa\crates\mofa-plugins)
+error[E0308]: mismatched types
+   --> crates\mofa-plugins\src\tool\adapter.rs:119:36
+    |
+119 |         let result: Result<_, _> = self.tool.execute(tool_input, &ctx).await;
+    |                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `Result<_, _>`, found `ToolResult`
+    |
+    = note: expected enum `std::result::Result<_, _>`
+             found struct `mofa_kernel::agent::ToolResult`
+help: try wrapping the expression in a variant of `std::result::Result`
+    |
+119 |         let result: Result<_, _> = Ok(self.tool.execute(tool_input, &ctx).await);
+    |                                    +++                                         +
+119 |         let result: Result<_, _> = Err(self.tool.execute(tool_input, &ctx).await);
+    |                                    ++++                                         +
+
+For more information about this error, try `rustc --explain E0308`.
+error: could not compile `mofa-plugins` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `mofa-plugins` (lib test) due to 1 previous error

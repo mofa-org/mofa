@@ -139,7 +139,10 @@ impl NativeNode {
             tx.send(data)
                 .await
                 .map_err(|e| DataflowError::ChannelError(e.to_string()))?;
-            debug!("NativeNode {} sent data on output '{}'", self.config.node_id, output_id);
+            debug!(
+                "NativeNode {} sent data on output '{}'",
+                self.config.node_id, output_id
+            );
         } else {
             debug!(
                 "NativeNode {}: output '{}' has no registered receiver; dropping",
@@ -331,23 +334,23 @@ mod tests {
         let node = NativeNode::new(config);
         assert_eq!(node.state().await, NodeState::Created);
 
-        node.init().await.unwrap();
+        node.init().await.expect("failed");
         assert_eq!(node.state().await, NodeState::Running);
 
-        node.pause().await.unwrap();
+        node.pause().await.expect("failed");
         assert_eq!(node.state().await, NodeState::Paused);
 
-        node.resume().await.unwrap();
+        node.resume().await.expect("failed");
         assert_eq!(node.state().await, NodeState::Running);
 
-        node.stop().await.unwrap();
+        node.stop().await.expect("failed");
         assert_eq!(node.state().await, NodeState::Stopped);
     }
 
     #[tokio::test]
     async fn test_double_init_fails() {
         let node = NativeNode::new(NodeConfig::default());
-        node.init().await.unwrap();
+        node.init().await.expect("failed");
         assert!(node.init().await.is_err());
     }
 
@@ -356,7 +359,7 @@ mod tests {
         use mofa_kernel::message::AgentEvent;
 
         let node = NativeNode::new(NodeConfig::default());
-        node.init().await.unwrap();
+        node.init().await.expect("failed");
         let el = node.create_event_loop();
 
         node.inject_event(AgentEvent::Custom("test".to_string(), b"ping".to_vec()))

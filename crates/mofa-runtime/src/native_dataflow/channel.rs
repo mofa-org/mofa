@@ -101,10 +101,7 @@ impl MessageEnvelope {
     }
 
     /// Serialize an [`AgentMessage`] into an envelope.
-    pub fn from_agent_message(
-        sender_id: &str,
-        message: &AgentMessage,
-    ) -> DataflowResult<Self> {
+    pub fn from_agent_message(sender_id: &str, message: &AgentMessage) -> DataflowResult<Self> {
         let payload = bincode::serialize(message)?;
         Ok(Self::new(sender_id, payload))
     }
@@ -158,7 +155,10 @@ impl NativeChannel {
             receivers.insert(agent_id.to_string(), Arc::new(Mutex::new(rx)));
         }
 
-        info!("Agent '{}' registered to channel '{}'", agent_id, self.config.channel_id);
+        info!(
+            "Agent '{}' registered to channel '{}'",
+            agent_id, self.config.channel_id
+        );
         Ok(())
     }
 
@@ -223,10 +223,9 @@ impl NativeChannel {
 
     /// Send a point-to-point message to the receiver specified in the envelope.
     pub async fn send_p2p(&self, envelope: MessageEnvelope) -> DataflowResult<()> {
-        let receiver_id = envelope
-            .receiver_id
-            .clone()
-            .ok_or_else(|| DataflowError::ChannelError("No receiver specified for P2P".to_string()))?;
+        let receiver_id = envelope.receiver_id.clone().ok_or_else(|| {
+            DataflowError::ChannelError("No receiver specified for P2P".to_string())
+        })?;
 
         let senders = self.p2p_senders.read().await;
         let tx = senders.get(&receiver_id).ok_or_else(|| {
@@ -252,10 +251,9 @@ impl NativeChannel {
 
     /// Publish a message to all subscribers of the topic set in the envelope.
     pub async fn publish(&self, envelope: MessageEnvelope) -> DataflowResult<()> {
-        let topic = envelope
-            .topic
-            .clone()
-            .ok_or_else(|| DataflowError::ChannelError("No topic specified for publish".to_string()))?;
+        let topic = envelope.topic.clone().ok_or_else(|| {
+            DataflowError::ChannelError("No topic specified for publish".to_string())
+        })?;
 
         let topic_channels = self.topic_channels.read().await;
         let tx = topic_channels
@@ -273,10 +271,7 @@ impl NativeChannel {
     ///
     /// Returns `Err(DataflowError::Timeout)` if no message arrives within the
     /// channel's configured timeout.
-    pub async fn receive_p2p(
-        &self,
-        agent_id: &str,
-    ) -> DataflowResult<Option<MessageEnvelope>> {
+    pub async fn receive_p2p(&self, agent_id: &str) -> DataflowResult<Option<MessageEnvelope>> {
         let rx = {
             let receivers = self.receivers.read().await;
             receivers.get(agent_id).cloned().ok_or_else(|| {
@@ -293,10 +288,7 @@ impl NativeChannel {
     }
 
     /// Non-blocking poll on the P2P queue of `agent_id`.
-    pub async fn try_receive_p2p(
-        &self,
-        agent_id: &str,
-    ) -> DataflowResult<Option<MessageEnvelope>> {
+    pub async fn try_receive_p2p(&self, agent_id: &str) -> DataflowResult<Option<MessageEnvelope>> {
         let rx = {
             let receivers = self.receivers.read().await;
             receivers.get(agent_id).cloned().ok_or_else(|| {
@@ -308,9 +300,9 @@ impl NativeChannel {
         match guard.try_recv() {
             Ok(env) => Ok(Some(env)),
             Err(mpsc::error::TryRecvError::Empty) => Ok(None),
-            Err(mpsc::error::TryRecvError::Disconnected) => {
-                Err(DataflowError::ChannelError("Channel disconnected".to_string()))
-            }
+            Err(mpsc::error::TryRecvError::Disconnected) => Err(DataflowError::ChannelError(
+                "Channel disconnected".to_string(),
+            )),
         }
     }
 
@@ -409,13 +401,13 @@ mod tests {
     #[tokio::test]
     async fn test_p2p_send_receive() {
         let ch = NativeChannel::new(ChannelConfig::default());
-        ch.register_agent("a").await.unwrap();
-        ch.register_agent("b").await.unwrap();
+        ch.register_agent("a").await.expect("failed");
+        ch.register_agent("b").await.expect("failed");
 
         let env = MessageEnvelope::new("a", b"hello".to_vec()).to("b");
-        ch.send_p2p(env).await.unwrap();
+        ch.send_p2p(env).await.expect("failed");
 
-        let received = ch.try_receive_p2p("b").await.unwrap();
+        let received = ch.try_receive_p2p("b").await.expect("failed");
         assert!(received.is_some());
         assert_eq!(received.unwrap().payload, b"hello");
     }
@@ -423,16 +415,16 @@ mod tests {
     #[tokio::test]
     async fn test_pubsub() {
         let ch = NativeChannel::new(ChannelConfig::default());
-        ch.register_agent("pub").await.unwrap();
-        ch.register_agent("sub").await.unwrap();
-        ch.subscribe("sub", "events").await.unwrap();
+        ch.register_agent("pub").await.expect("failed");
+        ch.register_agent("sub").await.expect("failed");
+        ch.subscribe("sub", "events").await.expect("failed");
 
-        let mut rx = ch.subscribe_topic("events").await.unwrap();
+        let mut rx = ch.subscribe_topic("events").await.expect("failed");
 
         let env = MessageEnvelope::new("pub", b"data".to_vec()).with_topic("events");
-        ch.publish(env).await.unwrap();
+        ch.publish(env).await.expect("failed");
 
-        let msg = rx.recv().await.unwrap();
+        let msg = rx.recv().await.expect("failed");
         assert_eq!(msg.payload, b"data");
     }
 
@@ -442,9 +434,9 @@ mod tests {
         let mut rx = ch.subscribe_broadcast();
 
         let env = MessageEnvelope::new("src", b"broadcast".to_vec());
-        ch.broadcast(env).await.unwrap();
+        ch.broadcast(env).await.expect("failed");
 
-        let msg = rx.recv().await.unwrap();
+        let msg = rx.recv().await.expect("failed");
         assert_eq!(msg.payload, b"broadcast");
     }
 
@@ -465,7 +457,7 @@ mod tests {
             message_timeout: Duration::from_millis(500),
             ..ChannelConfig::default()
         }));
-        ch.register_agent("reader").await.unwrap();
+        ch.register_agent("reader").await.expect("failed");
 
         let ch2 = ch.clone();
         let reader_task = tokio::spawn(async move {
@@ -474,10 +466,10 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(20)).await;
 
         let start = std::time::Instant::now();
-        ch.register_agent("new_agent").await.unwrap();
+        ch.register_agent("new_agent").await.expect("failed");
         let elapsed = start.elapsed();
 
-        reader_task.await.unwrap();
+        reader_task.await.expect("failed");
         assert!(
             elapsed < Duration::from_millis(400),
             "register_agent was blocked for {:?}",

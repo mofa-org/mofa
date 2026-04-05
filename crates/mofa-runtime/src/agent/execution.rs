@@ -862,7 +862,7 @@ mod tests {
         // 注册测试 Agent
         // Register test agent
         let agent = Arc::new(RwLock::new(TestAgent::new("test-agent", "Hello, World!")));
-        registry.register(agent).await.unwrap();
+        registry.register(agent).await.expect("failed");
 
         // 创建引擎并执行
         // Create engine and execute
@@ -884,7 +884,7 @@ mod tests {
     async fn test_execution_timeout() {
         let registry = Arc::new(AgentRegistry::new());
         let agent = Arc::new(RwLock::new(TestAgent::new("slow-agent", "response")));
-        registry.register(agent).await.unwrap();
+        registry.register(agent).await.expect("failed");
 
         let engine = ExecutionEngine::new(registry);
         let result = engine

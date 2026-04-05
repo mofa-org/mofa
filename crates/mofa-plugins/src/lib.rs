@@ -1371,17 +1371,17 @@ mod tests {
         // 注册 LLM 插件
         // Register LLM plugin
         let llm = LLMPlugin::new("llm_001");
-        manager.register(llm).await.unwrap();
+        manager.register(llm).await.expect("failed");
 
         // 注册存储插件
         // Register storage plugin
         let storage = StoragePlugin::new("storage_001");
-        manager.register(storage).await.unwrap();
+        manager.register(storage).await.expect("failed");
 
         // 注册记忆插件
         // Register memory plugin
         let memory = MemoryPlugin::new("memory_001");
-        manager.register(memory).await.unwrap();
+        manager.register(memory).await.expect("failed");
 
         // 获取所有插件
         // Get all plugins
@@ -1390,9 +1390,9 @@ mod tests {
 
         // 加载和初始化
         // Load and initialize
-        manager.load_all().await.unwrap();
-        manager.init_all().await.unwrap();
-        manager.start_all().await.unwrap();
+        manager.load_all().await.expect("failed");
+        manager.init_all().await.expect("failed");
+        manager.start_all().await.expect("failed");
 
         // 执行 LLM 插件
         // Execute LLM plugin
@@ -1416,8 +1416,8 @@ mod tests {
 
         // 停止和卸载
         // Stop and unload
-        manager.stop_all().await.unwrap();
-        manager.unload_all().await.unwrap();
+        manager.stop_all().await.expect("failed");
+        manager.unload_all().await.expect("failed");
 
         let ids = manager.plugin_ids().await;
         assert_eq!(ids.len(), 0);
@@ -1428,17 +1428,17 @@ mod tests {
         let mut llm = LLMPlugin::new("llm_test");
         let ctx = PluginContext::new("test_agent");
 
-        llm.load(&ctx).await.unwrap();
-        llm.init_plugin().await.unwrap();
-        llm.start().await.unwrap();
+        llm.load(&ctx).await.expect("failed");
+        llm.init_plugin().await.expect("failed");
+        llm.start().await.expect("failed");
 
         assert_eq!(llm.state(), PluginState::Running);
 
-        let response = llm.execute("Test prompt".to_string()).await.unwrap();
+        let response = llm.execute("Test prompt".to_string()).await.expect("failed");
         assert!(response.contains("Test prompt"));
 
-        llm.stop().await.unwrap();
-        llm.unload().await.unwrap();
+        llm.stop().await.expect("failed");
+        llm.unload().await.expect("failed");
 
         assert_eq!(llm.state(), PluginState::Unloaded);
     }
@@ -1456,16 +1456,16 @@ mod tests {
         assert_eq!(llm.state(), PluginState::Unloaded);
 
         // After load: Loaded
-        llm.load(&ctx).await.unwrap();
+        llm.load(&ctx).await.expect("failed");
         assert_eq!(llm.state(), PluginState::Loaded);
 
         // After init + start: Running
-        llm.init_plugin().await.unwrap();
-        llm.start().await.unwrap();
+        llm.init_plugin().await.expect("failed");
+        llm.start().await.expect("failed");
         assert_eq!(llm.state(), PluginState::Running);
 
         // After stop: must be Loaded, NOT Paused
-        llm.stop().await.unwrap();
+        llm.stop().await.expect("failed");
         assert_eq!(
             llm.state(),
             PluginState::Loaded,
@@ -1478,7 +1478,7 @@ mod tests {
         );
 
         // After unload: Unloaded
-        llm.unload().await.unwrap();
+        llm.unload().await.expect("failed");
         assert_eq!(llm.state(), PluginState::Unloaded);
     }
 
@@ -1493,16 +1493,16 @@ mod tests {
         assert_eq!(tool.state(), PluginState::Unloaded);
 
         // After load: Loaded
-        tool.load(&ctx).await.unwrap();
+        tool.load(&ctx).await.expect("failed");
         assert_eq!(tool.state(), PluginState::Loaded);
 
         // After init + start: Running
-        tool.init_plugin().await.unwrap();
-        tool.start().await.unwrap();
+        tool.init_plugin().await.expect("failed");
+        tool.start().await.expect("failed");
         assert_eq!(tool.state(), PluginState::Running);
 
         // After stop: must be Loaded, NOT Paused
-        tool.stop().await.unwrap();
+        tool.stop().await.expect("failed");
         assert_eq!(
             tool.state(),
             PluginState::Loaded,
@@ -1515,7 +1515,7 @@ mod tests {
         );
 
         // After unload: Unloaded
-        tool.unload().await.unwrap();
+        tool.unload().await.expect("failed");
         assert_eq!(tool.state(), PluginState::Unloaded);
     }
 
@@ -1530,16 +1530,16 @@ mod tests {
         assert_eq!(storage.state(), PluginState::Unloaded);
 
         // After load: Loaded
-        storage.load(&ctx).await.unwrap();
+        storage.load(&ctx).await.expect("failed");
         assert_eq!(storage.state(), PluginState::Loaded);
 
         // After init + start: Running
-        storage.init_plugin().await.unwrap();
-        storage.start().await.unwrap();
+        storage.init_plugin().await.expect("failed");
+        storage.start().await.expect("failed");
         assert_eq!(storage.state(), PluginState::Running);
 
         // After stop: must be Loaded, NOT Paused
-        storage.stop().await.unwrap();
+        storage.stop().await.expect("failed");
         assert_eq!(
             storage.state(),
             PluginState::Loaded,
@@ -1552,7 +1552,7 @@ mod tests {
         );
 
         // After unload: Unloaded
-        storage.unload().await.unwrap();
+        storage.unload().await.expect("failed");
         assert_eq!(storage.state(), PluginState::Unloaded);
     }
 
@@ -1563,21 +1563,21 @@ mod tests {
         let mut llm = LLMPlugin::new("llm_restart_test");
         let ctx = PluginContext::new("test_agent");
 
-        llm.load(&ctx).await.unwrap();
-        llm.init_plugin().await.unwrap();
+        llm.load(&ctx).await.expect("failed");
+        llm.init_plugin().await.expect("failed");
 
         // First start → stop cycle
-        llm.start().await.unwrap();
+        llm.start().await.expect("failed");
         assert_eq!(llm.state(), PluginState::Running);
-        llm.stop().await.unwrap();
+        llm.stop().await.expect("failed");
         assert_eq!(llm.state(), PluginState::Loaded);
 
         // Second start: only possible if stop() returned to Loaded (not Paused or Unloaded)
-        llm.start().await.unwrap();
+        llm.start().await.expect("failed");
         assert_eq!(llm.state(), PluginState::Running);
 
-        llm.stop().await.unwrap();
-        llm.unload().await.unwrap();
+        llm.stop().await.expect("failed");
+        llm.unload().await.expect("failed");
         assert_eq!(llm.state(), PluginState::Unloaded);
     }
 
@@ -1586,26 +1586,26 @@ mod tests {
         let mut storage = StoragePlugin::new("storage_test").with_backend(MemoryStorage::new());
         let ctx = PluginContext::new("test_agent");
 
-        storage.load(&ctx).await.unwrap();
-        storage.init_plugin().await.unwrap();
-        storage.start().await.unwrap();
+        storage.load(&ctx).await.expect("failed");
+        storage.init_plugin().await.expect("failed");
+        storage.start().await.expect("failed");
 
         // 测试存储操作
         // Test storage operations
-        storage.set_string("key1", "value1").await.unwrap();
-        let value = storage.get_string("key1").await.unwrap();
+        storage.set_string("key1", "value1").await.expect("failed");
+        let value = storage.get_string("key1").await.expect("failed");
         assert_eq!(value, Some("value1".to_string()));
 
         // 测试删除
         // Test deletion
-        let deleted = storage.delete("key1").await.unwrap();
+        let deleted = storage.delete("key1").await.expect("failed");
         assert!(deleted);
 
-        let value = storage.get_string("key1").await.unwrap();
+        let value = storage.get_string("key1").await.expect("failed");
         assert!(value.is_none());
 
-        storage.stop().await.unwrap();
-        storage.unload().await.unwrap();
+        storage.stop().await.expect("failed");
+        storage.unload().await.expect("failed");
     }
 
     #[tokio::test]
@@ -1613,9 +1613,9 @@ mod tests {
         let mut memory = MemoryPlugin::new("memory_test").with_max_memories(100);
         let ctx = PluginContext::new("test_agent");
 
-        memory.load(&ctx).await.unwrap();
-        memory.init_plugin().await.unwrap();
-        memory.start().await.unwrap();
+        memory.load(&ctx).await.expect("failed");
+        memory.init_plugin().await.expect("failed");
+        memory.start().await.expect("failed");
 
         // 添加记忆
         // Add memory
@@ -1635,8 +1635,8 @@ mod tests {
         // Check count
         assert_eq!(memory.all_memories().len(), 2);
 
-        memory.stop().await.unwrap();
-        memory.unload().await.unwrap();
+        memory.stop().await.expect("failed");
+        memory.unload().await.expect("failed");
     }
 
     #[tokio::test]

@@ -36,8 +36,8 @@
 //! use mofa_kernel::ObjectStore;
 //!
 //! let config = S3Config::new("us-east-1", "my-bucket");
-//! let store = S3ObjectStore::new(config).await.unwrap();
-//! store.put("report.txt", b"hello".to_vec()).await.unwrap();
+//! let store = S3ObjectStore::new(config).await.expect("failed");
+//! store.put("report.txt", b"hello".to_vec()).await.expect("failed");
 //! # }
 //! ```
 
@@ -47,5 +47,9 @@ pub mod socketio;
 #[cfg(feature = "s3")]
 pub mod s3;
 
-#[cfg(any(feature = "openai-speech", feature = "elevenlabs", feature = "deepgram"))]
+#[cfg(any(
+    feature = "openai-speech",
+    feature = "elevenlabs",
+    feature = "deepgram"
+))]
 pub mod speech;

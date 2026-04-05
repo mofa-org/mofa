@@ -92,14 +92,14 @@ mod tests {
     #[tokio::test]
     async fn run_default_list() {
         let temp = TempDir::new().unwrap();
-        let ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
-        run(&ctx, false, false).await.unwrap();
+        let ctx = CliContext::with_temp_dir(temp.path()).await.expect("failed");
+        run(&ctx, false, false).await.expect("failed");
     }
 
     #[tokio::test]
     async fn run_available_list() {
         let temp = TempDir::new().unwrap();
-        let ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
-        run(&ctx, false, true).await.unwrap();
+        let ctx = CliContext::with_temp_dir(temp.path()).await.expect("failed");
+        run(&ctx, false, true).await.expect("failed");
     }
 }

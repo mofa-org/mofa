@@ -422,7 +422,7 @@ mod tests {
     async fn test_agent_store_persists_across_context_instances() {
         let temp = TempDir::new().unwrap();
 
-        let ctx1 = CliContext::with_temp_dir(temp.path()).await.unwrap();
+        let ctx1 = CliContext::with_temp_dir(temp.path()).await.expect("failed");
         let entry = AgentConfigEntry {
             id: "persisted-agent".to_string(),
             name: "Persisted Agent".to_string(),
@@ -435,7 +435,7 @@ mod tests {
         ctx1.agent_store.save("persisted-agent", &entry).unwrap();
         drop(ctx1);
 
-        let ctx2 = CliContext::with_temp_dir(temp.path()).await.unwrap();
+        let ctx2 = CliContext::with_temp_dir(temp.path()).await.expect("failed");
         let loaded = ctx2.agent_store.get("persisted-agent").unwrap();
 
         assert!(loaded.is_some());
@@ -453,10 +453,10 @@ mod tests {
             .unwrap();
         let mut session = Session::new("legacy-session");
         session.add_message("user", "hello");
-        legacy_manager.save(&session).await.unwrap();
+        legacy_manager.save(&session).await.expect("failed");
 
-        let ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
-        let loaded = ctx.session_manager.get("legacy-session").await.unwrap();
+        let ctx = CliContext::with_temp_dir(temp.path()).await.expect("failed");
+        let loaded = ctx.session_manager.get("legacy-session").await.expect("failed");
 
         assert!(loaded.is_some());
         assert!(
@@ -470,7 +470,7 @@ mod tests {
     #[tokio::test]
     async fn test_plugin_and_tool_specs_replayed_on_startup() {
         let temp = TempDir::new().unwrap();
-        let ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
+        let ctx = CliContext::with_temp_dir(temp.path()).await.expect("failed");
 
         assert!(PluginRegistryTrait::contains(
             ctx.plugin_registry.as_ref(),
@@ -483,13 +483,13 @@ mod tests {
     async fn test_disabled_plugin_spec_is_not_replayed() {
         let temp = TempDir::new().unwrap();
 
-        let ctx1 = CliContext::with_temp_dir(temp.path()).await.unwrap();
+        let ctx1 = CliContext::with_temp_dir(temp.path()).await.expect("failed");
         let mut spec = ctx1.plugin_store.get("http-plugin").unwrap().unwrap();
         spec.enabled = false;
         ctx1.plugin_store.save("http-plugin", &spec).unwrap();
         drop(ctx1);
 
-        let ctx2 = CliContext::with_temp_dir(temp.path()).await.unwrap();
+        let ctx2 = CliContext::with_temp_dir(temp.path()).await.expect("failed");
         assert!(!PluginRegistryTrait::contains(
             ctx2.plugin_registry.as_ref(),
             "http-plugin"
@@ -499,7 +499,7 @@ mod tests {
     #[tokio::test]
     async fn test_default_agent_factory_registered_on_startup() {
         let temp = TempDir::new().unwrap();
-        let ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
+        let ctx = CliContext::with_temp_dir(temp.path()).await.expect("failed");
 
         let factory_types = ctx.agent_registry.list_factory_types().await;
         assert!(factory_types.iter().any(|k| k == CLI_BASE_FACTORY_KIND));

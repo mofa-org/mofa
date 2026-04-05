@@ -195,20 +195,20 @@ mod tests {
 
         // 发送输入
         // Send input
-        input_tx.send("Hello".to_string()).await.unwrap();
+        input_tx.send("Hello".to_string()).await.expect("failed");
 
         // 接收输入
         // Receive input
-        let input = conn.receive().await.unwrap();
+        let input = conn.receive().await.expect("failed");
         assert_eq!(input, "Hello");
 
         // 发送输出
         // Send output
-        conn.send("World".to_string()).await.unwrap();
+        conn.send("World".to_string()).await.expect("failed");
 
         // 接收输出
         // Receive output
-        let output = output_rx.recv().await.unwrap();
+        let output = output_rx.recv().await.expect("failed");
         assert_eq!(output, "World");
 
         assert!(conn.is_connected());
@@ -220,7 +220,7 @@ mod tests {
 
         // 没有输入时返回 None
         // Returns None when there is no input
-        let result = conn.try_receive().await.unwrap();
+        let result = conn.try_receive().await.expect("failed");
         assert!(result.is_none());
     }
 }

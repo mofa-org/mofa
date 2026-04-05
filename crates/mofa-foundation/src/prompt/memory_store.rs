@@ -377,12 +377,12 @@ mod tests {
             .with_tag("greeting");
 
         let entity = PromptEntity::from_template(&template);
-        store.save_template(&entity).await.unwrap();
+        store.save_template(&entity).await.expect("failed");
 
-        assert!(store.exists("test").await.unwrap());
+        assert!(store.exists("test").await.expect("failed"));
         assert_eq!(store.template_count(), 1);
 
-        let found = store.get_template("test").await.unwrap();
+        let found = store.get_template("test").await.expect("failed");
         assert!(found.is_some());
         assert_eq!(found.unwrap().template_id, "test");
     }
@@ -406,10 +406,10 @@ mod tests {
 
         // 按标签查询
         // Query by tag
-        let even = store.find_by_tag("even").await.unwrap();
+        let even = store.find_by_tag("even").await.expect("failed");
         assert_eq!(even.len(), 3);
 
-        let odd = store.find_by_tag("odd").await.unwrap();
+        let odd = store.find_by_tag("odd").await.expect("failed");
         assert_eq!(odd.len(), 2);
     }
 
@@ -444,12 +444,12 @@ mod tests {
 
         // 搜索 "code"
         // Search "code"
-        let results = store.search_templates("code").await.unwrap();
+        let results = store.search_templates("code").await.expect("failed");
         assert_eq!(results.len(), 2);
 
         // 搜索 "review"
         // Search "review"
-        let results = store.search_templates("review").await.unwrap();
+        let results = store.search_templates("review").await.expect("failed");
         assert_eq!(results.len(), 1);
     }
 
@@ -459,11 +459,11 @@ mod tests {
 
         let entity = PromptEntity::from_template(&PromptTemplate::new("test").with_content("test"));
 
-        store.save_template(&entity).await.unwrap();
-        assert!(store.exists("test").await.unwrap());
+        store.save_template(&entity).await.expect("failed");
+        assert!(store.exists("test").await.expect("failed"));
 
-        store.delete_template("test").await.unwrap();
-        assert!(!store.exists("test").await.unwrap());
+        store.delete_template("test").await.expect("failed");
+        assert!(!store.exists("test").await.expect("failed"));
     }
 
     #[tokio::test]
@@ -472,22 +472,22 @@ mod tests {
 
         let entity = PromptEntity::from_template(&PromptTemplate::new("test").with_content("test"));
 
-        store.save_template(&entity).await.unwrap();
+        store.save_template(&entity).await.expect("failed");
 
         // 禁用
         // Disable
-        store.set_template_enabled("test", false).await.unwrap();
+        store.set_template_enabled("test", false).await.expect("failed");
 
         // 启用模式查询应该找不到
         // Enabled mode query should not find it
         let filter = PromptFilter::new();
-        let results = store.query_templates(&filter).await.unwrap();
+        let results = store.query_templates(&filter).await.expect("failed");
         assert_eq!(results.len(), 0);
 
         // 包含禁用的查询应该能找到
         // Query including disabled should find it
         let filter = PromptFilter::new().include_disabled();
-        let results = store.query_templates(&filter).await.unwrap();
+        let results = store.query_templates(&filter).await.expect("failed");
         assert_eq!(results.len(), 1);
     }
 
@@ -509,7 +509,7 @@ mod tests {
             .await
             .unwrap();
 
-        let tags = store.get_all_tags().await.unwrap();
+        let tags = store.get_all_tags().await.expect("failed");
         assert_eq!(tags, vec!["a", "b", "c"]);
     }
 }

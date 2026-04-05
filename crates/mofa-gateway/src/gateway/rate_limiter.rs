@@ -132,12 +132,20 @@ impl RateLimiter {
     /// Create a new rate limiter with the given strategy.
     pub fn new(strategy: RateLimitStrategy) -> Self {
         let (token_bucket, sliding_window) = match strategy {
-            RateLimitStrategy::TokenBucket { capacity, refill_rate } => {
-                (Some(TokenBucketRateLimiter::new(capacity, refill_rate)), None)
-            }
-            RateLimitStrategy::SlidingWindow { window_size, max_requests } => {
-                (None, Some(SlidingWindowRateLimiter::new(window_size, max_requests)))
-            }
+            RateLimitStrategy::TokenBucket {
+                capacity,
+                refill_rate,
+            } => (
+                Some(TokenBucketRateLimiter::new(capacity, refill_rate)),
+                None,
+            ),
+            RateLimitStrategy::SlidingWindow {
+                window_size,
+                max_requests,
+            } => (
+                None,
+                Some(SlidingWindowRateLimiter::new(window_size, max_requests)),
+            ),
         };
 
         Self {
@@ -169,14 +177,16 @@ impl RateLimiter {
             let entry = limiters.entry(key.to_string()).or_insert_with(|| {
                 // Create a new rate limiter for this key based on the strategy
                 match &self.strategy {
-                    RateLimitStrategy::TokenBucket { capacity, refill_rate } => {
-                        Arc::new(TokenBucketRateLimiter::new(*capacity, *refill_rate))
-                            as Arc<dyn RateLimiterTrait + Send + Sync>
-                    }
-                    RateLimitStrategy::SlidingWindow { window_size, max_requests } => {
-                        Arc::new(SlidingWindowRateLimiter::new(*window_size, *max_requests))
-                            as Arc<dyn RateLimiterTrait + Send + Sync>
-                    }
+                    RateLimitStrategy::TokenBucket {
+                        capacity,
+                        refill_rate,
+                    } => Arc::new(TokenBucketRateLimiter::new(*capacity, *refill_rate))
+                        as Arc<dyn RateLimiterTrait + Send + Sync>,
+                    RateLimitStrategy::SlidingWindow {
+                        window_size,
+                        max_requests,
+                    } => Arc::new(SlidingWindowRateLimiter::new(*window_size, *max_requests))
+                        as Arc<dyn RateLimiterTrait + Send + Sync>,
                 }
             });
 
@@ -199,15 +209,15 @@ mod tests {
 
         // Should allow 5 requests immediately
         for _ in 0..5 {
-            assert!(limiter.try_acquire().await.unwrap());
+            assert!(limiter.try_acquire().await.expect("failed"));
         }
 
         // 6th request should be denied
-        assert!(!limiter.try_acquire().await.unwrap());
+        assert!(!limiter.try_acquire().await.expect("failed"));
 
         // Wait for refill
         tokio::time::sleep(Duration::from_secs(2)).await;
-        assert!(limiter.try_acquire().await.unwrap());
+        assert!(limiter.try_acquire().await.expect("failed"));
     }
 
     #[tokio::test]
@@ -218,14 +228,14 @@ mod tests {
 
         // Drain all tokens
         for _ in 0..10 {
-            assert!(limiter.try_acquire().await.unwrap());
+            assert!(limiter.try_acquire().await.expect("failed"));
         }
-        assert!(!limiter.try_acquire().await.unwrap());
+        assert!(!limiter.try_acquire().await.expect("failed"));
 
         // Wait 500ms — should refill ~5 tokens with sub-second precision
         tokio::time::sleep(Duration::from_millis(500)).await;
         assert!(
-            limiter.try_acquire().await.unwrap(),
+            limiter.try_acquire().await.expect("failed"),
             "sub-second refill should have added tokens"
         );
     }
@@ -236,15 +246,15 @@ mod tests {
 
         // Should allow 3 requests
         for _ in 0..3 {
-            assert!(limiter.try_acquire().await.unwrap());
+            assert!(limiter.try_acquire().await.expect("failed"));
         }
 
         // 4th request should be denied
-        assert!(!limiter.try_acquire().await.unwrap());
+        assert!(!limiter.try_acquire().await.expect("failed"));
 
         // Wait for window to slide
         tokio::time::sleep(Duration::from_secs(2)).await;
-        assert!(limiter.try_acquire().await.unwrap());
+        assert!(limiter.try_acquire().await.expect("failed"));
     }
 
     #[tokio::test]
@@ -255,17 +265,17 @@ mod tests {
         });
 
         // Different keys should have independent limits
-        assert!(limiter.try_acquire_key("user-1").await.unwrap());
-        assert!(limiter.try_acquire_key("user-2").await.unwrap());
+        assert!(limiter.try_acquire_key("user-1").await.expect("failed"));
+        assert!(limiter.try_acquire_key("user-2").await.expect("failed"));
 
         // Exhaust user-1's limit
         for _ in 0..4 {
-            assert!(limiter.try_acquire_key("user-1").await.unwrap());
+            assert!(limiter.try_acquire_key("user-1").await.expect("failed"));
         }
         // user-1 should be rate limited now
-        assert!(!limiter.try_acquire_key("user-1").await.unwrap());
+        assert!(!limiter.try_acquire_key("user-1").await.expect("failed"));
 
         // But user-2 should still be able to make requests
-        assert!(limiter.try_acquire_key("user-2").await.unwrap());
+        assert!(limiter.try_acquire_key("user-2").await.expect("failed"));
     }
 }

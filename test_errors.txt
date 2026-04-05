@@ -1,0 +1,20 @@
+﻿cargo :     Checking 
+mofa-foundation v0.1.0 
+(C:\Users\Aditya RS\mofa\c
+rates\mofa-foundation)
+At line:1 char:1
++ cargo check -p 
+mofa-foundation --tests 
+2>&1 | Out-File -FilePath 
+test ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo        
+      : NotSpecified: (   
+     Checking mo...ofa-   
+ foundation):String) [    
+], RemoteException
+    + FullyQualifiedError 
+   Id : NativeCommandErr  
+  or
+ 

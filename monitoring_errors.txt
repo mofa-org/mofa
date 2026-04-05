@@ -1,0 +1,16 @@
+    Blocking waiting for file lock on artifact directory
+   Compiling h2 v0.4.13
+   Compiling pulley-interpreter v40.0.4
+   Compiling regalloc2 v0.13.5
+   Compiling wit-parser v0.243.0
+   Compiling wasmtime-environ v40.0.4
+   Compiling ureq v2.12.1
+   Compiling rhai v1.24.0
+   Compiling wasm-compose v0.243.0
+   Compiling wasmtime-internal-cache v40.0.4
+   Compiling mofa-kernel v0.1.0 (C:\Users\Aditya RS\mofa\crates\mofa-kernel)
+   Compiling ractor v0.15.10
+   Compiling jsonschema v0.17.1
+   Compiling sysinfo v0.32.1
+   Compiling tungstenite v0.24.0
+   Compiling tokio-tungstenite v0.24.0

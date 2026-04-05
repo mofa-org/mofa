@@ -513,11 +513,11 @@ mod tests {
     #[tokio::test]
     async fn test_install_registers_and_persists_builtin_plugin() {
         let temp = TempDir::new().unwrap();
-        let ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
+        let ctx = CliContext::with_temp_dir(temp.path()).await.expect("failed");
 
         disable_default_http_plugin(&ctx);
 
-        run(&ctx, "http-plugin", None, false).await.unwrap();
+        run(&ctx, "http-plugin", None, false).await.expect("failed");
 
         assert!(PluginRegistryTrait::contains(
             ctx.plugin_registry.as_ref(),
@@ -552,7 +552,7 @@ mod tests {
     async fn test_validate_plugin_structure() {
         let temp_dir = TempDir::new().unwrap();
         let plugin_dir = temp_dir.path().join("test-plugin");
-        tokio::fs::create_dir(&plugin_dir).await.unwrap();
+        tokio::fs::create_dir(&plugin_dir).await.expect("failed");
 
         // Empty directory should fail
         assert!(validate_plugin_structure(&plugin_dir).is_err());
@@ -567,7 +567,7 @@ mod tests {
     #[tokio::test]
     async fn test_install_from_local_path() {
         let temp = TempDir::new().unwrap();
-        let ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
+        let ctx = CliContext::with_temp_dir(temp.path()).await.expect("failed");
 
         let err = run(&ctx, "http-plugin", None, false).await.unwrap_err();
         assert!(err.to_string().contains("already installed"));
@@ -576,7 +576,7 @@ mod tests {
     #[tokio::test]
     async fn test_install_rejects_empty_name() {
         let temp = TempDir::new().unwrap();
-        let ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
+        let ctx = CliContext::with_temp_dir(temp.path()).await.expect("failed");
 
         let err = run(&ctx, "   ", None, false).await.unwrap_err();
         assert!(err.to_string().contains("cannot be empty"));
@@ -585,7 +585,7 @@ mod tests {
     #[tokio::test]
     async fn test_install_rejects_verify_signature_until_implemented() {
         let temp = TempDir::new().unwrap();
-        let ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
+        let ctx = CliContext::with_temp_dir(temp.path()).await.expect("failed");
 
         let err = run(&ctx, "http-plugin", None, true).await.unwrap_err();
         assert!(err.to_string().contains("not implemented yet"));
@@ -595,7 +595,7 @@ mod tests {
     #[tokio::test]
     async fn test_install_supports_repo_prefixed_reference() {
         let temp = TempDir::new().unwrap();
-        let ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
+        let ctx = CliContext::with_temp_dir(temp.path()).await.expect("failed");
 
         disable_default_http_plugin(&ctx);
 
@@ -611,7 +611,7 @@ mod tests {
     #[tokio::test]
     async fn test_install_rejects_unknown_catalog_entry() {
         let temp = TempDir::new().unwrap();
-        let ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
+        let ctx = CliContext::with_temp_dir(temp.path()).await.expect("failed");
 
         let err = run(&ctx, "official/not-real", None, false)
             .await
@@ -622,10 +622,10 @@ mod tests {
     #[tokio::test]
     async fn test_install_from_local_path2() {
         let temp = TempDir::new().unwrap();
-        let ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
+        let ctx = CliContext::with_temp_dir(temp.path()).await.expect("failed");
         // Create a source plugin directory
         let source_plugin = temp.path().join("source-plugin");
-        tokio::fs::create_dir_all(&source_plugin).await.unwrap();
+        tokio::fs::create_dir_all(&source_plugin).await.expect("failed");
         tokio::fs::write(
             source_plugin.join("plugin.toml"),
             b"[plugin]\nname = \"test\"\n",
@@ -637,7 +637,7 @@ mod tests {
             .unwrap();
 
         // Ensure files are synced to disk
-        tokio::fs::metadata(&source_plugin).await.unwrap();
+        tokio::fs::metadata(&source_plugin).await.expect("failed");
 
         // Install the plugin using the path as the name parameter
         let plugin_path_str = source_plugin.to_str().unwrap();
@@ -667,11 +667,11 @@ mod tests {
     #[tokio::test]
     async fn test_install_already_exists() {
         let temp = TempDir::new().unwrap();
-        let ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
+        let ctx = CliContext::with_temp_dir(temp.path()).await.expect("failed");
 
         // Create a plugin directory and install it first
         let source_plugin = temp.path().join("test-plugin");
-        tokio::fs::create_dir_all(&source_plugin).await.unwrap();
+        tokio::fs::create_dir_all(&source_plugin).await.expect("failed");
         tokio::fs::write(source_plugin.join("file.txt"), b"test")
             .await
             .unwrap();
@@ -694,11 +694,11 @@ mod tests {
     #[tokio::test]
     async fn test_install_invalid_plugin_structure() {
         let temp = TempDir::new().unwrap();
-        let ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
+        let ctx = CliContext::with_temp_dir(temp.path()).await.expect("failed");
 
         // Create an empty source directory (invalid)
         let source_plugin = temp.path().join("empty-plugin");
-        tokio::fs::create_dir_all(&source_plugin).await.unwrap();
+        tokio::fs::create_dir_all(&source_plugin).await.expect("failed");
 
         // Try to install - should fail validation
         let result = run(&ctx, source_plugin.to_str().unwrap(), None, false).await;

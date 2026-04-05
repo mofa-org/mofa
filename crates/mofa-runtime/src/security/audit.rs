@@ -3,7 +3,7 @@
 //! Helper functions for logging security events for compliance and monitoring.
 
 use crate::security::events::SecurityEvent;
-use tracing::{info, warn, error};
+use tracing::{error, info, warn};
 
 /// Audit logger for security events
 pub struct SecurityAuditLogger;
@@ -12,7 +12,14 @@ impl SecurityAuditLogger {
     /// Log a security event
     pub fn log_event(event: &SecurityEvent) {
         match event {
-            SecurityEvent::PermissionCheck { subject, action, resource, allowed, reason, .. } => {
+            SecurityEvent::PermissionCheck {
+                subject,
+                action,
+                resource,
+                allowed,
+                reason,
+                ..
+            } => {
                 if *allowed {
                     info!(
                         subject = %subject,
@@ -30,40 +37,48 @@ impl SecurityAuditLogger {
                     );
                 }
             }
-            SecurityEvent::PiiDetected { category, count, .. } => {
+            SecurityEvent::PiiDetected {
+                category, count, ..
+            } => {
                 warn!(
                     category = %category,
                     count = %count,
                     "Security: PII detected"
                 );
             }
-            SecurityEvent::PiiRedacted { count, categories, .. } => {
+            SecurityEvent::PiiRedacted {
+                count, categories, ..
+            } => {
                 info!(
                     count = %count,
                     categories = ?categories,
                     "Security: PII redacted"
                 );
             }
-            SecurityEvent::ContentModerated { verdict, reason, .. } => {
-                match verdict.as_str() {
-                    "block" => {
-                        error!(
-                            reason = %reason.as_ref().unwrap_or(&"unknown".to_string()),
-                            "Security: Content blocked"
-                        );
-                    }
-                    "flag" => {
-                        warn!(
-                            reason = %reason.as_ref().unwrap_or(&"unknown".to_string()),
-                            "Security: Content flagged"
-                        );
-                    }
-                    _ => {
-                        info!("Security: Content allowed");
-                    }
+            SecurityEvent::ContentModerated {
+                verdict, reason, ..
+            } => match verdict.as_str() {
+                "block" => {
+                    error!(
+                        reason = %reason.as_ref().unwrap_or(&"unknown".to_string()),
+                        "Security: Content blocked"
+                    );
                 }
-            }
-            SecurityEvent::PromptInjectionDetected { confidence, pattern, .. } => {
+                "flag" => {
+                    warn!(
+                        reason = %reason.as_ref().unwrap_or(&"unknown".to_string()),
+                        "Security: Content flagged"
+                    );
+                }
+                _ => {
+                    info!("Security: Content allowed");
+                }
+            },
+            SecurityEvent::PromptInjectionDetected {
+                confidence,
+                pattern,
+                ..
+            } => {
                 error!(
                     confidence = %confidence,
                     pattern = %pattern,
@@ -105,10 +120,8 @@ impl SecurityAuditLogger {
 
     /// Log content moderation
     pub fn log_content_moderation(verdict: &str, reason: Option<&str>) {
-        let event = SecurityEvent::content_moderated(
-            verdict.to_string(),
-            reason.map(|s| s.to_string()),
-        );
+        let event =
+            SecurityEvent::content_moderated(verdict.to_string(), reason.map(|s| s.to_string()));
         Self::log_event(&event);
     }
 

@@ -425,12 +425,12 @@ mod tests {
         entries: &[(&str, &str, &[(&str, &str)])],
     ) {
         for (id, text, meta) in entries {
-            let emb = adapter.embed_one(text).await.unwrap();
+            let emb = adapter.embed_one(text).await.expect("failed");
             let mut chunk = DocumentChunk::new(*id, *text, emb);
             for (k, v) in *meta {
                 chunk = chunk.with_metadata(*k, *v);
             }
-            store.upsert(chunk).await.unwrap();
+            store.upsert(chunk).await.expect("failed");
         }
     }
 

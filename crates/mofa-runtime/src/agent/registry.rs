@@ -642,7 +642,7 @@ mod tests {
         let registry = AgentRegistry::new();
         let agent = Arc::new(RwLock::new(TestAgent::new("agent-1", "Test Agent")));
 
-        registry.register(agent).await.unwrap();
+        registry.register(agent).await.expect("failed");
 
         let found = registry.get("agent-1").await;
         assert!(found.is_some());
@@ -660,7 +660,7 @@ mod tests {
             .unwrap();
 
         let config = AgentConfig::new("agent-2", "Created Agent");
-        let agent = registry.create("test", config).await.unwrap();
+        let agent = registry.create("test", config).await.expect("failed");
 
         let agent_guard = agent.read().await;
         assert_eq!(agent_guard.id(), "agent-2");
@@ -708,10 +708,10 @@ mod tests {
         let registry = AgentRegistry::new();
         let agent = Arc::new(RwLock::new(TestAgent::new("agent-1", "Test Agent")));
 
-        registry.register(agent).await.unwrap();
+        registry.register(agent).await.expect("failed");
         assert!(registry.contains("agent-1").await);
 
-        registry.unregister("agent-1").await.unwrap();
+        registry.unregister("agent-1").await.expect("failed");
         assert!(!registry.contains("agent-1").await);
     }
 
@@ -724,7 +724,7 @@ mod tests {
             .unwrap();
 
         let agent = Arc::new(RwLock::new(TestAgent::new("agent-1", "Test")));
-        registry.register(agent).await.unwrap();
+        registry.register(agent).await.expect("failed");
 
         let stats = registry.stats().await;
         assert_eq!(stats.total_agents, 1);

@@ -1116,12 +1116,12 @@ mod tests {
         let config = create_test_config("model1");
 
         // Register
-        pool.register_model(config).await.unwrap();
+        pool.register_model(config).await.expect("failed");
         assert_eq!(pool.list_models().len(), 1);
         assert!(pool.list_models().contains(&"model1".to_string()));
 
         // Unregister
-        pool.unregister_model("model1").await.unwrap();
+        pool.unregister_model("model1").await.expect("failed");
         assert_eq!(pool.list_models().len(), 0);
     }
 
@@ -1139,8 +1139,8 @@ mod tests {
         let config1 = create_test_config("model1");
         let config2 = create_test_config("model2");
 
-        pool.register_model(config1).await.unwrap();
-        pool.register_model(config2).await.unwrap();
+        pool.register_model(config1).await.expect("failed");
+        pool.register_model(config2).await.expect("failed");
 
         let stats = pool.get_statistics().unwrap();
         assert_eq!(stats.loaded_models_count, 0); // None loaded yet
@@ -1156,7 +1156,7 @@ mod tests {
         assert_eq!(pool.get_idle_timeout_secs(), DEFAULT_IDLE_TIMEOUT_SECS);
 
         // Set custom timeout
-        pool.set_idle_timeout_secs(60).await.unwrap();
+        pool.set_idle_timeout_secs(60).await.expect("failed");
         assert_eq!(pool.get_idle_timeout_secs(), 60);
     }
 
@@ -1170,7 +1170,7 @@ mod tests {
 
         // Set custom threshold (1 GB)
         let custom_threshold = 1_000_000_000u64;
-        pool.set_memory_threshold(custom_threshold).await.unwrap();
+        pool.set_memory_threshold(custom_threshold).await.expect("failed");
         assert_eq!(pool.get_memory_threshold(), custom_threshold);
     }
 
@@ -1205,13 +1205,13 @@ mod tests {
         let pool = Arc::new(ModelPool::new());
 
         // Set a low memory threshold to force eviction
-        pool.set_memory_threshold(1_000_000_000).await.unwrap(); // 1 GB
-        pool.set_idle_timeout_secs(1).await.unwrap(); // 1 second for testing
+        pool.set_memory_threshold(1_000_000_000).await.expect("failed"); // 1 GB
+        pool.set_idle_timeout_secs(1).await.expect("failed"); // 1 second for testing
 
         // Register 3 models
         for i in 1..=3 {
             let config = create_test_config(&format!("model{}", i));
-            pool.register_model(config).await.unwrap();
+            pool.register_model(config).await.expect("failed");
         }
 
         assert_eq!(pool.list_models().len(), 3);
@@ -1242,7 +1242,7 @@ mod tests {
             .unwrap();
 
         // Set short idle timeout
-        pool.set_idle_timeout_secs(0).await.unwrap();
+        pool.set_idle_timeout_secs(0).await.expect("failed");
 
         // Try to trigger eviction (should succeed even with no loaded models)
         let result = pool.trigger_eviction(1_000_000_000).await;
@@ -1257,7 +1257,7 @@ mod tests {
         let pool = ModelPool::new();
 
         // Set very low threshold
-        pool.set_memory_threshold(1).await.unwrap(); // 1 byte (impossible)
+        pool.set_memory_threshold(1).await.expect("failed"); // 1 byte (impossible)
 
         // Try to load a model (should fail due to memory constraint)
         pool.register_model(create_test_config("model1"))

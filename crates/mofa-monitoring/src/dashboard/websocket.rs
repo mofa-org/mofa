@@ -357,7 +357,7 @@ impl WebSocketHandler {
                     // Messages from direct send
                     Some(msg) = rx.recv() => {
                         let json = serde_json::to_string(&msg).unwrap_or_default();
-                        if sender.send(Message::Text(json)).await.is_err() {
+                        if sender.send(Message::Text(json.into())).await.is_err() {
                             break;
                         }
                     }
@@ -366,7 +366,7 @@ impl WebSocketHandler {
                         match result {
                             Ok(msg) => {
                                 let json = serde_json::to_string(&msg).unwrap_or_default();
-                                if sender.send(Message::Text(json)).await.is_err() {
+                                if sender.send(Message::Text(json.into())).await.is_err() {
                                     break;
                                 }
                             }
@@ -541,7 +541,7 @@ mod tests {
 
         // Serve in background
         tokio::spawn(async move {
-            axum::serve(listener, router).await.unwrap();
+            axum::serve(listener, router).await.expect("failed");
         });
 
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
@@ -601,7 +601,7 @@ mod tests {
         let addr = listener.local_addr().unwrap();
 
         tokio::spawn(async move {
-            axum::serve(listener, router).await.unwrap();
+            axum::serve(listener, router).await.expect("failed");
         });
 
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;

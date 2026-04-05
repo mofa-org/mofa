@@ -433,7 +433,7 @@ mod tests {
         .unwrap();
 
         assert!(!indexed.is_empty());
-        assert_eq!(store.count().await.unwrap(), indexed.len());
+        assert_eq!(store.count().await.expect("failed"), indexed.len());
 
         let results = query_store(&store, &embedder, "microkernel agents", 3, None)
             .await

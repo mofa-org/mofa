@@ -80,7 +80,11 @@ impl ReplicatedStateMachine {
     }
 
     /// Apply add node command.
-    async fn apply_add_node(&self, node_id: NodeId, address: NodeAddress) -> ControlPlaneResult<()> {
+    async fn apply_add_node(
+        &self,
+        node_id: NodeId,
+        address: NodeAddress,
+    ) -> ControlPlaneResult<()> {
         let mut membership = self.membership.write().await;
 
         // Check if node already exists
@@ -163,11 +167,20 @@ impl ReplicatedStateMachine {
     }
 
     /// Apply update agent state command.
-    async fn apply_update_agent_state(&self, agent_id: &str, state: &str) -> ControlPlaneResult<()> {
+    async fn apply_update_agent_state(
+        &self,
+        agent_id: &str,
+        state: &str,
+    ) -> ControlPlaneResult<()> {
         let mut registry = self.agent_registry.write().await;
         if let Some(entry) = registry.get_mut(agent_id) {
-            entry.metadata.insert("state".to_string(), state.to_string());
-            debug!("Applied update_agent_state command: {} = {}", agent_id, state);
+            entry
+                .metadata
+                .insert("state".to_string(), state.to_string());
+            debug!(
+                "Applied update_agent_state command: {} = {}",
+                agent_id, state
+            );
         } else {
             warn!("Agent {} not found for state update", agent_id);
         }
@@ -223,7 +236,7 @@ mod tests {
             metadata: metadata.clone(),
         };
 
-        sm.apply(command).await.unwrap();
+        sm.apply(command).await.expect("failed");
 
         let registry = sm.get_agent_registry().await;
         assert!(registry.contains_key("agent-1"));
@@ -239,12 +252,12 @@ mod tests {
             agent_id: "agent-1".to_string(),
             metadata,
         };
-        sm.apply(register_cmd).await.unwrap();
+        sm.apply(register_cmd).await.expect("failed");
 
         let unregister_cmd = StateMachineCommand::UnregisterAgent {
             agent_id: "agent-1".to_string(),
         };
-        sm.apply(unregister_cmd).await.unwrap();
+        sm.apply(unregister_cmd).await.expect("failed");
 
         let registry = sm.get_agent_registry().await;
         assert!(!registry.contains_key("agent-1"));
@@ -263,7 +276,7 @@ mod tests {
             node_id: node_id.clone(),
             address: address.clone(),
         };
-        sm.apply(add_cmd).await.unwrap();
+        sm.apply(add_cmd).await.expect("failed");
 
         let membership_arc = sm.membership();
         let membership = membership_arc.read().await;
@@ -271,7 +284,7 @@ mod tests {
         drop(membership);
 
         let remove_cmd = StateMachineCommand::RemoveNode { node_id };
-        sm.apply(remove_cmd).await.unwrap();
+        sm.apply(remove_cmd).await.expect("failed");
 
         let membership_arc = sm.membership();
         let membership = membership_arc.read().await;

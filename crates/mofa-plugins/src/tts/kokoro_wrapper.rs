@@ -509,7 +509,7 @@ mod tests {
             .await
             .unwrap();
 
-        let voices = wrapper.list_voices().await.unwrap();
+        let voices = wrapper.list_voices().await.expect("failed");
         assert!(!voices.is_empty());
         assert!(voices.iter().any(|v| v.id == "default"));
     }

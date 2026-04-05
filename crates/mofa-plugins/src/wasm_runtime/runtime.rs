@@ -612,7 +612,7 @@ mod tests {
             )
         "#;
 
-        let compiled = runtime.compile_wat("test", wat).await.unwrap();
+        let compiled = runtime.compile_wat("test", wat).await.expect("failed");
         assert_eq!(compiled.name, "test");
         assert!(compiled.compile_time_ms > 0);
 

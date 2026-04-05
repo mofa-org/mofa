@@ -504,9 +504,9 @@ mod tests {
         let recorder = InMemorySessionRecorder::new();
         let session = DebugSession::new("s-1", "wf-1", "exec-1");
 
-        recorder.start_session(&session).await.unwrap();
+        recorder.start_session(&session).await.expect("failed");
 
-        let retrieved = recorder.get_session("s-1").await.unwrap();
+        let retrieved = recorder.get_session("s-1").await.expect("failed");
         assert!(retrieved.is_some());
         let s = retrieved.unwrap();
         assert_eq!(s.session_id, "s-1");
@@ -518,7 +518,7 @@ mod tests {
     async fn test_in_memory_recorder_record_events() {
         let recorder = InMemorySessionRecorder::new();
         let session = DebugSession::new("s-1", "wf-1", "exec-1");
-        recorder.start_session(&session).await.unwrap();
+        recorder.start_session(&session).await.expect("failed");
 
         let event1 = DebugEvent::NodeStart {
             node_id: "n1".to_string(),
@@ -532,16 +532,16 @@ mod tests {
             duration_ms: 10,
         };
 
-        recorder.record_event("s-1", &event1).await.unwrap();
-        recorder.record_event("s-1", &event2).await.unwrap();
+        recorder.record_event("s-1", &event1).await.expect("failed");
+        recorder.record_event("s-1", &event2).await.expect("failed");
 
-        let events = recorder.get_events("s-1").await.unwrap();
+        let events = recorder.get_events("s-1").await.expect("failed");
         assert_eq!(events.len(), 2);
         assert_eq!(events[0].event_type(), "node_start");
         assert_eq!(events[1].event_type(), "node_end");
 
         // Check event count is updated
-        let s = recorder.get_session("s-1").await.unwrap().unwrap();
+        let s = recorder.get_session("s-1").await.expect("failed").unwrap();
         assert_eq!(s.event_count, 2);
     }
 
@@ -549,11 +549,11 @@ mod tests {
     async fn test_in_memory_recorder_end_session() {
         let recorder = InMemorySessionRecorder::new();
         let session = DebugSession::new("s-1", "wf-1", "exec-1");
-        recorder.start_session(&session).await.unwrap();
+        recorder.start_session(&session).await.expect("failed");
 
-        recorder.end_session("s-1", "completed").await.unwrap();
+        recorder.end_session("s-1", "completed").await.expect("failed");
 
-        let s = recorder.get_session("s-1").await.unwrap().unwrap();
+        let s = recorder.get_session("s-1").await.expect("failed").unwrap();
         assert_eq!(s.status, "completed");
         assert!(s.ended_at.is_some());
     }
@@ -570,7 +570,7 @@ mod tests {
             .await
             .unwrap();
 
-        let sessions = recorder.list_sessions().await.unwrap();
+        let sessions = recorder.list_sessions().await.expect("failed");
         assert_eq!(sessions.len(), 2);
     }
 
@@ -592,11 +592,11 @@ mod tests {
         assert!(result.is_err());
 
         // get_session for non-existent session should return None
-        let result = recorder.get_session("nonexistent").await.unwrap();
+        let result = recorder.get_session("nonexistent").await.expect("failed");
         assert!(result.is_none());
 
         // get_events for non-existent session should return empty
-        let events = recorder.get_events("nonexistent").await.unwrap();
+        let events = recorder.get_events("nonexistent").await.expect("failed");
         assert!(events.is_empty());
     }
 
@@ -605,7 +605,7 @@ mod tests {
         let (recorder, _temp_dir) = file_recorder_with_tempdir(0);
         let session = DebugSession::new("s-1", "wf-1", "exec-1");
 
-        recorder.start_session(&session).await.unwrap();
+        recorder.start_session(&session).await.expect("failed");
         recorder
             .record_event(
                 "s-1",
@@ -629,14 +629,14 @@ mod tests {
             )
             .await
             .unwrap();
-        recorder.end_session("s-1", "completed").await.unwrap();
+        recorder.end_session("s-1", "completed").await.expect("failed");
 
-        let events = recorder.get_events("s-1").await.unwrap();
+        let events = recorder.get_events("s-1").await.expect("failed");
         assert_eq!(events.len(), 2);
         assert_eq!(events[0].event_type(), "node_start");
         assert_eq!(events[1].event_type(), "node_end");
 
-        let session = recorder.get_session("s-1").await.unwrap().unwrap();
+        let session = recorder.get_session("s-1").await.expect("failed").unwrap();
         assert_eq!(session.status, "completed");
         assert!(session.ended_at.is_some());
         assert_eq!(session.event_count, 2);
@@ -653,14 +653,14 @@ mod tests {
         let mut s3 = DebugSession::new("s-3", "wf", "e-3");
         s3.started_at = 3;
 
-        recorder.start_session(&s1).await.unwrap();
-        recorder.end_session("s-1", "completed").await.unwrap();
-        recorder.start_session(&s2).await.unwrap();
-        recorder.end_session("s-2", "completed").await.unwrap();
-        recorder.start_session(&s3).await.unwrap();
-        recorder.end_session("s-3", "completed").await.unwrap();
+        recorder.start_session(&s1).await.expect("failed");
+        recorder.end_session("s-1", "completed").await.expect("failed");
+        recorder.start_session(&s2).await.expect("failed");
+        recorder.end_session("s-2", "completed").await.expect("failed");
+        recorder.start_session(&s3).await.expect("failed");
+        recorder.end_session("s-3", "completed").await.expect("failed");
 
-        let sessions = recorder.list_sessions().await.unwrap();
+        let sessions = recorder.list_sessions().await.expect("failed");
         assert_eq!(sessions.len(), 3);
         assert_eq!(sessions[0].session_id, "s-3");
         assert_eq!(sessions[1].session_id, "s-2");
@@ -685,10 +685,10 @@ mod tests {
         let result = recorder.end_session("missing", "failed").await;
         assert!(result.is_err());
 
-        let session = recorder.get_session("missing").await.unwrap();
+        let session = recorder.get_session("missing").await.expect("failed");
         assert!(session.is_none());
 
-        let events = recorder.get_events("missing").await.unwrap();
+        let events = recorder.get_events("missing").await.expect("failed");
         assert!(events.is_empty());
     }
 
@@ -696,7 +696,7 @@ mod tests {
     async fn test_file_recorder_crash_recovery() {
         let (recorder, temp_dir) = file_recorder_with_tempdir(0);
         let session = DebugSession::new("s-crash", "wf", "e");
-        recorder.start_session(&session).await.unwrap();
+        recorder.start_session(&session).await.expect("failed");
 
         recorder
             .record_event(
@@ -727,10 +727,10 @@ mod tests {
             .open(temp_dir.path().join("s-crash.jsonl"))
             .await
             .unwrap();
-        file.write_all(b"{bad-json\n").await.unwrap();
-        file.flush().await.unwrap();
+        file.write_all(b"{bad-json\n").await.expect("failed");
+        file.flush().await.expect("failed");
 
-        let events = recorder.get_events("s-crash").await.unwrap();
+        let events = recorder.get_events("s-crash").await.expect("failed");
         assert_eq!(events.len(), 2);
     }
 
@@ -740,20 +740,20 @@ mod tests {
 
         let mut s1 = DebugSession::new("s-1", "wf", "e-1");
         s1.started_at = 1;
-        recorder.start_session(&s1).await.unwrap();
-        recorder.end_session("s-1", "completed").await.unwrap();
+        recorder.start_session(&s1).await.expect("failed");
+        recorder.end_session("s-1", "completed").await.expect("failed");
 
         let mut s2 = DebugSession::new("s-2", "wf", "e-2");
         s2.started_at = 2;
-        recorder.start_session(&s2).await.unwrap();
-        recorder.end_session("s-2", "completed").await.unwrap();
+        recorder.start_session(&s2).await.expect("failed");
+        recorder.end_session("s-2", "completed").await.expect("failed");
 
         let mut s3 = DebugSession::new("s-3", "wf", "e-3");
         s3.started_at = 3;
-        recorder.start_session(&s3).await.unwrap();
-        recorder.end_session("s-3", "completed").await.unwrap();
+        recorder.start_session(&s3).await.expect("failed");
+        recorder.end_session("s-3", "completed").await.expect("failed");
 
-        let sessions = recorder.list_sessions().await.unwrap();
+        let sessions = recorder.list_sessions().await.expect("failed");
         assert_eq!(sessions.len(), 2);
         assert!(sessions.iter().any(|s| s.session_id == "s-2"));
         assert!(sessions.iter().any(|s| s.session_id == "s-3"));
@@ -770,7 +770,7 @@ mod tests {
             tasks.push(tokio::spawn(async move {
                 let session_id = format!("s-{idx}");
                 let session = DebugSession::new(session_id.clone(), "wf", format!("exec-{idx}"));
-                recorder.start_session(&session).await.unwrap();
+                recorder.start_session(&session).await.expect("failed");
 
                 for event_idx in 0..5usize {
                     recorder
@@ -794,12 +794,12 @@ mod tests {
         }
 
         for task in tasks {
-            task.await.unwrap();
+            task.await.expect("failed");
         }
 
         for idx in 0..3usize {
             let session_id = format!("s-{idx}");
-            let events = recorder.get_events(&session_id).await.unwrap();
+            let events = recorder.get_events(&session_id).await.expect("failed");
             assert_eq!(events.len(), 5);
             assert!(events.iter().all(|event| {
                 event

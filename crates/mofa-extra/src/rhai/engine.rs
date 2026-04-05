@@ -845,7 +845,7 @@ mod tests {
         let engine = RhaiScriptEngine::new(ScriptEngineConfig::default()).unwrap();
         let context = ScriptContext::new();
 
-        let result = engine.execute("1 + 2", &context).await.unwrap();
+        let result = engine.execute("1 + 2", &context).await.expect("failed");
 
         assert!(result.success);
         assert_eq!(result.value, serde_json::json!(3));
@@ -860,7 +860,7 @@ mod tests {
             .with_variable("y", 20)
             .unwrap();
 
-        let result = engine.execute("x + y", &context).await.unwrap();
+        let result = engine.execute("x + y", &context).await.expect("failed");
 
         assert!(result.success);
         assert_eq!(result.value, serde_json::json!(30));
@@ -878,7 +878,7 @@ mod tests {
             double(21)
         "#;
 
-        let result = engine.execute(script, &context).await.unwrap();
+        let result = engine.execute(script, &context).await.expect("failed");
 
         assert!(result.success);
         assert_eq!(result.value, serde_json::json!(42));
@@ -932,7 +932,7 @@ mod tests {
 
         // 测试字符串函数
         // Test string functions
-        let result = engine.execute(r#"upper("hello")"#, &context).await.unwrap();
+        let result = engine.execute(r#"upper("hello")"#, &context).await.expect("failed");
         assert_eq!(result.value, "HELLO");
 
         // 测试 JSON 函数
@@ -945,7 +945,7 @@ mod tests {
 
         // 测试时间函数
         // Test time functions
-        let result = engine.execute("now()", &context).await.unwrap();
+        let result = engine.execute("now()", &context).await.expect("failed");
         assert!(result.value.as_i64().is_some());
     }
 

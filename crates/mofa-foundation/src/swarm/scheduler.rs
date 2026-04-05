@@ -447,10 +447,10 @@ impl SwarmScheduler for ParallelScheduler {
                     idx,
                     "dag stalled".into(),
                 ));
-            } else if task.status == crate::swarm::SubtaskStatus::Skipped {
-                if !results.iter().any(|r| r.node_index == idx.index()) {
-                    results.push(TaskExecutionResult::skipped(task, idx, "skipped".into()));
-                }
+            } else if task.status == crate::swarm::SubtaskStatus::Skipped
+                && !results.iter().any(|r| r.node_index == idx.index())
+            {
+                results.push(TaskExecutionResult::skipped(task, idx, "skipped".into()));
             }
         }
 
@@ -496,7 +496,7 @@ mod tests {
         });
 
         let scheduler = SequentialScheduler::new();
-        let summary = scheduler.execute(&mut dag, executor).await.unwrap();
+        let summary = scheduler.execute(&mut dag, executor).await.expect("failed");
 
         assert!(summary.is_fully_successful());
         assert_eq!(summary.succeeded, 3);
@@ -529,7 +529,7 @@ mod tests {
         config.failure_policy = FailurePolicy::FailFastCascade;
         let scheduler = ParallelScheduler::with_config(config);
 
-        let summary = scheduler.execute(&mut dag, executor).await.unwrap();
+        let summary = scheduler.execute(&mut dag, executor).await.expect("failed");
 
         assert_eq!(summary.failed, 1);
         assert_eq!(summary.skipped, 2);
@@ -568,7 +568,7 @@ mod tests {
         });
 
         let scheduler = SequentialScheduler::new();
-        let summary = scheduler.execute(&mut dag, executor).await.unwrap();
+        let summary = scheduler.execute(&mut dag, executor).await.expect("failed");
 
         assert_eq!(summary.failed, 1);
         assert_eq!(summary.skipped, 0);
@@ -596,7 +596,7 @@ mod tests {
         config.task_timeout = Duration::from_millis(1);
         let scheduler = SequentialScheduler::with_config(config);
 
-        let summary = scheduler.execute(&mut dag, executor).await.unwrap();
+        let summary = scheduler.execute(&mut dag, executor).await.expect("failed");
 
         assert_eq!(summary.failed, 1);
         let results = summary.results;
@@ -632,7 +632,7 @@ mod tests {
         });
 
         let scheduler = ParallelScheduler::new();
-        let summary = scheduler.execute(&mut dag, executor).await.unwrap();
+        let summary = scheduler.execute(&mut dag, executor).await.expect("failed");
 
         assert!(summary.is_fully_successful());
         assert_eq!(summary.succeeded, 4);
@@ -688,7 +688,7 @@ mod tests {
         config.concurrency_limit = Some(3);
         let scheduler = ParallelScheduler::with_config(config);
 
-        let summary = scheduler.execute(&mut dag, executor).await.unwrap();
+        let summary = scheduler.execute(&mut dag, executor).await.expect("failed");
 
         assert!(summary.is_fully_successful());
         assert_eq!(summary.succeeded, 10);
@@ -734,7 +734,7 @@ mod tests {
         config.failure_policy = FailurePolicy::FailFastCascade;
         let scheduler = SequentialScheduler::with_config(config);
 
-        let summary = scheduler.execute(&mut dag, executor).await.unwrap();
+        let summary = scheduler.execute(&mut dag, executor).await.expect("failed");
         assert_eq!(summary.failed, 1);
         assert_eq!(summary.skipped, 2);
         assert_eq!(summary.succeeded, 0);
@@ -769,7 +769,7 @@ mod tests {
         });
 
         let scheduler = ParallelScheduler::new();
-        let summary = scheduler.execute(&mut dag, executor).await.unwrap();
+        let summary = scheduler.execute(&mut dag, executor).await.expect("failed");
 
         assert_eq!(summary.failed, 1);
         assert_eq!(summary.succeeded, 1);
@@ -789,7 +789,7 @@ mod tests {
             Arc::new(move |_idx, task| Box::pin(async move { Ok(format!("out:{}", task.id)) }));
 
         let scheduler = SequentialScheduler::new();
-        let summary = scheduler.execute(&mut dag, executor).await.unwrap();
+        let summary = scheduler.execute(&mut dag, executor).await.expect("failed");
         assert!(summary.is_fully_successful());
 
         let task = dag.get_task(idx_a).unwrap();
@@ -805,7 +805,7 @@ mod tests {
             Arc::new(move |_idx, _task| Box::pin(async move { Ok("unused".into()) }));
 
         let scheduler = SequentialScheduler::new();
-        let summary = scheduler.execute(&mut dag, executor).await.unwrap();
+        let summary = scheduler.execute(&mut dag, executor).await.expect("failed");
         assert_eq!(summary.total_tasks, 0);
         assert_eq!(summary.succeeded, 0);
         assert_eq!(summary.failed, 0);
@@ -830,7 +830,7 @@ mod tests {
         });
 
         let scheduler = ParallelScheduler::new(); // default FailurePolicy::Continue
-        let summary = scheduler.execute(&mut dag, executor).await.unwrap();
+        let summary = scheduler.execute(&mut dag, executor).await.expect("failed");
 
         assert_eq!(summary.failed, 1);
         assert_eq!(summary.succeeded, 1);
@@ -869,7 +869,7 @@ mod tests {
         config.concurrency_limit = Some(1);
         let scheduler = ParallelScheduler::with_config(config);
 
-        let summary = scheduler.execute(&mut dag, executor).await.unwrap();
+        let summary = scheduler.execute(&mut dag, executor).await.expect("failed");
         assert!(summary.is_fully_successful());
         assert_eq!(peak.load(Ordering::SeqCst), 1);
     }

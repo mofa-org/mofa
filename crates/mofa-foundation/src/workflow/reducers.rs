@@ -412,7 +412,7 @@ mod tests {
             .unwrap();
         assert_eq!(result, json!("new"));
 
-        let result = reducer.reduce(None, &json!("value")).await.unwrap();
+        let result = reducer.reduce(None, &json!("value")).await.expect("failed");
         assert_eq!(result, json!("value"));
     }
 
@@ -426,7 +426,7 @@ mod tests {
             .unwrap();
         assert_eq!(result, json!(["a", "b", "c"]));
 
-        let result = reducer.reduce(None, &json!("first")).await.unwrap();
+        let result = reducer.reduce(None, &json!("first")).await.expect("failed");
         assert_eq!(result, json!(["first"]));
     }
 
@@ -441,7 +441,7 @@ mod tests {
         assert_eq!(result, json!([1, 2, 3, 4]));
 
         // Single item extends
-        let result = reducer.reduce(Some(&json!([1])), &json!(2)).await.unwrap();
+        let result = reducer.reduce(Some(&json!([1])), &json!(2)).await.expect("failed");
         assert_eq!(result, json!([1, 2]));
     }
 
@@ -451,7 +451,7 @@ mod tests {
 
         let current = json!({"a": 1, "b": 2});
         let update = json!({"b": 3, "c": 4});
-        let result = reducer.reduce(Some(&current), &update).await.unwrap();
+        let result = reducer.reduce(Some(&current), &update).await.expect("failed");
 
         assert_eq!(result["a"], 1);
         assert_eq!(result["b"], 3);
@@ -474,7 +474,7 @@ mod tests {
                 "c": 5
             }
         });
-        let result = reducer.reduce(Some(&current), &update).await.unwrap();
+        let result = reducer.reduce(Some(&current), &update).await.expect("failed");
 
         // Deep merge should preserve nested "x"
         assert_eq!(result["config"]["a"], 1);
@@ -507,7 +507,7 @@ mod tests {
         let reducer = FirstReducer;
 
         // First value
-        let result = reducer.reduce(None, &json!("first")).await.unwrap();
+        let result = reducer.reduce(None, &json!("first")).await.expect("failed");
         assert_eq!(result, json!("first"));
 
         // Subsequent updates ignored
@@ -552,7 +552,7 @@ mod tests {
             Ok(json!(curr + upd))
         });
 
-        let result = reducer.reduce(Some(&json!(10)), &json!(5)).await.unwrap();
+        let result = reducer.reduce(Some(&json!(10)), &json!(5)).await.expect("failed");
         assert_eq!(result, json!(15));
 
         assert_eq!(reducer.name(), "sum");

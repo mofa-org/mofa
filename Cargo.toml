@@ -15,6 +15,7 @@ members = [
     "crates/mofa-gateway",
     "crates/mofa-smith",
     "crates/mofa-integrations",
+    "crates/mofa-bench",
     "crates/mofa-local-llm",
 ]
 exclude = ["examples"]
@@ -78,6 +79,7 @@ tower = "0.5"
 tower-http = { version = "0.6", features = ["cors", "trace", "compression-gzip"] }
 
 rand = "0.8"
+criterion = { version = "0.5", features = ["html_reports", "async_tokio"] }
 chrono = { version = "0.4", features = ["serde"] }
 cron = "0.12"
 hex = "0.4"

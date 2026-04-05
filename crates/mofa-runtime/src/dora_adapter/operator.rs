@@ -341,10 +341,10 @@ mod tests {
         let plugin = Box::new(LLMPlugin::new("test_llm"));
         let mut adapter = PluginOperatorAdapter::new("test_op".to_string(), plugin);
 
-        adapter.init_operator().await.unwrap();
+        adapter.init_operator().await.expect("failed");
 
         let input = OperatorInput::new("input".to_string(), b"Hello".to_vec());
-        let outputs = adapter.process(input).await.unwrap();
+        let outputs = adapter.process(input).await.expect("failed");
 
         assert!(!outputs.is_empty());
     }
@@ -357,10 +357,10 @@ mod tests {
         let adapter1 = PluginOperatorAdapter::new("op1".to_string(), plugin1);
         chain.add_operator(Box::new(adapter1));
 
-        chain.init_all().await.unwrap();
+        chain.init_all().await.expect("failed");
 
         let input = OperatorInput::new("input".to_string(), b"Test".to_vec());
-        let outputs = chain.process(input).await.unwrap();
+        let outputs = chain.process(input).await.expect("failed");
 
         assert!(!outputs.is_empty());
     }

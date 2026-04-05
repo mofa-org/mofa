@@ -194,7 +194,7 @@ mod tests {
             .update_status(&todo.id, TodoStatus::InProgress)
             .await;
 
-        let updated = manager.get_todo(&todo.id).await.unwrap();
+        let updated = manager.get_todo(&todo.id).await.expect("failed");
         assert_eq!(updated.status, TodoStatus::InProgress);
     }
 

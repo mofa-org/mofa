@@ -9,9 +9,7 @@
 
 use mofa_kernel::agent::{AgentError, AgentResult};
 use mofa_kernel::llm::provider::LLMProvider;
-use mofa_kernel::llm::types::{
-    ChatCompletionRequest, ChatMessage,
-};
+use mofa_kernel::llm::types::{ChatCompletionRequest, ChatMessage};
 use mofa_kernel::speech::{
     AsrAdapter, AsrConfig, AudioFormat, AudioOutput, TranscriptionResult, TtsAdapter, TtsConfig,
 };
@@ -227,9 +225,7 @@ impl VoicePipeline {
 mod tests {
     use super::*;
     use async_trait::async_trait;
-    use mofa_kernel::llm::types::{
-        ChatCompletionResponse, Choice, FinishReason,
-    };
+    use mofa_kernel::llm::types::{ChatCompletionResponse, Choice, FinishReason};
     use mofa_kernel::speech::*;
 
     // ---- Mock ASR ----
@@ -309,7 +305,7 @@ mod tests {
             VoicePipelineConfig::new().with_voice("default"),
         );
 
-        let result = pipeline.process(&[0u8; 100]).await.unwrap();
+        let result = pipeline.process(&[0u8; 100]).await.expect("failed");
 
         assert_eq!(result.transcription.text, "What is the weather today?");
         assert_eq!(result.llm_reply, "It's sunny and 25°C today!");
@@ -328,7 +324,7 @@ mod tests {
                 .with_system_prompt("You are a helpful weather assistant."),
         );
 
-        let result = pipeline.process(&[0u8; 50]).await.unwrap();
+        let result = pipeline.process(&[0u8; 50]).await.expect("failed");
         assert!(!result.llm_reply.is_empty());
     }
 

@@ -135,7 +135,7 @@ mod tests {
         let ctx = AgentContext::new("test");
         let task = Task::new("task-1", "Do something");
 
-        let results = coordinator.dispatch(task, &ctx).await.unwrap();
+        let results = coordinator.dispatch(task, &ctx).await.expect("failed");
         assert_eq!(results.len(), 2);
     }
 
@@ -144,7 +144,7 @@ mod tests {
         let coordinator = SequentialCoordinator::new(vec!["agent-1".to_string()]);
         let results = vec![AgentOutput::text("Result 1"), AgentOutput::text("Result 2")];
 
-        let aggregated = coordinator.aggregate(results).await.unwrap();
+        let aggregated = coordinator.aggregate(results).await.expect("failed");
         assert!(aggregated.to_text().contains("Result 1"));
         assert!(aggregated.to_text().contains("Result 2"));
     }

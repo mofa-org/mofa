@@ -1051,7 +1051,7 @@ mod tests {
     async fn test_mock_tts_list_voices() {
         let config = TTSPluginConfig::default();
         let engine = MockTTSEngine::new(config);
-        let voices = engine.list_voices().await.unwrap();
+        let voices = engine.list_voices().await.expect("failed");
 
         assert!(!voices.is_empty());
         assert!(voices.iter().any(|v| v.id == "default"));
@@ -1069,20 +1069,20 @@ mod tests {
         let mut plugin = TTSPlugin::new("test_tts");
         let ctx = PluginContext::new("test_agent");
 
-        plugin.load(&ctx).await.unwrap();
+        plugin.load(&ctx).await.expect("failed");
         assert_eq!(plugin.state(), PluginState::Loaded);
 
         // Use mock engine to avoid model download in tests
         let mock_engine = MockTTSEngine::new(TTSPluginConfig::default());
         plugin.engine = Some(Arc::new(mock_engine));
 
-        plugin.start().await.unwrap();
+        plugin.start().await.expect("failed");
         assert_eq!(plugin.state(), PluginState::Running);
 
-        plugin.stop().await.unwrap();
+        plugin.stop().await.expect("failed");
         assert_eq!(plugin.state(), PluginState::Paused);
 
-        plugin.unload().await.unwrap();
+        plugin.unload().await.expect("failed");
         assert_eq!(plugin.state(), PluginState::Unloaded);
     }
 
@@ -1091,13 +1091,13 @@ mod tests {
         let mut plugin = TTSPlugin::new("test_tts");
         let ctx = PluginContext::new("test_agent");
 
-        plugin.load(&ctx).await.unwrap();
+        plugin.load(&ctx).await.expect("failed");
 
         // Use mock engine to avoid model download in tests
         let mock_engine = MockTTSEngine::new(TTSPluginConfig::default());
         plugin.engine = Some(Arc::new(mock_engine));
 
-        plugin.start().await.unwrap();
+        plugin.start().await.expect("failed");
 
         let command = TTSCommand {
             action: "speak".to_string(),
@@ -1118,13 +1118,13 @@ mod tests {
         let mut plugin = TTSPlugin::new("test_tts");
         let ctx = PluginContext::new("test_agent");
 
-        plugin.load(&ctx).await.unwrap();
+        plugin.load(&ctx).await.expect("failed");
 
         // Use mock engine to avoid model download in tests
         let mock_engine = MockTTSEngine::new(TTSPluginConfig::default());
         plugin.engine = Some(Arc::new(mock_engine));
 
-        plugin.start().await.unwrap();
+        plugin.start().await.expect("failed");
 
         let command = TTSCommand {
             action: "list_voices".to_string(),
@@ -1134,7 +1134,7 @@ mod tests {
         };
 
         let input = serde_json::to_string(&command).unwrap();
-        let result = plugin.execute(input).await.unwrap();
+        let result = plugin.execute(input).await.expect("failed");
 
         let voices: Vec<VoiceInfo> = serde_json::from_str(&result).unwrap();
         assert!(!voices.is_empty());
@@ -1183,7 +1183,7 @@ mod tests {
         prepare_cached_model(&mut plugin, "test/kokoro.onnx", cache_dir.path());
 
         let ctx = PluginContext::new("test_agent");
-        plugin.load(&ctx).await.unwrap();
+        plugin.load(&ctx).await.expect("failed");
 
         let cached_model_path = plugin
             .model_cache
@@ -1204,7 +1204,7 @@ mod tests {
         prepare_cached_model(&mut plugin, "test/kokoro.onnx", cache_dir.path());
 
         let ctx = PluginContext::new("test_agent");
-        plugin.load(&ctx).await.unwrap();
+        plugin.load(&ctx).await.expect("failed");
 
         let cached_model_path = plugin
             .model_cache
@@ -1213,7 +1213,7 @@ mod tests {
             .model_path(&plugin.config.model_url);
         fs::write(&cached_model_path, b"fake-model-content").unwrap();
 
-        plugin.init_plugin().await.unwrap();
+        plugin.init_plugin().await.expect("failed");
         assert_eq!(plugin.engine.as_ref().unwrap().name(), "MockTTS");
     }
 }

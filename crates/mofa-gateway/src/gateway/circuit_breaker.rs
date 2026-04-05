@@ -153,11 +153,7 @@ pub struct CircuitBreakerRegistry {
 
 impl CircuitBreakerRegistry {
     /// Create a new circuit breaker registry.
-    pub fn new(
-        failure_threshold: u32,
-        success_threshold: u32,
-        timeout: Duration,
-    ) -> Self {
+    pub fn new(failure_threshold: u32, success_threshold: u32, timeout: Duration) -> Self {
         Self {
             breakers: Arc::new(RwLock::new(HashMap::new())),
             default_failure_threshold: failure_threshold,
@@ -193,7 +189,7 @@ mod tests {
 
         // Initially closed
         assert_eq!(cb.state().await, CircuitState::Closed);
-        assert!(cb.try_acquire().await.unwrap());
+        assert!(cb.try_acquire().await.expect("failed"));
 
         // Record failures
         for _ in 0..3 {
@@ -202,7 +198,7 @@ mod tests {
 
         // Should now be open
         assert_eq!(cb.state().await, CircuitState::Open);
-        assert!(!cb.try_acquire().await.unwrap());
+        assert!(!cb.try_acquire().await.expect("failed"));
     }
 
     #[tokio::test]
@@ -219,7 +215,7 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(150)).await;
 
         // Should transition to half-open
-        assert!(cb.try_acquire().await.unwrap());
+        assert!(cb.try_acquire().await.expect("failed"));
         assert_eq!(cb.state().await, CircuitState::HalfOpen);
 
         // Two consecutive successes should close it (success_threshold = 2)

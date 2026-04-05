@@ -66,7 +66,7 @@ mod tests {
             context: vec![],
             metadata: std::collections::HashMap::new(),
         };
-        let result = generator.generate(&input).await.unwrap();
+        let result = generator.generate(&input).await.expect("failed");
         assert_eq!(result, "mock response");
     }
 
@@ -78,7 +78,7 @@ mod tests {
             context: vec![],
             metadata: std::collections::HashMap::new(),
         };
-        let mut stream = generator.stream(input).await.unwrap();
+        let mut stream = generator.stream(input).await.expect("failed");
         let chunks: Vec<_> = stream.collect().await;
         assert_eq!(chunks.len(), 1);
         match &chunks[0] {

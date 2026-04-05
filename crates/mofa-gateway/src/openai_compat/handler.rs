@@ -418,7 +418,7 @@ mod tests {
             build_streaming_response(token_stream, "test-model".to_string(), HeaderMap::new());
 
         // Collect SSE body and check that it ends with [DONE]
-        let bytes = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let bytes = to_bytes(resp.into_body(), usize::MAX).await.expect("failed");
         let text = String::from_utf8(bytes.to_vec()).unwrap();
         let data_lines: Vec<&str> = text
             .lines()

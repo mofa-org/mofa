@@ -35,17 +35,17 @@ fn make_config(name: &str) -> ModelProviderConfig {
 async fn backend_fail_next_drains_fifo() {
     let backend = MockLLMBackend::new();
     backend.add_response("hi", "hello");
-    backend.register_model(make_config("m")).await.unwrap();
-    backend.load_model("m").await.unwrap();
+    backend.register_model(make_config("m")).await.expect("failed");
+    backend.load_model("m").await.expect("failed");
 
     backend.fail_next(2, OrchestratorError::InferenceFailed("boom".into()));
 
-    let r1 = backend.infer("m", "hi").await;
+    let r1: Result<_, _> = backend.infer("m", "hi").await;
     assert!(r1.is_err());
-    let r2 = backend.infer("m", "hi").await;
+    let r2: Result<_, _> = backend.infer("m", "hi").await;
     assert!(r2.is_err());
     // Third call succeeds — queue drained
-    let r3 = backend.infer("m", "hi").await;
+    let r3: Result<_, _> = backend.infer("m", "hi").await;
     assert_eq!(r3.unwrap(), "hello");
 }
 
@@ -53,11 +53,11 @@ async fn backend_fail_next_drains_fifo() {
 async fn backend_fail_next_zero_is_noop() {
     let backend = MockLLMBackend::new();
     backend.add_response("x", "ok");
-    backend.register_model(make_config("m")).await.unwrap();
-    backend.load_model("m").await.unwrap();
+    backend.register_model(make_config("m")).await.expect("failed");
+    backend.load_model("m").await.expect("failed");
 
     backend.fail_next(0, OrchestratorError::InferenceFailed("unused".into()));
-    assert_eq!(backend.infer("m", "x").await.unwrap(), "ok");
+    assert_eq!(backend.infer("m", "x").await.expect("failed"), "ok");
 }
 
 // ===================================================================
@@ -68,27 +68,27 @@ async fn backend_fail_next_zero_is_noop() {
 async fn backend_fail_on_pattern_match() {
     let backend = MockLLMBackend::new();
     backend.add_response("safe", "ok");
-    backend.register_model(make_config("m")).await.unwrap();
-    backend.load_model("m").await.unwrap();
+    backend.register_model(make_config("m")).await.expect("failed");
+    backend.load_model("m").await.expect("failed");
 
     backend.fail_on("danger", OrchestratorError::Other("blocked".into()));
 
-    let err = backend.infer("m", "this is danger zone").await;
+    let err: Result<_, _> = backend.infer("m", "this is danger zone").await;
     assert!(err.is_err());
 
-    let ok = backend.infer("m", "safe input").await;
+    let ok: Result<_, _> = backend.infer("m", "safe input").await;
     assert_eq!(ok.unwrap(), "ok");
 }
 
 #[tokio::test]
 async fn backend_fail_on_does_not_match_unrelated() {
     let backend = MockLLMBackend::new();
-    backend.register_model(make_config("m")).await.unwrap();
-    backend.load_model("m").await.unwrap();
+    backend.register_model(make_config("m")).await.expect("failed");
+    backend.load_model("m").await.expect("failed");
 
     backend.fail_on("specific", OrchestratorError::Other("nope".into()));
 
-    let result = backend.infer("m", "something else").await;
+    let result: Result<_, _> = backend.infer("m", "something else").await;
     assert!(result.is_ok());
 }
 
@@ -99,8 +99,8 @@ async fn backend_fail_on_does_not_match_unrelated() {
 #[tokio::test]
 async fn backend_fail_next_takes_priority_over_fail_on() {
     let backend = MockLLMBackend::new();
-    backend.register_model(make_config("m")).await.unwrap();
-    backend.load_model("m").await.unwrap();
+    backend.register_model(make_config("m")).await.expect("failed");
+    backend.load_model("m").await.expect("failed");
 
     backend.fail_on("anything", OrchestratorError::Other("pattern".into()));
     backend.fail_next(1, OrchestratorError::InferenceFailed("queue".into()));
@@ -119,46 +119,46 @@ async fn backend_fail_next_takes_priority_over_fail_on() {
 #[tokio::test]
 async fn backend_response_sequence_returns_in_order() {
     let backend = MockLLMBackend::new();
-    backend.register_model(make_config("m")).await.unwrap();
-    backend.load_model("m").await.unwrap();
+    backend.register_model(make_config("m")).await.expect("failed");
+    backend.load_model("m").await.expect("failed");
 
     backend.add_response_sequence("greet", vec!["Hi!", "Hello again!", "Still here."]);
 
-    assert_eq!(backend.infer("m", "greet me").await.unwrap(), "Hi!");
+    assert_eq!(backend.infer("m", "greet me").await.expect("failed"), "Hi!");
     assert_eq!(
-        backend.infer("m", "greet me").await.unwrap(),
+        backend.infer("m", "greet me").await.expect("failed"),
         "Hello again!"
     );
-    assert_eq!(backend.infer("m", "greet me").await.unwrap(), "Still here.");
+    assert_eq!(backend.infer("m", "greet me").await.expect("failed"), "Still here.");
     // Last value repeats
-    assert_eq!(backend.infer("m", "greet me").await.unwrap(), "Still here.");
+    assert_eq!(backend.infer("m", "greet me").await.expect("failed"), "Still here.");
 }
 
 #[tokio::test]
 async fn backend_sequence_takes_priority_over_static_rule() {
     let backend = MockLLMBackend::new();
-    backend.register_model(make_config("m")).await.unwrap();
-    backend.load_model("m").await.unwrap();
+    backend.register_model(make_config("m")).await.expect("failed");
+    backend.load_model("m").await.expect("failed");
 
     backend.add_response("hello", "static");
     backend.add_response_sequence("hello", vec!["seq1", "seq2"]);
 
-    assert_eq!(backend.infer("m", "hello").await.unwrap(), "seq1");
-    assert_eq!(backend.infer("m", "hello").await.unwrap(), "seq2");
+    assert_eq!(backend.infer("m", "hello").await.expect("failed"), "seq1");
+    assert_eq!(backend.infer("m", "hello").await.expect("failed"), "seq2");
     // After sequence exhausted (last repeats)
-    assert_eq!(backend.infer("m", "hello").await.unwrap(), "seq2");
+    assert_eq!(backend.infer("m", "hello").await.expect("failed"), "seq2");
 }
 
 #[tokio::test]
 async fn backend_unmatched_sequence_falls_through() {
     let backend = MockLLMBackend::new();
-    backend.register_model(make_config("m")).await.unwrap();
-    backend.load_model("m").await.unwrap();
+    backend.register_model(make_config("m")).await.expect("failed");
+    backend.load_model("m").await.expect("failed");
 
     backend.add_response_sequence("greet", vec!["Hi!"]);
     backend.add_response("other", "static");
 
-    assert_eq!(backend.infer("m", "other topic").await.unwrap(), "static");
+    assert_eq!(backend.infer("m", "other topic").await.expect("failed"), "static");
 }
 
 // ===================================================================
@@ -168,8 +168,8 @@ async fn backend_unmatched_sequence_falls_through() {
 #[tokio::test]
 async fn backend_rate_limit_blocks_after_max_calls() {
     let backend = MockLLMBackend::new();
-    backend.register_model(make_config("m")).await.unwrap();
-    backend.load_model("m").await.unwrap();
+    backend.register_model(make_config("m")).await.expect("failed");
+    backend.load_model("m").await.expect("failed");
 
     backend.set_rate_limit(3);
 
@@ -177,15 +177,15 @@ async fn backend_rate_limit_blocks_after_max_calls() {
     assert!(backend.infer("m", "2").await.is_ok());
     assert!(backend.infer("m", "3").await.is_ok());
     // 4th call exceeds limit
-    let err = backend.infer("m", "4").await;
+    let err: Result<_, _> = backend.infer("m", "4").await;
     assert!(err.is_err());
 }
 
 #[tokio::test]
 async fn backend_rate_limit_reset_allows_more_calls() {
     let backend = MockLLMBackend::new();
-    backend.register_model(make_config("m")).await.unwrap();
-    backend.load_model("m").await.unwrap();
+    backend.register_model(make_config("m")).await.expect("failed");
+    backend.load_model("m").await.expect("failed");
 
     backend.set_rate_limit(1);
     assert!(backend.infer("m", "a").await.is_ok());
@@ -202,23 +202,23 @@ async fn backend_rate_limit_reset_allows_more_calls() {
 #[tokio::test]
 async fn backend_call_count_tracks_all_invocations() {
     let backend = MockLLMBackend::new();
-    backend.register_model(make_config("m")).await.unwrap();
-    backend.load_model("m").await.unwrap();
+    backend.register_model(make_config("m")).await.expect("failed");
+    backend.load_model("m").await.expect("failed");
 
     assert_eq!(backend.call_count(), 0);
-    let _ = backend.infer("m", "a").await;
-    let _ = backend.infer("m", "b").await;
+    let _: Result<_, _> = backend.infer("m", "a").await;
+    let _: Result<_, _> = backend.infer("m", "b").await;
     assert_eq!(backend.call_count(), 2);
 }
 
 #[tokio::test]
 async fn backend_call_count_includes_failed_calls() {
     let backend = MockLLMBackend::new();
-    backend.register_model(make_config("m")).await.unwrap();
-    backend.load_model("m").await.unwrap();
+    backend.register_model(make_config("m")).await.expect("failed");
+    backend.load_model("m").await.expect("failed");
 
     backend.fail_next(1, OrchestratorError::InferenceFailed("err".into()));
-    let _ = backend.infer("m", "a").await;
+    let _: Result<_, _> = backend.infer("m", "a").await;
 
     assert_eq!(backend.call_count(), 1);
 }
@@ -226,10 +226,10 @@ async fn backend_call_count_includes_failed_calls() {
 #[tokio::test]
 async fn backend_call_count_reset() {
     let backend = MockLLMBackend::new();
-    backend.register_model(make_config("m")).await.unwrap();
-    backend.load_model("m").await.unwrap();
+    backend.register_model(make_config("m")).await.expect("failed");
+    backend.load_model("m").await.expect("failed");
 
-    let _ = backend.infer("m", "a").await;
+    let _: Result<_, _> = backend.infer("m", "a").await;
     assert_eq!(backend.call_count(), 1);
 
     backend.reset_call_count();
@@ -377,10 +377,10 @@ async fn bus_fail_next_send_returns_errors() {
     };
     let mode = CommunicationMode::Broadcast;
 
-    let r1 = bus.send_and_capture("a", mode.clone(), msg.clone()).await;
+    let r1: Result<_, _> = bus.send_and_capture("a", mode.clone(), msg.clone()).await;
     assert!(r1.is_err());
 
-    let r2 = bus.send_and_capture("a", mode.clone(), msg.clone()).await;
+    let r2: Result<_, _> = bus.send_and_capture("a", mode.clone(), msg.clone()).await;
     assert!(r2.is_err());
 
     // Messages are still captured even when send fails
@@ -398,12 +398,12 @@ async fn bus_fail_next_send_drains_then_proceeds() {
     };
     let mode = CommunicationMode::Broadcast;
 
-    let r1 = bus.send_and_capture("a", mode.clone(), msg.clone()).await;
+    let r1: Result<_, _> = bus.send_and_capture("a", mode.clone(), msg.clone()).await;
     assert!(r1.is_err());
 
     // Second call — queue drained, proceeds to inner bus
     // (inner bus may still error if no receiver, but that's a different error)
-    let _ = bus.send_and_capture("a", mode.clone(), msg.clone()).await;
+    let _: Result<_, _> = bus.send_and_capture("a", mode.clone(), msg.clone()).await;
     assert_eq!(bus.message_count().await, 2);
 }
 
@@ -511,24 +511,24 @@ async fn system_clock_returns_nonzero() {
 #[tokio::test]
 async fn backend_combined_fail_next_and_rate_limit() {
     let backend = MockLLMBackend::new();
-    backend.register_model(make_config("m")).await.unwrap();
-    backend.load_model("m").await.unwrap();
+    backend.register_model(make_config("m")).await.expect("failed");
+    backend.load_model("m").await.expect("failed");
 
     backend.fail_next(1, OrchestratorError::InferenceFailed("boom".into()));
     backend.set_rate_limit(2);
 
     // Call 1: fail_next fires (rate limit counter still increments)
-    let r1 = backend.infer("m", "a").await;
+    let r1: Result<_, _> = backend.infer("m", "a").await;
     assert!(r1.is_err());
 
     // Call 2, 3: rate limit allows (fail_next drained)
-    let r2 = backend.infer("m", "b").await;
+    let r2: Result<_, _> = backend.infer("m", "b").await;
     assert!(r2.is_ok());
-    let r3 = backend.infer("m", "c").await;
+    let r3: Result<_, _> = backend.infer("m", "c").await;
     assert!(r3.is_ok());
 
     // Call 4: rate limit exceeded
-    let r4 = backend.infer("m", "d").await;
+    let r4: Result<_, _> = backend.infer("m", "d").await;
     assert!(r4.is_err());
 
     assert_eq!(backend.call_count(), 4);

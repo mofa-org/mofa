@@ -25,16 +25,14 @@ mod openai_examples {
     use mofa_integrations::speech::openai::{
         OpenAiAsrAdapter, OpenAiSpeechConfig, OpenAiTtsAdapter, OpenAiTtsModel,
     };
-    use mofa_kernel::speech::{
-        AsrAdapter, AsrConfig, AudioFormat, TtsAdapter, TtsConfig,
-    };
+    use mofa_kernel::speech::{AsrAdapter, AsrConfig, AudioFormat, TtsAdapter, TtsConfig};
 
     // ---- Mock-safe tests (always run) ----
 
     #[tokio::test]
     async fn openai_tts_list_voices_returns_six() {
         let adapter = OpenAiTtsAdapter::new(OpenAiSpeechConfig::new().with_api_key("fake"));
-        let voices = adapter.list_voices().await.unwrap();
+        let voices = adapter.list_voices().await.expect("failed");
 
         assert_eq!(voices.len(), 6, "OpenAI TTS should expose 6 voices");
 
@@ -62,7 +60,7 @@ mod openai_examples {
     async fn openai_tts_health_check_with_key_set() {
         let adapter = OpenAiTtsAdapter::new(OpenAiSpeechConfig::new().with_api_key("sk-fake"));
         assert!(
-            adapter.health_check().await.unwrap(),
+            adapter.health_check().await.expect("failed"),
             "health check should pass when key is set"
         );
     }
@@ -89,7 +87,10 @@ mod openai_examples {
 
         assert!(!output.data.is_empty(), "audio data should not be empty");
         assert_eq!(output.format, AudioFormat::Mp3);
-        println!("✅ OpenAI TTS produced {} bytes of audio", output.data.len());
+        println!(
+            "✅ OpenAI TTS produced {} bytes of audio",
+            output.data.len()
+        );
     }
 
     #[tokio::test]
@@ -147,7 +148,7 @@ mod elevenlabs_examples {
     #[tokio::test]
     async fn elevenlabs_health_check_with_key() {
         let adapter = ElevenLabsTtsAdapter::new(ElevenLabsConfig::new().with_api_key("fake"));
-        assert!(adapter.health_check().await.unwrap());
+        assert!(adapter.health_check().await.expect("failed"));
     }
 
     #[test]
@@ -163,7 +164,10 @@ mod elevenlabs_examples {
     async fn elevenlabs_list_voices_real_api() {
         let adapter = ElevenLabsTtsAdapter::new(ElevenLabsConfig::new());
         let voices = adapter.list_voices().await.expect("should list voices");
-        assert!(!voices.is_empty(), "ElevenLabs should have at least one voice");
+        assert!(
+            !voices.is_empty(),
+            "ElevenLabs should have at least one voice"
+        );
         println!("✅ Found {} ElevenLabs voices", voices.len());
     }
 }
@@ -180,7 +184,7 @@ mod deepgram_examples {
     #[tokio::test]
     async fn deepgram_health_check_with_key() {
         let adapter = DeepgramAsrAdapter::new(DeepgramConfig::new().with_api_key("fake"));
-        assert!(adapter.health_check().await.unwrap());
+        assert!(adapter.health_check().await.expect("failed"));
     }
 
     #[test]
@@ -194,6 +198,11 @@ mod deepgram_examples {
 // SpeechConfig / SpeechProviderConfig (registry_builder)
 // ============================================================================
 
+#[cfg(any(
+    feature = "openai-speech",
+    feature = "elevenlabs",
+    feature = "deepgram"
+))]
 mod registry_builder_tests {
     use mofa_integrations::speech::registry_builder::{SpeechConfig, SpeechProviderConfig};
 

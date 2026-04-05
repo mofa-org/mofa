@@ -261,7 +261,7 @@ impl DashboardServer {
             .route("/styles.css", get(serve_styles))
             .route("/app.js", get(serve_app_js))
             .route("/debugger.js", get(serve_debugger_js))
-            .route("/assets/*path", get(serve_static))
+            .route("/assets/{*path}", get(serve_static))
             // Prometheus endpoint
             .route(
                 "/metrics",

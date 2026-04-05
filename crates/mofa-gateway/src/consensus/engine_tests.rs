@@ -18,14 +18,16 @@ mod tests {
         async fn handle_request_vote(
             &self,
             request: crate::consensus::transport::RequestVoteRequest,
-        ) -> crate::error::ConsensusResult<crate::consensus::transport::RequestVoteResponse> {
+        ) -> crate::error::ConsensusResult<crate::consensus::transport::RequestVoteResponse>
+        {
             self.engine.handle_request_vote(request).await
         }
 
         async fn handle_append_entries(
             &self,
             request: crate::consensus::transport::AppendEntriesRequest,
-        ) -> crate::error::ConsensusResult<crate::consensus::transport::AppendEntriesResponse> {
+        ) -> crate::error::ConsensusResult<crate::consensus::transport::AppendEntriesResponse>
+        {
             self.engine.handle_append_entries(request).await
         }
     }
@@ -53,12 +55,12 @@ mod tests {
         };
 
         let engine = ConsensusEngine::new(node_id, config, storage, transport);
-        engine.start().await.unwrap();
+        engine.start().await.expect("failed");
 
         // Give it a moment to initialize
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
-        engine.stop().await.unwrap();
+        engine.stop().await.expect("failed");
     }
 
     #[tokio::test]
@@ -72,13 +74,13 @@ mod tests {
         };
 
         let engine = ConsensusEngine::new(node_id, config, storage, transport);
-        
+
         // Try to propose as follower (should fail)
         let command = StateMachineCommand::RegisterAgent {
             agent_id: "agent-1".to_string(),
             metadata: HashMap::new(),
         };
-        
+
         let result = engine.propose(command).await;
         assert!(result.is_err());
         assert!(matches!(

@@ -24,7 +24,7 @@
 
 use crate::consensus::{
     AppendEntriesRequest, AppendEntriesResponse, LeaderState, RaftNodeState, RaftStorage,
-    RequestVoteRequest, RequestVoteResponse, RaftTransport,
+    RaftTransport, RequestVoteRequest, RequestVoteResponse,
 };
 use crate::error::{ConsensusError, ConsensusResult};
 use crate::types::{LogEntry, LogIndex, NodeId, RaftState, StateMachineCommand, Term};
@@ -33,7 +33,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::{RwLock, mpsc};
 use tokio::time::sleep;
 use tracing::{debug, info, warn};
 
@@ -148,14 +148,8 @@ impl ConsensusEngine {
             let current_state = state.read().await.state;
             match current_state {
                 RaftState::Follower => {
-                    Self::follower_loop(
-                        &node_id,
-                        &state,
-                        &last_heartbeat,
-                        &config,
-                        shutdown_rx,
-                    )
-                    .await;
+                    Self::follower_loop(&node_id, &state, &last_heartbeat, &config, shutdown_rx)
+                        .await;
                     // After follower loop returns, check state again (might have become candidate)
                     continue;
                 }
@@ -213,19 +207,22 @@ impl ConsensusEngine {
         };
         let timeout = Duration::from_millis(timeout_ms);
 
-        debug!("Follower {} waiting {}ms for heartbeat", node_id, timeout_ms);
+        debug!(
+            "Follower {} waiting {}ms for heartbeat",
+            node_id, timeout_ms
+        );
 
         // Wait for heartbeat or timeout
         // Track when we started waiting and when we last received a heartbeat
         let wait_start = Instant::now();
         let mut last_known_heartbeat = *last_heartbeat.read().await;
-        
+
         loop {
             // Check current heartbeat status
             let heartbeat_guard = last_heartbeat.read().await;
             let current_heartbeat = *heartbeat_guard;
             drop(heartbeat_guard);
-            
+
             // If we received a new heartbeat, reset our wait timer
             if current_heartbeat != last_known_heartbeat
                 && let Some(new_heartbeat) = current_heartbeat
@@ -236,7 +233,7 @@ impl ConsensusEngine {
                 // Actually, we should track time since last heartbeat, not since wait start
                 continue;
             }
-            
+
             // Calculate elapsed time since last heartbeat (or since we started if no heartbeat)
             let elapsed = if let Some(last) = last_known_heartbeat {
                 last.elapsed()
@@ -244,10 +241,14 @@ impl ConsensusEngine {
                 // No heartbeat received yet, use time since we started waiting
                 wait_start.elapsed()
             };
-            
+
             if elapsed >= timeout {
                 // No heartbeat received within timeout, become candidate
-                warn!("Follower {} timed out ({}ms elapsed), becoming candidate", node_id, elapsed.as_millis());
+                warn!(
+                    "Follower {} timed out ({}ms elapsed), becoming candidate",
+                    node_id,
+                    elapsed.as_millis()
+                );
                 let mut s = state.write().await;
                 // Double-check we're still a follower (might have been updated)
                 if s.state == RaftState::Follower {
@@ -255,7 +256,7 @@ impl ConsensusEngine {
                 }
                 break;
             }
-            
+
             // Wait for either timeout remaining time or shutdown
             let remaining = timeout - elapsed;
             tokio::select! {
@@ -288,7 +289,10 @@ impl ConsensusEngine {
         let current_term = s.current_term;
         drop(s);
 
-        info!("Candidate {} starting election in term {}", node_id, current_term);
+        info!(
+            "Candidate {} starting election in term {}",
+            node_id, current_term
+        );
 
         // Get last log info
         let (last_log_term, last_log_index) = {
@@ -327,7 +331,7 @@ impl ConsensusEngine {
 
         // Collect votes with timeout - wait for all responses concurrently
         let election_timeout = Duration::from_millis(config.election_timeout_ms.1);
-        
+
         // Use tokio::time::timeout to wait for all vote responses
         let vote_futures: Vec<_> = vote_tasks.into_iter().collect();
         let vote_results = tokio::time::timeout(election_timeout, async {
@@ -345,16 +349,20 @@ impl ConsensusEngine {
                 }
             }
             results
-        }).await;
-        
+        })
+        .await;
+
         match vote_results {
             Ok(responses) => {
                 // Process all vote responses
                 for response_result in responses {
                     match response_result {
                         Ok(response) => {
-                            debug!("Candidate {} received vote response: granted={}, term={}", node_id, response.vote_granted, response.term);
-                            
+                            debug!(
+                                "Candidate {} received vote response: granted={}, term={}",
+                                node_id, response.vote_granted, response.term
+                            );
+
                             let current_term_check = state.read().await.current_term;
                             if response.term > current_term_check {
                                 // Higher term seen, become follower
@@ -364,14 +372,22 @@ impl ConsensusEngine {
                                 s.voted_for = None;
                                 return;
                             }
-                            
+
                             if response.vote_granted {
                                 votes_received += 1;
-                                debug!("Candidate {} received vote, total: {}/{}", node_id, votes_received, quorum);
-                                
+                                debug!(
+                                    "Candidate {} received vote, total: {}/{}",
+                                    node_id, votes_received, quorum
+                                );
+
                                 // Check quorum immediately
                                 if votes_received >= quorum {
-                                    info!("Candidate {} won election with {}/{} votes", node_id, votes_received, cluster_nodes.len());
+                                    info!(
+                                        "Candidate {} won election with {}/{} votes",
+                                        node_id,
+                                        votes_received,
+                                        cluster_nodes.len()
+                                    );
                                     let mut s = state.write().await;
                                     s.state = RaftState::Leader;
                                     let followers: Vec<NodeId> = cluster_nodes
@@ -379,7 +395,8 @@ impl ConsensusEngine {
                                         .filter(|n| *n != node_id)
                                         .cloned()
                                         .collect();
-                                    let new_leader_state = LeaderState::new(&followers, last_log_index);
+                                    let new_leader_state =
+                                        LeaderState::new(&followers, last_log_index);
                                     drop(s);
                                     *leader_state.write().await = Some(new_leader_state);
                                     return;
@@ -393,13 +410,22 @@ impl ConsensusEngine {
                 }
             }
             Err(_) => {
-                debug!("Candidate {} election timeout after {}ms", node_id, election_timeout.as_millis());
+                debug!(
+                    "Candidate {} election timeout after {}ms",
+                    node_id,
+                    election_timeout.as_millis()
+                );
             }
         }
-        
+
         // Final check for quorum
         if votes_received >= quorum {
-            info!("Candidate {} won election with {}/{} votes (after timeout)", node_id, votes_received, cluster_nodes.len());
+            info!(
+                "Candidate {} won election with {}/{} votes (after timeout)",
+                node_id,
+                votes_received,
+                cluster_nodes.len()
+            );
             let mut s = state.write().await;
             s.state = RaftState::Leader;
             let followers: Vec<NodeId> = cluster_nodes
@@ -414,7 +440,10 @@ impl ConsensusEngine {
         }
 
         // Didn't get enough votes, remain candidate (will retry)
-        warn!("Candidate {} didn't get enough votes ({}/{})", node_id, votes_received, quorum);
+        warn!(
+            "Candidate {} didn't get enough votes ({}/{})",
+            node_id, votes_received, quorum
+        );
     }
 
     /// Leader event loop (log replication and heartbeats).
@@ -428,17 +457,20 @@ impl ConsensusEngine {
         shutdown_rx: &mut mpsc::Receiver<()>,
     ) {
         let heartbeat_interval = Duration::from_millis(config.heartbeat_interval_ms);
-        
+
         info!("Leader {} starting leader loop", node_id);
 
         loop {
             // Check if we're still the leader (might have been demoted)
             let current_state = state.read().await.state;
             if current_state != RaftState::Leader {
-                warn!("Leader {} is no longer leader, state: {:?}", node_id, current_state);
+                warn!(
+                    "Leader {} is no longer leader, state: {:?}",
+                    node_id, current_state
+                );
                 return;
             }
-            
+
             tokio::select! {
                 _ = sleep(heartbeat_interval) => {
                     // Send heartbeats to all followers
@@ -502,8 +534,11 @@ impl ConsensusEngine {
                 entries: Vec::new(), // Empty for heartbeat
                 leader_commit: current_commit_index,
             };
-            
-            info!("Leader {} sending heartbeat with commit_index={}", node_id, current_commit_index.0);
+
+            info!(
+                "Leader {} sending heartbeat with commit_index={}",
+                node_id, current_commit_index.0
+            );
 
             let transport_clone = Arc::clone(transport);
             let follower_id_clone = follower_id.clone();
@@ -511,7 +546,10 @@ impl ConsensusEngine {
             let leader_state_clone = Arc::clone(leader_state);
 
             tokio::spawn(async move {
-                match transport_clone.append_entries(&follower_id_clone, heartbeat).await {
+                match transport_clone
+                    .append_entries(&follower_id_clone, heartbeat)
+                    .await
+                {
                     Ok(response) => {
                         if response.term > current_term {
                             // Higher term seen, become follower
@@ -527,10 +565,9 @@ impl ConsensusEngine {
                                     follower_id_clone.clone(),
                                     response.last_log_index.increment(),
                                 );
-                                ls_ref.match_index.insert(
-                                    follower_id_clone.clone(),
-                                    response.last_log_index,
-                                );
+                                ls_ref
+                                    .match_index
+                                    .insert(follower_id_clone.clone(), response.last_log_index);
                             }
                         }
                     }
@@ -550,22 +587,30 @@ impl ConsensusEngine {
     ) -> ConsensusResult<RequestVoteResponse> {
         let mut state = self.state.write().await;
 
-        debug!("Node {} received vote request from {} for term {}", self.node_id, request.candidate_id, request.term);
+        debug!(
+            "Node {} received vote request from {} for term {}",
+            self.node_id, request.candidate_id, request.term
+        );
 
         // If request term is less than current term, reject
         if request.term < state.current_term {
-            debug!("Node {} rejecting vote: request term {} < current term {}", self.node_id, request.term, state.current_term);
+            debug!(
+                "Node {} rejecting vote: request term {} < current term {}",
+                self.node_id, request.term, state.current_term
+            );
             return Ok(RequestVoteResponse {
                 term: state.current_term,
                 vote_granted: false,
             });
         }
-        
+
         // If we're the leader and receive a vote request with same or higher term, step down
         // This shouldn't happen in normal operation, but handle it gracefully
         if state.state == RaftState::Leader && request.term >= state.current_term {
-            warn!("Leader {} received vote request with term {} >= current term {}, stepping down", 
-                self.node_id, request.term, state.current_term);
+            warn!(
+                "Leader {} received vote request with term {} >= current term {}, stepping down",
+                self.node_id, request.term, state.current_term
+            );
             if request.term > state.current_term {
                 state.current_term = request.term;
             }
@@ -576,7 +621,10 @@ impl ConsensusEngine {
 
         // If request term is greater, update term and become follower
         if request.term > state.current_term {
-            debug!("Node {} updating term from {} to {}, becoming follower", self.node_id, state.current_term, request.term);
+            debug!(
+                "Node {} updating term from {} to {}, becoming follower",
+                self.node_id, state.current_term, request.term
+            );
             state.current_term = request.term;
             state.state = RaftState::Follower;
             state.voted_for = None;
@@ -586,8 +634,8 @@ impl ConsensusEngine {
 
         // Check if we can vote for this candidate
         let (last_log_term, last_log_index) = state.last_log_info();
-        let can_vote = state.voted_for.is_none()
-            || state.voted_for.as_ref() == Some(&request.candidate_id);
+        let can_vote =
+            state.voted_for.is_none() || state.voted_for.as_ref() == Some(&request.candidate_id);
 
         let vote_granted = can_vote
             && (request.last_log_term > last_log_term
@@ -596,7 +644,10 @@ impl ConsensusEngine {
 
         if vote_granted {
             state.voted_for = Some(request.candidate_id.clone());
-            info!("Node {} voted for {} in term {}", self.node_id, request.candidate_id, request.term);
+            info!(
+                "Node {} voted for {} in term {}",
+                self.node_id, request.candidate_id, request.term
+            );
         }
 
         Ok(RequestVoteResponse {
@@ -612,8 +663,11 @@ impl ConsensusEngine {
     ) -> ConsensusResult<AppendEntriesResponse> {
         let mut state = self.state.write().await;
 
-        debug!("Node {} received AppendEntries from {} for term {}", self.node_id, request.leader_id, request.term);
-        
+        debug!(
+            "Node {} received AppendEntries from {} for term {}",
+            self.node_id, request.leader_id, request.term
+        );
+
         // Update last heartbeat time
         *self.last_heartbeat.write().await = Some(Instant::now());
 
@@ -647,13 +701,22 @@ impl ConsensusEngine {
                 let entry_term = state.log[prev_idx].term;
                 let matches = entry_term == request.prev_log_term;
                 if !matches {
-                    info!("Node {} log consistency check failed: prev_log_index={}, log has term {} but request has term {}", 
-                        self.node_id, request.prev_log_index.0, entry_term.0, request.prev_log_term.0);
+                    info!(
+                        "Node {} log consistency check failed: prev_log_index={}, log has term {} but request has term {}",
+                        self.node_id,
+                        request.prev_log_index.0,
+                        entry_term.0,
+                        request.prev_log_term.0
+                    );
                 }
                 matches
             } else {
-                info!("Node {} log consistency check failed: prev_log_index={} but log length is {}", 
-                    self.node_id, request.prev_log_index.0, state.log.len());
+                info!(
+                    "Node {} log consistency check failed: prev_log_index={} but log length is {}",
+                    self.node_id,
+                    request.prev_log_index.0,
+                    state.log.len()
+                );
                 false
             }
         } else {
@@ -679,8 +742,10 @@ impl ConsensusEngine {
         if request.leader_commit > state.commit_index {
             let old_commit = state.commit_index;
             state.commit_index = request.leader_commit.min(state.last_log_info().1);
-            info!("Node {} updated commit_index from {} to {} (leader_commit: {})", 
-                self.node_id, old_commit.0, state.commit_index.0, request.leader_commit.0);
+            info!(
+                "Node {} updated commit_index from {} to {} (leader_commit: {})",
+                self.node_id, old_commit.0, state.commit_index.0, request.leader_commit.0
+            );
         }
 
         let last_log_index = state.last_log_info().1;
@@ -738,13 +803,8 @@ impl ConsensusEngine {
         drop(state);
 
         // Replicate to followers
-        self.replicate_entry(
-            entry,
-            prev_log_index,
-            prev_log_term,
-            log_index,
-        )
-        .await?;
+        self.replicate_entry(entry, prev_log_index, prev_log_term, log_index)
+            .await?;
 
         Ok(log_index)
     }
@@ -834,7 +894,10 @@ impl ConsensusEngine {
                 };
 
                 // Send request
-                match transport_clone.append_entries(&follower_id_clone, request).await {
+                match transport_clone
+                    .append_entries(&follower_id_clone, request)
+                    .await
+                {
                     Ok(response) => {
                         // Check for higher term
                         if response.term > current_term {
@@ -849,7 +912,10 @@ impl ConsensusEngine {
                         }
 
                         if response.success {
-                            info!("Replication to {} succeeded, last_log_index={}", follower_id_clone, response.last_log_index.0);
+                            info!(
+                                "Replication to {} succeeded, last_log_index={}",
+                                follower_id_clone, response.last_log_index.0
+                            );
                             // Update next_index and match_index
                             let mut ls = leader_state_clone.write().await;
                             if let Some(ref mut ls_ref) = *ls {
@@ -857,18 +923,21 @@ impl ConsensusEngine {
                                     follower_id_clone.clone(),
                                     response.last_log_index.increment(),
                                 );
-                                ls_ref.match_index.insert(
-                                    follower_id_clone.clone(),
-                                    response.last_log_index,
-                                );
+                                ls_ref
+                                    .match_index
+                                    .insert(follower_id_clone.clone(), response.last_log_index);
                             }
                             Ok(true)
                         } else {
-                            info!("Replication to {} failed (success=false)", follower_id_clone);
+                            info!(
+                                "Replication to {} failed (success=false)",
+                                follower_id_clone
+                            );
                             // Follower rejected, decrement next_index and retry
                             let mut ls = leader_state_clone.write().await;
                             if let Some(ref mut ls_ref) = *ls
-                                && let Some(current_next) = ls_ref.next_index.get(&follower_id_clone)
+                                && let Some(current_next) =
+                                    ls_ref.next_index.get(&follower_id_clone)
                                 && current_next.0 > 1
                             {
                                 ls_ref.next_index.insert(
@@ -915,7 +984,7 @@ impl ConsensusEngine {
                                     false
                                 }
                             };
-                            
+
                             // Send immediate heartbeat to update followers' commit_index
                             if should_send_heartbeat {
                                 Self::send_heartbeats(
@@ -940,23 +1009,21 @@ impl ConsensusEngine {
                 let mut s = state.write().await;
                 if s.state == RaftState::Leader {
                     s.commit_index = log_index;
-                    info!("Quorum reached for log index {} (after {} responses), commit_index updated to {}", log_index.0, completed, log_index.0);
+                    info!(
+                        "Quorum reached for log index {} (after {} responses), commit_index updated to {}",
+                        log_index.0, completed, log_index.0
+                    );
                     true
                 } else {
                     false
                 }
             };
-            
+
             // Send immediate heartbeat to update followers' commit_index
             // This ensures followers commit the entry quickly
             if should_send_heartbeat {
-                Self::send_heartbeats(
-                    &node_id,
-                    &state,
-                    &leader_state,
-                    &transport,
-                    &cluster_nodes,
-                ).await;
+                Self::send_heartbeats(&node_id, &state, &leader_state, &transport, &cluster_nodes)
+                    .await;
             }
             Ok(())
         } else {
@@ -1016,35 +1083,46 @@ impl ConsensusEngine {
     pub async fn get_committed_entries(&self, last_applied: u64) -> (u64, Vec<LogEntry>) {
         let state = self.state.read().await;
         let commit_index = state.commit_index.0;
-        
+
         if commit_index <= last_applied {
             return (commit_index, Vec::new());
         }
-        
+
         // Get entries from last_applied + 1 to commit_index
         // Note: last_applied is 0-indexed, but log entries are 1-indexed
         // So we need to get entries from index (last_applied) to (commit_index - 1)
         let start_idx = last_applied as usize;
         let end_idx = commit_index as usize;
-        
+
         // Ensure we don't go out of bounds
         if end_idx > state.log.len() {
-            debug!("Node {}: commit_index {} > log length {}, using log length", 
-                self.node_id, end_idx, state.log.len());
+            debug!(
+                "Node {}: commit_index {} > log length {}, using log length",
+                self.node_id,
+                end_idx,
+                state.log.len()
+            );
             // Return empty if log isn't long enough yet
             return (commit_index, Vec::new());
         }
-        
-        let entries: Vec<LogEntry> = state.log
+
+        let entries: Vec<LogEntry> = state
+            .log
             .iter()
             .skip(start_idx)
             .take(end_idx - start_idx)
             .cloned()
             .collect();
-        
-        debug!("Node {}: get_committed_entries: commit_index={}, last_applied={}, log_len={}, returning {} entries", 
-            self.node_id, commit_index, last_applied, state.log.len(), entries.len());
-        
+
+        debug!(
+            "Node {}: get_committed_entries: commit_index={}, last_applied={}, log_len={}, returning {} entries",
+            self.node_id,
+            commit_index,
+            last_applied,
+            state.log.len(),
+            entries.len()
+        );
+
         (commit_index, entries)
     }
 }

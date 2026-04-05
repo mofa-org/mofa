@@ -11,7 +11,7 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 async fn test_state_machine_agent_registration() {
     use std::sync::Arc;
     use tokio::sync::RwLock;
-    
+
     let sm = Arc::new(RwLock::new(ReplicatedStateMachine::new()));
 
     // Register an agent
@@ -24,7 +24,7 @@ async fn test_state_machine_agent_registration() {
         metadata: metadata.clone(),
     };
 
-    sm.write().await.apply(command).await.unwrap();
+    sm.write().await.apply(command).await.expect("failed");
 
     // Verify agent is registered
     let agents = sm.read().await.get_agents().await;
@@ -47,7 +47,7 @@ async fn test_state_machine_node_management() {
         node_id: node_id.clone(),
         address: address.clone(),
     };
-    sm.apply(add_cmd).await.unwrap();
+    sm.apply(add_cmd).await.expect("failed");
 
     // Verify node is in membership
     {
@@ -60,7 +60,7 @@ async fn test_state_machine_node_management() {
     let remove_cmd = StateMachineCommand::RemoveNode {
         node_id: node_id.clone(),
     };
-    sm.apply(remove_cmd).await.unwrap();
+    sm.apply(remove_cmd).await.expect("failed");
 
     // Verify node is removed
     {
@@ -79,7 +79,7 @@ async fn test_state_machine_config_updates() {
         key: "test_key".to_string(),
         value: "test_value".to_string(),
     };
-    sm.apply(config_cmd).await.unwrap();
+    sm.apply(config_cmd).await.expect("failed");
 
     // Verify config is updated
     let config = sm.get_config().await;
@@ -144,10 +144,10 @@ async fn test_load_balancer_integration() {
     lb.add_node(node3.clone()).await;
 
     // Test round-robin selection
-    let selected1 = lb.select_node().await.unwrap().unwrap();
-    let selected2 = lb.select_node().await.unwrap().unwrap();
-    let selected3 = lb.select_node().await.unwrap().unwrap();
-    let selected4 = lb.select_node().await.unwrap().unwrap();
+    let selected1 = lb.select_node().await.expect("failed").unwrap();
+    let selected2 = lb.select_node().await.expect("failed").unwrap();
+    let selected3 = lb.select_node().await.expect("failed").unwrap();
+    let selected4 = lb.select_node().await.expect("failed").unwrap();
 
     assert_eq!(selected1, node1);
     assert_eq!(selected2, node2);
@@ -169,7 +169,7 @@ async fn test_load_balancer_integration() {
     lb_lc.increment_connections(&node1).await;
     lb_lc.increment_connections(&node2).await;
 
-    let selected = lb_lc.select_node().await.unwrap().unwrap();
+    let selected = lb_lc.select_node().await.expect("failed").unwrap();
     assert_eq!(selected, node3); // Should select node with least connections
 }
 
@@ -179,17 +179,13 @@ async fn test_health_checker_integration() {
     use mofa_gateway::types::NodeStatus;
     use std::time::Duration;
 
-    let checker = HealthChecker::new(
-        Duration::from_secs(5),
-        Duration::from_secs(1),
-        3,
-    );
+    let checker = HealthChecker::new(Duration::from_secs(5), Duration::from_secs(1), 3);
 
     let node_id = NodeId::new("node-1");
     checker.register_node(node_id.clone()).await;
 
     // Check node
-    let is_healthy = checker.check_node(&node_id).await.unwrap();
+    let is_healthy = checker.check_node(&node_id).await.expect("failed");
     assert!(is_healthy);
 
     // Verify status
@@ -214,7 +210,7 @@ async fn test_circuit_breaker_integration() {
     let breaker = registry.get_or_create(&node_id).await;
 
     // Initially closed
-    assert!(breaker.try_acquire().await.unwrap());
+    assert!(breaker.try_acquire().await.expect("failed"));
 
     // Record failures until circuit opens
     for _ in 0..3 {
@@ -222,14 +218,14 @@ async fn test_circuit_breaker_integration() {
     }
 
     // Circuit should be open
-    assert!(!breaker.try_acquire().await.unwrap());
+    assert!(!breaker.try_acquire().await.expect("failed"));
 
     // Circuit is open - verify we can't acquire
-    assert!(!breaker.try_acquire().await.unwrap());
+    assert!(!breaker.try_acquire().await.expect("failed"));
 
     // Record success to reset failure count (but circuit may still be open due to timeout)
     breaker.record_success().await;
-    
+
     // Note: In a real scenario, we'd wait for the timeout period before the circuit
     // transitions to half-open. For this test, we just verify the basic open/close behavior.
 }

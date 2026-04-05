@@ -306,24 +306,30 @@ mod tests {
     #[tokio::test]
     async fn test_hash_embedder_dimensions() {
         let embedder = HashEmbedder::new(64);
-        let vec = embedder.embed("hello world").await.unwrap();
+        let vec = embedder.embed("hello world").await.expect("failed");
         assert_eq!(vec.len(), 64);
     }
 
     #[tokio::test]
     async fn test_hash_embedder_is_normalised() {
         let embedder = HashEmbedder::with_128_dims();
-        let vec = embedder.embed("some test text").await.unwrap();
+        let vec = embedder.embed("some test text").await.expect("failed");
         let norm: f32 = vec.iter().map(|x| x * x).sum::<f32>().sqrt();
-        assert!((norm - 1.0).abs() < 1e-5, "embedding should be unit-length, got norm={norm}");
+        assert!(
+            (norm - 1.0).abs() < 1e-5,
+            "embedding should be unit-length, got norm={norm}"
+        );
     }
 
     #[tokio::test]
     async fn test_hash_embedder_similar_texts_closer() {
         let embedder = HashEmbedder::with_128_dims();
-        let a = embedder.embed("rust programming language").await.unwrap();
-        let b = embedder.embed("rust language systems").await.unwrap();
-        let c = embedder.embed("python data science machine learning").await.unwrap();
+        let a = embedder.embed("rust programming language").await.expect("failed");
+        let b = embedder.embed("rust language systems").await.expect("failed");
+        let c = embedder
+            .embed("python data science machine learning")
+            .await
+            .unwrap();
 
         let sim_ab: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
         let sim_ac: f32 = a.iter().zip(c.iter()).map(|(x, y)| x * y).sum();
@@ -337,7 +343,7 @@ mod tests {
     #[tokio::test]
     async fn test_hash_embedder_empty_text() {
         let embedder = HashEmbedder::with_128_dims();
-        let vec = embedder.embed("").await.unwrap();
+        let vec = embedder.embed("").await.expect("failed");
         assert_eq!(vec.len(), 128);
         // zero vector is fine for empty input
         let norm: f32 = vec.iter().map(|x| x * x).sum::<f32>().sqrt();
@@ -347,8 +353,8 @@ mod tests {
     #[tokio::test]
     async fn test_hash_embedder_deterministic() {
         let embedder = HashEmbedder::with_128_dims();
-        let v1 = embedder.embed("deterministic embedding").await.unwrap();
-        let v2 = embedder.embed("deterministic embedding").await.unwrap();
+        let v1 = embedder.embed("deterministic embedding").await.expect("failed");
+        let v2 = embedder.embed("deterministic embedding").await.expect("failed");
         assert_eq!(v1, v2, "same input must produce identical embeddings");
     }
 
@@ -357,8 +363,10 @@ mod tests {
     #[tokio::test]
     async fn test_semantic_memory_store_and_retrieve() {
         let mut mem = SemanticMemory::with_hash_embedder();
-        mem.store("k1", MemoryValue::text("hello world")).await.unwrap();
-        let val = mem.retrieve("k1").await.unwrap();
+        mem.store("k1", MemoryValue::text("hello world"))
+            .await
+            .unwrap();
+        let val = mem.retrieve("k1").await.expect("failed");
         assert!(val.is_some());
         assert_eq!(val.unwrap().as_text(), Some("hello world"));
     }
@@ -366,11 +374,23 @@ mod tests {
     #[tokio::test]
     async fn test_semantic_memory_search_returns_relevant() {
         let mut mem = SemanticMemory::with_hash_embedder();
-        mem.store("rust", MemoryValue::text("Rust is a systems programming language")).await.unwrap();
-        mem.store("python", MemoryValue::text("Python is used in data science")).await.unwrap();
-        mem.store("cooking", MemoryValue::text("How to bake a chocolate cake")).await.unwrap();
+        mem.store(
+            "rust",
+            MemoryValue::text("Rust is a systems programming language"),
+        )
+        .await
+        .unwrap();
+        mem.store(
+            "python",
+            MemoryValue::text("Python is used in data science"),
+        )
+        .await
+        .unwrap();
+        mem.store("cooking", MemoryValue::text("How to bake a chocolate cake"))
+            .await
+            .unwrap();
 
-        let results = mem.search("systems language programming", 2).await.unwrap();
+        let results = mem.search("systems language programming", 2).await.expect("failed");
         assert!(!results.is_empty());
         // The rust entry should be in the results
         assert!(results.iter().any(|r| r.key == "rust"));
@@ -379,20 +399,24 @@ mod tests {
     #[tokio::test]
     async fn test_semantic_memory_remove() {
         let mut mem = SemanticMemory::with_hash_embedder();
-        mem.store("k1", MemoryValue::text("test")).await.unwrap();
-        let removed = mem.remove("k1").await.unwrap();
+        mem.store("k1", MemoryValue::text("test")).await.expect("failed");
+        let removed = mem.remove("k1").await.expect("failed");
         assert!(removed);
-        let val = mem.retrieve("k1").await.unwrap();
+        let val = mem.retrieve("k1").await.expect("failed");
         assert!(val.is_none());
     }
 
     #[tokio::test]
     async fn test_semantic_memory_history() {
         let mut mem = SemanticMemory::with_hash_embedder();
-        mem.add_to_history("session-1", Message::user("question")).await.unwrap();
-        mem.add_to_history("session-1", Message::assistant("answer")).await.unwrap();
+        mem.add_to_history("session-1", Message::user("question"))
+            .await
+            .unwrap();
+        mem.add_to_history("session-1", Message::assistant("answer"))
+            .await
+            .unwrap();
 
-        let history = mem.get_history("session-1").await.unwrap();
+        let history = mem.get_history("session-1").await.expect("failed");
         assert_eq!(history.len(), 2);
         assert_eq!(history[0].content, "question");
     }
@@ -400,11 +424,17 @@ mod tests {
     #[tokio::test]
     async fn test_semantic_memory_stats() {
         let mut mem = SemanticMemory::with_hash_embedder();
-        mem.store("k1", MemoryValue::text("entry one")).await.unwrap();
-        mem.store("k2", MemoryValue::text("entry two")).await.unwrap();
-        mem.add_to_history("s1", Message::user("msg")).await.unwrap();
+        mem.store("k1", MemoryValue::text("entry one"))
+            .await
+            .unwrap();
+        mem.store("k2", MemoryValue::text("entry two"))
+            .await
+            .unwrap();
+        mem.add_to_history("s1", Message::user("msg"))
+            .await
+            .unwrap();
 
-        let stats = mem.stats().await.unwrap();
+        let stats = mem.stats().await.expect("failed");
         assert_eq!(stats.total_items, 2);
         assert_eq!(stats.total_sessions, 1);
         assert_eq!(stats.total_messages, 1);
@@ -413,14 +443,16 @@ mod tests {
     #[tokio::test]
     async fn test_semantic_memory_clear() {
         let mut mem = SemanticMemory::with_hash_embedder();
-        mem.store("k1", MemoryValue::text("data")).await.unwrap();
-        mem.add_to_history("s1", Message::user("msg")).await.unwrap();
+        mem.store("k1", MemoryValue::text("data")).await.expect("failed");
+        mem.add_to_history("s1", Message::user("msg"))
+            .await
+            .unwrap();
 
-        mem.clear().await.unwrap();
+        mem.clear().await.expect("failed");
 
-        let val = mem.retrieve("k1").await.unwrap();
+        let val = mem.retrieve("k1").await.expect("failed");
         assert!(val.is_none());
-        let history = mem.get_history("s1").await.unwrap();
+        let history = mem.get_history("s1").await.expect("failed");
         assert!(history.is_empty());
     }
 }

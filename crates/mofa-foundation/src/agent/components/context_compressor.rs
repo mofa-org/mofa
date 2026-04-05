@@ -474,7 +474,10 @@ impl ContextCompressor for SummarizingCompressor {
 
         // check cache if enabled
         #[cfg(feature = "compression-cache")]
-        let cache_key = self.cache.as_ref().map(|cache| CompressionCache::cache_key(&prompt));
+        let cache_key = self
+            .cache
+            .as_ref()
+            .map(|cache| CompressionCache::cache_key(&prompt));
 
         #[cfg(feature = "compression-cache")]
         let summary_text =
@@ -776,10 +779,7 @@ impl SemanticCompressor {
             ));
         }
 
-        let texts: Vec<String> = to_compress
-            .par_iter()
-            .map(Self::extract_text)
-            .collect();
+        let texts: Vec<String> = to_compress.par_iter().map(Self::extract_text).collect();
 
         let non_empty_texts: Vec<(usize, String)> = texts
             .into_iter()
@@ -1352,7 +1352,7 @@ mod tests {
     async fn sliding_window_under_limit_unchanged() {
         let compressor = SlidingWindowCompressor::new(20);
         let msgs = short_conversation();
-        let result = compressor.compress(msgs.clone(), 100_000).await.unwrap();
+        let result = compressor.compress(msgs.clone(), 100_000).await.expect("failed");
         assert_eq!(result.len(), msgs.len());
     }
 
@@ -1360,7 +1360,7 @@ mod tests {
     async fn sliding_window_only_system_message() {
         let compressor = SlidingWindowCompressor::new(5);
         let msgs = system_only();
-        let result = compressor.compress(msgs.clone(), 1).await.unwrap();
+        let result = compressor.compress(msgs.clone(), 1).await.expect("failed");
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].role, "system");
     }
@@ -1371,7 +1371,7 @@ mod tests {
         let compressor = SlidingWindowCompressor::new(4);
         let msgs = long_conversation(5);
         assert_eq!(msgs.len(), 11);
-        let result = compressor.compress(msgs, 1).await.unwrap();
+        let result = compressor.compress(msgs, 1).await.expect("failed");
         assert_eq!(result.len(), 5);
         assert_eq!(result[0].role, "system");
     }
@@ -1383,7 +1383,7 @@ mod tests {
         let msgs = vec![make_msg("system", "sys"), make_msg("user", &long_content)];
         // Even though the single message exceeds the token budget, the window
         // compressor keeps it because it is within window_size.
-        let result = compressor.compress(msgs, 1).await.unwrap();
+        let result = compressor.compress(msgs, 1).await.expect("failed");
         assert_eq!(result.len(), 2);
     }
 
@@ -1391,7 +1391,7 @@ mod tests {
     async fn sliding_window_preserves_system_prompt() {
         let compressor = SlidingWindowCompressor::new(2);
         let msgs = long_conversation(10); // 21 messages
-        let result = compressor.compress(msgs, 1).await.unwrap();
+        let result = compressor.compress(msgs, 1).await.expect("failed");
         assert_eq!(result[0].role, "system");
     }
 
@@ -1400,7 +1400,7 @@ mod tests {
         let llm = Arc::new(MockLLM);
         let compressor = SummarizingCompressor::new(llm);
         let msgs = short_conversation();
-        let result = compressor.compress(msgs.clone(), 100_000).await.unwrap();
+        let result = compressor.compress(msgs.clone(), 100_000).await.expect("failed");
         assert_eq!(result.len(), msgs.len());
     }
 
@@ -1409,7 +1409,7 @@ mod tests {
         let llm = Arc::new(MockLLM);
         let compressor = SummarizingCompressor::new(llm);
         let msgs = system_only();
-        let result = compressor.compress(msgs, 1).await.unwrap();
+        let result = compressor.compress(msgs, 1).await.expect("failed");
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].role, "system");
     }
@@ -1420,7 +1420,7 @@ mod tests {
         let compressor = SummarizingCompressor::new(llm).with_keep_recent(2);
         let msgs = long_conversation(3);
         assert_eq!(msgs.len(), 7);
-        let result = compressor.compress(msgs, 1).await.unwrap();
+        let result = compressor.compress(msgs, 1).await.expect("failed");
         assert_eq!(result.len(), 4);
         assert_eq!(result[0].role, "system");
         assert!(
@@ -1440,7 +1440,7 @@ mod tests {
         let msgs = vec![make_msg("system", "sys"), make_msg("user", &long_content)];
         // Only 1 conversation message which is <= keep_recent=10, so no
         // summarisation happens; messages are returned as-is even over budget.
-        let result = compressor.compress(msgs.clone(), 1).await.unwrap();
+        let result = compressor.compress(msgs.clone(), 1).await.expect("failed");
         assert_eq!(result.len(), 2);
     }
 
@@ -1538,7 +1538,7 @@ mod tests {
         let llm = Arc::new(MockLLMWithEmbeddings);
         let compressor = SemanticCompressor::new(llm);
         let msgs = short_conversation();
-        let result = compressor.compress(msgs.clone(), 100_000).await.unwrap();
+        let result = compressor.compress(msgs.clone(), 100_000).await.expect("failed");
         assert_eq!(result.len(), msgs.len());
     }
 
@@ -1547,7 +1547,7 @@ mod tests {
         let llm = Arc::new(MockLLMWithEmbeddings);
         let compressor = SemanticCompressor::new(llm);
         let msgs = system_only();
-        let result = compressor.compress(msgs.clone(), 1).await.unwrap();
+        let result = compressor.compress(msgs.clone(), 1).await.expect("failed");
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].role, "system");
     }
@@ -1584,7 +1584,7 @@ mod tests {
             ),
         ];
         // Use a very small token budget to force compression
-        let result = compressor.compress(msgs, 10).await.unwrap();
+        let result = compressor.compress(msgs, 10).await.expect("failed");
         // Should compress: 1 system + compressed older messages + 2 recent
         // Original has 6 messages, compressed should have fewer
         assert!(result.len() >= 3);
@@ -1597,7 +1597,7 @@ mod tests {
         let llm = Arc::new(MockLLMWithEmbeddings);
         let compressor = SemanticCompressor::new(llm).with_keep_recent(2);
         let msgs = long_conversation(5);
-        let result = compressor.compress(msgs, 100).await.unwrap();
+        let result = compressor.compress(msgs, 100).await.expect("failed");
         assert!(result.len() >= 3);
         assert_eq!(result[0].role, "system");
     }
@@ -1607,7 +1607,7 @@ mod tests {
         let llm = Arc::new(MockLLM);
         let compressor = HierarchicalCompressor::new(llm);
         let msgs = short_conversation();
-        let result = compressor.compress(msgs.clone(), 100_000).await.unwrap();
+        let result = compressor.compress(msgs.clone(), 100_000).await.expect("failed");
         assert_eq!(result.len(), msgs.len());
     }
 
@@ -1616,7 +1616,7 @@ mod tests {
         let llm = Arc::new(MockLLM);
         let compressor = HierarchicalCompressor::new(llm);
         let msgs = system_only();
-        let result = compressor.compress(msgs.clone(), 1).await.unwrap();
+        let result = compressor.compress(msgs.clone(), 1).await.expect("failed");
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].role, "system");
     }
@@ -1626,7 +1626,7 @@ mod tests {
         let llm = Arc::new(MockLLM);
         let compressor = HierarchicalCompressor::new(llm).with_keep_recent(2);
         let msgs = long_conversation(10);
-        let result = compressor.compress(msgs, 200).await.unwrap();
+        let result = compressor.compress(msgs, 200).await.expect("failed");
         assert!(result.len() >= 3);
         assert_eq!(result[0].role, "system");
     }
@@ -1641,7 +1641,7 @@ mod tests {
             make_msg("assistant", "Old response"),
             make_msg("user", "Recent message"),
         ];
-        let result = compressor.compress(msgs, 50).await.unwrap();
+        let result = compressor.compress(msgs, 50).await.expect("failed");
         assert_eq!(result[0].role, "system");
         assert!(result[0].content.as_deref().unwrap().contains("Important"));
     }
@@ -1650,7 +1650,7 @@ mod tests {
     async fn hybrid_under_limit_unchanged() {
         let compressor = HybridCompressor::new();
         let msgs = short_conversation();
-        let result = compressor.compress(msgs.clone(), 100_000).await.unwrap();
+        let result = compressor.compress(msgs.clone(), 100_000).await.expect("failed");
         assert_eq!(result.len(), msgs.len());
     }
 
@@ -1661,7 +1661,7 @@ mod tests {
             .add_strategy(Box::new(SlidingWindowCompressor::new(2)))
             .add_strategy(Box::new(SummarizingCompressor::new(llm.clone())));
         let msgs = long_conversation(10); // 21 messages total (1 system + 20 conversation)
-        let result = compressor.compress(msgs, 100).await.unwrap();
+        let result = compressor.compress(msgs, 100).await.expect("failed");
         // SlidingWindowCompressor with window_size=2 should compress to: 1 system + 2*2 = 5 messages max
         // But token budget might allow more, so just check it's compressed and system is preserved
         assert!(result.len() <= 21);
@@ -1673,7 +1673,7 @@ mod tests {
     async fn hybrid_empty_strategies_returns_unchanged() {
         let compressor = HybridCompressor::new();
         let msgs = long_conversation(5);
-        let result = compressor.compress(msgs.clone(), 100_000).await.unwrap();
+        let result = compressor.compress(msgs.clone(), 100_000).await.expect("failed");
         assert_eq!(result.len(), msgs.len());
     }
 
@@ -1686,7 +1686,7 @@ mod tests {
                 SummarizingCompressor::new(llm).with_keep_recent(2),
             ));
         let msgs = long_conversation(8);
-        let result = compressor.compress(msgs, 50).await.unwrap();
+        let result = compressor.compress(msgs, 50).await.expect("failed");
         assert!(result.len() < 17);
     }
 }

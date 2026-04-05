@@ -7,9 +7,7 @@ use crate::security::pii::patterns::{
     SSN_PATTERN, validate_luhn,
 };
 use async_trait::async_trait;
-use mofa_kernel::security::{
-    PiiDetector, RedactionMatch, SecurityResult, SensitiveDataCategory,
-};
+use mofa_kernel::security::{PiiDetector, RedactionMatch, SecurityResult, SensitiveDataCategory};
 
 /// Regex-based PII detector
 pub struct RegexPiiDetector {
@@ -79,7 +77,8 @@ impl RegexPiiDetector {
             .filter(|m| {
                 if self.validate_credit_cards {
                     // Remove spaces and dashes for validation
-                    let cleaned: String = m.as_str().chars().filter(|c| c.is_ascii_digit()).collect();
+                    let cleaned: String =
+                        m.as_str().chars().filter(|c| c.is_ascii_digit()).collect();
                     validate_luhn(&cleaned)
                 } else {
                     true
@@ -125,9 +124,7 @@ impl RegexPiiDetector {
                 if parts.len() != 4 {
                     return false;
                 }
-                parts.iter().all(|part| {
-                    part.parse::<u8>().is_ok()
-                })
+                parts.iter().all(|part| part.parse::<u8>().is_ok())
             })
             .map(|m| {
                 let original = m.as_str().to_string();
@@ -194,7 +191,7 @@ mod tests {
     async fn test_detect_emails() {
         let detector = RegexPiiDetector::new();
         let text = "Contact me at user@example.com or admin@test.org";
-        let results = detector.detect(text).await.unwrap();
+        let results = detector.detect(text).await.expect("failed");
 
         assert_eq!(results.len(), 2);
         assert_eq!(results[0].category, SensitiveDataCategory::Email);
@@ -205,7 +202,7 @@ mod tests {
     async fn test_detect_phones() {
         let detector = RegexPiiDetector::new();
         let text = "Call me at (555) 123-4567 or 555-987-6543";
-        let results = detector.detect(text).await.unwrap();
+        let results = detector.detect(text).await.expect("failed");
 
         assert!(results.len() >= 2);
         assert_eq!(results[0].category, SensitiveDataCategory::Phone);
@@ -215,7 +212,7 @@ mod tests {
     async fn test_detect_credit_cards() {
         let detector = RegexPiiDetector::new();
         let text = "Card: 4111-1111-1111-1111";
-        let results = detector.detect(text).await.unwrap();
+        let results = detector.detect(text).await.expect("failed");
 
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].category, SensitiveDataCategory::CreditCard);
@@ -225,7 +222,7 @@ mod tests {
     async fn test_detect_ssns() {
         let detector = RegexPiiDetector::new();
         let text = "SSN: 123-45-6789";
-        let results = detector.detect(text).await.unwrap();
+        let results = detector.detect(text).await.expect("failed");
 
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].category, SensitiveDataCategory::Ssn);
@@ -235,7 +232,7 @@ mod tests {
     async fn test_detect_multiple_types() {
         let detector = RegexPiiDetector::new();
         let text = "Email: user@example.com, Phone: (555) 123-4567, SSN: 123-45-6789";
-        let results = detector.detect(text).await.unwrap();
+        let results = detector.detect(text).await.expect("failed");
 
         assert_eq!(results.len(), 3);
         assert_eq!(results[0].category, SensitiveDataCategory::Email);
@@ -247,7 +244,7 @@ mod tests {
     async fn test_no_pii() {
         let detector = RegexPiiDetector::new();
         let text = "This is just regular text with no sensitive information.";
-        let results = detector.detect(text).await.unwrap();
+        let results = detector.detect(text).await.expect("failed");
 
         assert_eq!(results.len(), 0);
     }

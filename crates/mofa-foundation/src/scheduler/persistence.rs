@@ -140,8 +140,8 @@ mod tests {
         ];
 
         // Save and load
-        persistence.save(&defs).await.unwrap();
-        let loaded = persistence.load().await.unwrap();
+        persistence.save(&defs).await.expect("failed");
+        let loaded = persistence.load().await.expect("failed");
 
         assert_eq!(loaded.len(), 2);
         assert_eq!(loaded[0].schedule_id, "s1");
@@ -155,7 +155,7 @@ mod tests {
         let path = dir.path().join("nonexistent.json");
         let persistence = SchedulePersistence::new(&path);
 
-        let loaded = persistence.load().await.unwrap();
+        let loaded = persistence.load().await.expect("failed");
         assert!(loaded.is_empty());
     }
 
@@ -178,7 +178,7 @@ mod tests {
             )
             .unwrap(),
         ];
-        persistence.save(&defs).await.unwrap();
+        persistence.save(&defs).await.expect("failed");
 
         // Simulate crash: write corrupt data to .tmp but do NOT rename
         tokio::fs::write(&tmp_path, b"{ this is not valid json ]]]")
@@ -186,7 +186,7 @@ mod tests {
             .unwrap();
 
         // Original file must still load successfully
-        let loaded = persistence.load().await.unwrap();
+        let loaded = persistence.load().await.expect("failed");
         assert_eq!(loaded.len(), 1);
         assert_eq!(loaded[0].schedule_id, "s1");
     }

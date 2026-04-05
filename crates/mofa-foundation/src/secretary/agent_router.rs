@@ -899,8 +899,7 @@ impl RuleBasedRouter {
                 match regex::Regex::new(&condition.value) {
                     Ok(re) => {
                         let matched = re.is_match(&field_value);
-                        let mut cache =
-                            self.regex_cache.lock().unwrap_or_else(|e| e.into_inner());
+                        let mut cache = self.regex_cache.lock().unwrap_or_else(|e| e.into_inner());
                         cache.insert(condition.value.clone(), re);
                         matched
                     }
@@ -1315,7 +1314,7 @@ mod tests {
             "todo_1",
         );
 
-        let decision = router.route(&context, &agents).await.unwrap();
+        let decision = router.route(&context, &agents).await.expect("failed");
         assert_eq!(decision.agent_id, "agent_1");
         assert_eq!(decision.decision_type, RoutingDecisionType::CapabilityMatch);
     }
@@ -1358,7 +1357,7 @@ mod tests {
             "todo_1",
         );
 
-        let decision = router.route(&context, &agents).await.unwrap();
+        let decision = router.route(&context, &agents).await.expect("failed");
         assert_eq!(decision.agent_id, "backend_agent");
         assert_eq!(decision.decision_type, RoutingDecisionType::RuleMatch);
     }
@@ -1389,7 +1388,7 @@ mod tests {
             "todo_1",
         );
 
-        let decision = composite.route(&context, &agents).await.unwrap();
+        let decision = composite.route(&context, &agents).await.expect("failed");
         assert_eq!(decision.agent_id, "agent_1");
     }
 }

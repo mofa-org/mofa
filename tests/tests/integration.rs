@@ -29,10 +29,10 @@ async fn backend_infer_returns_matching_response() {
         quantization: None,
         extra_config: HashMap::new(),
     };
-    backend.register_model(config).await.unwrap();
-    backend.load_model("test-llm").await.unwrap();
+    backend.register_model(config).await.expect("failed");
+    backend.load_model("test-llm").await.expect("failed");
 
-    let resp = backend.infer("test-llm", "say hello").await.unwrap();
+    let resp = backend.infer("test-llm", "say hello").await.expect("failed");
     assert_eq!(resp, "Hi there!");
 
     let resp = backend
@@ -47,7 +47,7 @@ async fn backend_infer_returns_fallback_on_no_match() {
     let mut backend = MockLLMBackend::new();
     backend.set_fallback("I don't understand.");
 
-    let resp = backend.infer("any", "random input").await.unwrap();
+    let resp = backend.infer("any", "random input").await.expect("failed");
     assert_eq!(resp, "I don't understand.");
 }
 
@@ -58,7 +58,7 @@ async fn backend_first_match_wins() {
     backend.add_response("hello", "first");
     backend.add_response("world", "second");
 
-    let resp = backend.infer("x", "hello world").await.unwrap();
+    let resp = backend.infer("x", "hello world").await.expect("failed");
     assert_eq!(resp, "first", "first-match semantics must hold");
 }
 
@@ -76,11 +76,11 @@ async fn backend_register_load_unload_lifecycle() {
         extra_config: HashMap::new(),
     };
 
-    backend.register_model(config).await.unwrap();
+    backend.register_model(config).await.expect("failed");
     assert!(backend.list_models().contains(&"model-a".to_string()));
     assert!(!backend.is_model_loaded("model-a"));
 
-    backend.load_model("model-a").await.unwrap();
+    backend.load_model("model-a").await.expect("failed");
     assert!(backend.is_model_loaded("model-a"));
     assert!(
         backend
@@ -88,10 +88,10 @@ async fn backend_register_load_unload_lifecycle() {
             .contains(&"model-a".to_string())
     );
 
-    backend.unload_model("model-a").await.unwrap();
+    backend.unload_model("model-a").await.expect("failed");
     assert!(!backend.is_model_loaded("model-a"));
 
-    backend.unregister_model("model-a").await.unwrap();
+    backend.unregister_model("model-a").await.expect("failed");
     assert!(!backend.list_models().contains(&"model-a".to_string()));
 }
 
@@ -117,8 +117,8 @@ async fn backend_statistics_reflect_state() {
         quantization: None,
         extra_config: HashMap::new(),
     };
-    backend.register_model(config).await.unwrap();
-    backend.load_model("m").await.unwrap();
+    backend.register_model(config).await.expect("failed");
+    backend.load_model("m").await.expect("failed");
 
     let stats = backend.get_statistics().unwrap();
     assert_eq!(stats.loaded_models_count, 1);
@@ -137,10 +137,10 @@ async fn backend_eviction_clears_loaded() {
         quantization: None,
         extra_config: HashMap::new(),
     };
-    backend.register_model(config).await.unwrap();
-    backend.load_model("m").await.unwrap();
+    backend.register_model(config).await.expect("failed");
+    backend.load_model("m").await.expect("failed");
 
-    let evicted = backend.trigger_eviction(0).await.unwrap();
+    let evicted = backend.trigger_eviction(0).await.expect("failed");
     assert_eq!(evicted, 1);
     assert!(!backend.is_model_loaded("m"));
 }
@@ -148,14 +148,14 @@ async fn backend_eviction_clears_loaded() {
 #[tokio::test]
 async fn backend_memory_threshold_roundtrip() {
     let backend = MockLLMBackend::new();
-    backend.set_memory_threshold(1024).await.unwrap();
+    backend.set_memory_threshold(1024).await.expect("failed");
     assert_eq!(backend.get_memory_threshold(), 1024);
 }
 
 #[tokio::test]
 async fn backend_idle_timeout_roundtrip() {
     let backend = MockLLMBackend::new();
-    backend.set_idle_timeout_secs(60).await.unwrap();
+    backend.set_idle_timeout_secs(60).await.expect("failed");
     assert_eq!(backend.get_idle_timeout_secs(), 60);
 }
 
@@ -175,7 +175,7 @@ async fn bus_captures_messages() {
         content: "ping".into(),
     };
     let mode = mofa_kernel::bus::CommunicationMode::Broadcast;
-    let _ = bus.send_and_capture("agent-1", mode, msg).await;
+    let _: Result<_, _> = bus.send_and_capture("agent-1", mode, msg).await;
 
     assert_eq!(bus.message_count().await, 1);
 }
@@ -188,7 +188,7 @@ async fn bus_clear_history_resets() {
         content: "ping".into(),
     };
     let mode = mofa_kernel::bus::CommunicationMode::Broadcast;
-    let _ = bus.send_and_capture("a", mode, msg).await;
+    let _: Result<_, _> = bus.send_and_capture("a", mode, msg).await;
     assert_eq!(bus.message_count().await, 1);
 
     bus.clear_history().await;

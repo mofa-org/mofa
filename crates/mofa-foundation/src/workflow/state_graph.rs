@@ -155,12 +155,10 @@ impl<S: GraphState> StateGraphImpl<S> {
                 }
 
                 // Include fallback node edges from NodePolicy
-                if let Some(policy) = self.policies.get(&node_id) {
-                    if let Some(fallback) = &policy.fallback_node {
-                        if fallback != END && !reachable.contains(fallback) {
-                            stack.push(fallback.to_string());
-                        }
-                    }
+                if let Some(fallback) = self.policies.get(&node_id).and_then(|p| p.fallback_node.as_ref())
+                    && fallback != END && !reachable.contains(fallback)
+                {
+                    stack.push(fallback.to_string());
                 }
             }
         }
@@ -1082,8 +1080,8 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
 mod tests {
     use super::*;
     use futures::StreamExt;
-    use mofa_kernel::workflow::telemetry::TelemetryEmitter;
     use mofa_kernel::workflow::GraphConfig;
+    use mofa_kernel::workflow::telemetry::TelemetryEmitter;
     use mofa_kernel::workflow::{JsonState, StateGraph};
     use serde_json::json;
     use std::collections::HashMap;
@@ -1427,7 +1425,7 @@ mod tests {
             );
 
         let compiled = graph.compile().unwrap();
-        compiled.invoke(JsonState::new(), None).await.unwrap();
+        compiled.invoke(JsonState::new(), None).await.expect("failed");
 
         assert!(
             max_active.load(Ordering::SeqCst) > 1,
@@ -1460,7 +1458,7 @@ mod tests {
 
         let compiled: CompiledGraphImpl<JsonState> = graph.compile().unwrap();
 
-        let final_state = compiled.invoke(JsonState::new(), None).await.unwrap();
+        let final_state = compiled.invoke(JsonState::new(), None).await.expect("failed");
         assert_eq!(final_state.get_value("flag"), Some(json!(true)));
         assert_eq!(final_state.get_value("reader_saw_flag"), Some(json!(false)));
 
@@ -1524,7 +1522,7 @@ mod tests {
             .add_edge("rejected", END);
 
         let compiled = graph.compile().unwrap();
-        let final_state = compiled.invoke(JsonState::new(), None).await.unwrap();
+        let final_state = compiled.invoke(JsonState::new(), None).await.expect("failed");
 
         assert_eq!(
             final_state.get_value::<serde_json::Value>("decision"),
@@ -1569,7 +1567,7 @@ mod tests {
             .add_edge("rejected", END);
 
         let compiled = graph.compile().unwrap();
-        let final_state = compiled.invoke(JsonState::new(), None).await.unwrap();
+        let final_state = compiled.invoke(JsonState::new(), None).await.expect("failed");
 
         assert_eq!(
             final_state.get_value::<serde_json::Value>("decision"),

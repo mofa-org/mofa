@@ -260,21 +260,22 @@ struct OtlpRecorder {
 impl Drop for OtlpRecorder {
     fn drop(&mut self) {
         if let Ok(mut guard) = self.meter_provider.lock()
-            && let Some(provider) = guard.take() {
-                // Shutdown in a background OS thread so we never block a tokio
-                // worker thread (e.g. when an async task holding this recorder
-                // is aborted).
-                std::thread::spawn(move || {
-                    let _ = provider.shutdown();
-                });
-            }
+            && let Some(provider) = guard.take()
+        {
+            // Shutdown in a background OS thread so we never block a tokio
+            // worker thread (e.g. when an async task holding this recorder
+            // is aborted).
+            std::thread::spawn(move || {
+                let _ = provider.shutdown();
+            });
+        }
     }
 }
 
 impl OtlpRecorder {
     fn new(config: &OtlpMetricsExporterConfig) -> Result<Self, OtlpMetricsExporterError> {
         use opentelemetry_otlp::WithExportConfig;
-        
+
         let exporter = opentelemetry_otlp::MetricExporter::builder()
             .with_http()
             .with_endpoint(config.endpoint.clone())
@@ -286,7 +287,7 @@ impl OtlpRecorder {
             .with_reader(
                 opentelemetry_sdk::metrics::PeriodicReader::builder(exporter, Tokio)
                     .with_interval(config.export_interval)
-                    .build()
+                    .build(),
             )
             .with_resource(Resource::new(vec![KeyValue::new(
                 "service.name",

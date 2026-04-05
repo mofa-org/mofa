@@ -294,7 +294,7 @@ mod error_handling_tests {
 
         let mut results = vec![];
         for handle in handles {
-            results.push(handle.await.unwrap());
+            results.push(handle.await.expect("failed"));
         }
 
         let errors = results.iter().filter(|r| r.is_err()).count();

@@ -644,13 +644,13 @@ mod tests {
 
         assert_eq!(df.state().await, DataflowState::Running);
 
-        df.pause().await.unwrap();
+        df.pause().await.expect("failed");
         assert_eq!(df.state().await, DataflowState::Paused);
 
-        df.resume().await.unwrap();
+        df.resume().await.expect("failed");
         assert_eq!(df.state().await, DataflowState::Running);
 
-        df.stop().await.unwrap();
+        df.stop().await.expect("failed");
         assert_eq!(df.state().await, DataflowState::Stopped);
     }
 
@@ -734,8 +734,8 @@ mod tests {
             .await
             .unwrap();
 
-        let producer = df.get_node("a").await.unwrap();
-        let consumer = df.get_node("b").await.unwrap();
+        let producer = df.get_node("a").await.expect("failed");
+        let consumer = df.get_node("b").await.expect("failed");
         let consumer_el = consumer.create_event_loop();
 
         producer
@@ -756,6 +756,6 @@ mod tests {
             other => panic!("expected AgentEvent::Custom, got: {:?}", other),
         }
 
-        df.stop().await.unwrap();
+        df.stop().await.expect("failed");
     }
 }

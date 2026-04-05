@@ -570,15 +570,15 @@ mod tests {
         let registry = PluginRegistry::new();
 
         let info = PluginInfo::new("plugin-1", "Plugin 1", PluginVersion::new(1, 0, 0));
-        registry.register(info).await.unwrap();
+        registry.register(info).await.expect("failed");
 
         assert!(registry.contains("plugin-1").await);
         assert!(!registry.contains("plugin-2").await);
 
-        let loaded = registry.get("plugin-1").await.unwrap();
+        let loaded = registry.get("plugin-1").await.expect("failed");
         assert_eq!(loaded.name, "Plugin 1");
 
-        registry.unregister("plugin-1").await.unwrap();
+        registry.unregister("plugin-1").await.expect("failed");
         assert!(!registry.contains("plugin-1").await);
     }
 
@@ -588,17 +588,17 @@ mod tests {
 
         // Plugin A has no dependencies
         let a = PluginInfo::new("a", "A", PluginVersion::new(1, 0, 0));
-        registry.register(a).await.unwrap();
+        registry.register(a).await.expect("failed");
 
         // Plugin B depends on A
         let b = PluginInfo::new("b", "B", PluginVersion::new(1, 0, 0)).with_dependency("a");
-        registry.register(b).await.unwrap();
+        registry.register(b).await.expect("failed");
 
         // Plugin C depends on B
         let c = PluginInfo::new("c", "C", PluginVersion::new(1, 0, 0)).with_dependency("b");
-        registry.register(c).await.unwrap();
+        registry.register(c).await.expect("failed");
 
-        let order = registry.get_load_order().await.unwrap();
+        let order = registry.get_load_order().await.expect("failed");
 
         // A should come before B, B before C
         let pos_a = order.iter().position(|x| x == "a").unwrap();

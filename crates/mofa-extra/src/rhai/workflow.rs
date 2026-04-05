@@ -835,8 +835,8 @@ mod tests {
             "#,
         );
 
-        let node = ScriptWorkflowNode::new(config, engine).await.unwrap();
-        let result = node.execute(serde_json::json!(21)).await.unwrap();
+        let node = ScriptWorkflowNode::new(config, engine).await.expect("failed");
+        let result = node.execute(serde_json::json!(21)).await.expect("failed");
 
         assert!(result.success);
         assert_eq!(result.output, serde_json::json!(42));
@@ -848,7 +848,7 @@ mod tests {
 
         let config = condition_script("check_positive", "Check Positive", "input > 0");
 
-        let node = ScriptWorkflowNode::new(config, engine).await.unwrap();
+        let node = ScriptWorkflowNode::new(config, engine).await.expect("failed");
 
         assert!(
             node.execute_as_condition(serde_json::json!(10))
@@ -897,7 +897,7 @@ mod tests {
             .await
             .unwrap();
 
-        let result = executor.execute(serde_json::json!(5)).await.unwrap();
+        let result = executor.execute(serde_json::json!(5)).await.expect("failed");
         // 5 * 2 = 10, 10 + 10 = 20
         assert_eq!(result, serde_json::json!(20));
     }
@@ -926,12 +926,12 @@ mod tests {
             .await
             .unwrap();
 
-        let result = executor.execute(serde_json::json!(20)).await.unwrap();
+        let result = executor.execute(serde_json::json!(20)).await.expect("failed");
         assert!(result.as_str().unwrap().starts_with("HIGH:"));
 
         executor.reset().await;
 
-        let result = executor.execute(serde_json::json!(5)).await.unwrap();
+        let result = executor.execute(serde_json::json!(5)).await.expect("failed");
         assert!(result.as_str().unwrap().starts_with("LOW:"));
     }
 }

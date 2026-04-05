@@ -112,38 +112,39 @@ impl LoadBalancer {
                 // proportionally to its weight
                 let weights = self.node_weights.read().await;
                 let mut current_weights = self.weighted_current_weights.write().await;
-                
+
                 // Initialize current weights if needed
                 for node in nodes.iter() {
                     current_weights.entry(node.clone()).or_insert(0);
                 }
-                
+
                 // Find node with maximum (current_weight + weight)
                 let mut max_effective_weight = i32::MIN;
                 let mut selected = None;
-                
+
                 for node in nodes.iter() {
                     let weight = weights.get(node).copied().unwrap_or(1) as i32;
                     let current = current_weights.get(node).copied().unwrap_or(0);
                     let effective_weight = current + weight;
-                    
+
                     if effective_weight > max_effective_weight {
                         max_effective_weight = effective_weight;
                         selected = Some(node.clone());
                     }
                 }
-                
+
                 // Decrease current weight of selected node by sum of all weights
                 if let Some(ref selected_node) = selected {
-                    let total_weight: i32 = nodes.iter()
+                    let total_weight: i32 = nodes
+                        .iter()
                         .map(|n| weights.get(n).copied().unwrap_or(1) as i32)
                         .sum();
-                    
+
                     if let Some(current) = current_weights.get_mut(selected_node) {
                         *current -= total_weight;
                     }
                 }
-                
+
                 Ok(selected)
             }
             LoadBalancingAlgorithm::Random => {
@@ -188,10 +189,10 @@ mod tests {
         lb.add_node(NodeId::new("node-3")).await;
 
         // Should cycle through nodes
-        let node1 = lb.select_node().await.unwrap().unwrap();
-        let node2 = lb.select_node().await.unwrap().unwrap();
-        let node3 = lb.select_node().await.unwrap().unwrap();
-        let node4 = lb.select_node().await.unwrap().unwrap();
+        let node1 = lb.select_node().await.expect("failed").unwrap();
+        let node2 = lb.select_node().await.expect("failed").unwrap();
+        let node3 = lb.select_node().await.expect("failed").unwrap();
+        let node4 = lb.select_node().await.expect("failed").unwrap();
 
         assert_eq!(node1, NodeId::new("node-1"));
         assert_eq!(node2, NodeId::new("node-2"));
@@ -206,7 +207,7 @@ mod tests {
         lb.add_node(NodeId::new("node-2")).await;
 
         // Initially both have 0, should select first
-        let node = lb.select_node().await.unwrap().unwrap();
+        let node = lb.select_node().await.expect("failed").unwrap();
         assert_eq!(node, NodeId::new("node-1"));
 
         // Increment connections for node-1
@@ -214,7 +215,7 @@ mod tests {
         lb.increment_connections(&NodeId::new("node-1")).await;
 
         // Now should select node-2 (fewer connections)
-        let node = lb.select_node().await.unwrap().unwrap();
+        let node = lb.select_node().await.expect("failed").unwrap();
         assert_eq!(node, NodeId::new("node-2"));
     }
 
@@ -234,7 +235,7 @@ mod tests {
         // Over 6 selections (one full cycle), we should see all nodes selected
         let mut selections = Vec::new();
         for _ in 0..6 {
-            let node = lb.select_node().await.unwrap().unwrap();
+            let node = lb.select_node().await.expect("failed").unwrap();
             selections.push(node);
         }
 
@@ -249,7 +250,7 @@ mod tests {
         let mut node3_count = 0;
 
         for _ in 0..18 {
-            let node = lb.select_node().await.unwrap().unwrap();
+            let node = lb.select_node().await.expect("failed").unwrap();
             if node == NodeId::new("node-1") {
                 node1_count += 1;
             } else if node == NodeId::new("node-2") {

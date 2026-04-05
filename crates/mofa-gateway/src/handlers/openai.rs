@@ -4,23 +4,20 @@
 //! that bridge to the InferenceOrchestrator.
 
 use axum::{
+    Extension, Json, Router,
     extract::State,
     http::{HeaderMap, StatusCode},
     response::IntoResponse,
     routing::post,
-    Json, Router, Extension,
 };
 use std::sync::Arc;
 
 use crate::error::GatewayError;
-use crate::inference_bridge::{
-    ChatCompletionRequest, ChatCompletionResponse, InferenceBridge,
-};
+use crate::inference_bridge::{ChatCompletionRequest, ChatCompletionResponse, InferenceBridge};
 
 /// Create the OpenAI-compatible router
 pub fn openai_router() -> Router {
-    Router::new()
-        .route("/v1/chat/completions", post(chat_completions))
+    Router::new().route("/v1/chat/completions", post(chat_completions))
 }
 
 /// Extract client key from request headers for rate-limiting
@@ -43,7 +40,7 @@ pub async fn chat_completions(
 ) -> Result<impl IntoResponse, GatewayError> {
     // Rate-limit check - simplified for now
     let client = client_key(&headers);
-    
+
     // Demo logging
     println!("Routing request via InferenceOrchestrator");
     println!("  Model: {}", req.model);
@@ -78,7 +75,7 @@ mod tests {
         };
 
         // Run completion
-        let response = bridge.run_chat_completion(request).await.unwrap();
+        let response = bridge.run_chat_completion(request).await.expect("failed");
 
         // Verify response format
         assert!(response.id.starts_with("chatcmpl-"));

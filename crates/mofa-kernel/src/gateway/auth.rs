@@ -291,7 +291,7 @@ mod tests {
     async fn auth_provider_valid_key_returns_claims() {
         let p = provider(vec!["agents:invoke"]);
         let headers = HashMap::from([("x-api-key".to_string(), "secret".to_string())]);
-        let claims = p.authenticate(&headers).await.unwrap();
+        let claims = p.authenticate(&headers).await.expect("failed");
         assert_eq!(claims.subject, "agent:test");
         assert!(claims.has_scope("agents:invoke"));
     }
@@ -300,7 +300,7 @@ mod tests {
     async fn auth_provider_insufficient_scope_after_auth() {
         let p = provider(vec!["agents:read"]);
         let headers = HashMap::from([("x-api-key".to_string(), "secret".to_string())]);
-        let claims = p.authenticate(&headers).await.unwrap();
+        let claims = p.authenticate(&headers).await.expect("failed");
         let err = claims.require_scope("agents:invoke").unwrap_err();
         assert!(matches!(
             err,

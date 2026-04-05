@@ -176,19 +176,19 @@ mod tests {
     #[tokio::test]
     async fn test_upsert_and_count() {
         let mut store = InMemoryVectorStore::cosine();
-        assert_eq!(store.count().await.unwrap(), 0);
+        assert_eq!(store.count().await.expect("failed"), 0);
 
         store
             .upsert(make_chunk("1", "hello", vec![1.0, 0.0, 0.0]))
             .await
             .unwrap();
-        assert_eq!(store.count().await.unwrap(), 1);
+        assert_eq!(store.count().await.expect("failed"), 1);
 
         store
             .upsert(make_chunk("2", "world", vec![0.0, 1.0, 0.0]))
             .await
             .unwrap();
-        assert_eq!(store.count().await.unwrap(), 2);
+        assert_eq!(store.count().await.expect("failed"), 2);
     }
 
     #[tokio::test]
@@ -204,9 +204,9 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(store.count().await.unwrap(), 1);
+        assert_eq!(store.count().await.expect("failed"), 1);
 
-        let results = store.search(&[0.0, 1.0], 1, None).await.unwrap();
+        let results = store.search(&[0.0, 1.0], 1, None).await.expect("failed");
         assert_eq!(results[0].text, "new text");
     }
 
@@ -219,8 +219,8 @@ mod tests {
             make_chunk("2", "two", vec![0.0, 1.0]),
             make_chunk("3", "three", vec![1.0, 1.0]),
         ];
-        store.upsert_batch(chunks).await.unwrap();
-        assert_eq!(store.count().await.unwrap(), 3);
+        store.upsert_batch(chunks).await.expect("failed");
+        assert_eq!(store.count().await.expect("failed"), 3);
     }
 
     #[tokio::test]
@@ -267,7 +267,7 @@ mod tests {
             .await
             .unwrap();
 
-        let results = store.search(&[1.0, 0.0, 0.0], 2, None).await.unwrap();
+        let results = store.search(&[1.0, 0.0, 0.0], 2, None).await.expect("failed");
 
         assert_eq!(results.len(), 2);
         assert_eq!(results[0].id, "a");
@@ -287,7 +287,7 @@ mod tests {
             .await
             .unwrap();
 
-        let results = store.search(&[1.0, 0.0], 10, Some(0.9)).await.unwrap();
+        let results = store.search(&[1.0, 0.0], 10, Some(0.9)).await.expect("failed");
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].id, "close");
     }
@@ -342,9 +342,9 @@ mod tests {
             .with_metadata("domain", "ops"),
         ];
 
-        store.upsert_batch(docs).await.unwrap();
+        store.upsert_batch(docs).await.expect("failed");
 
-        let results = store.search(&[1.0, 0.0, 0.0], 2, None).await.unwrap();
+        let results = store.search(&[1.0, 0.0, 0.0], 2, None).await.expect("failed");
         assert_eq!(results[0].id, "kb-billing");
         assert_eq!(
             results[0].metadata.get("domain").map(String::as_str),
@@ -360,13 +360,13 @@ mod tests {
             .upsert(make_chunk("1", "hello", vec![1.0, 0.0]))
             .await
             .unwrap();
-        assert_eq!(store.count().await.unwrap(), 1);
+        assert_eq!(store.count().await.expect("failed"), 1);
 
-        let deleted = store.delete("1").await.unwrap();
+        let deleted = store.delete("1").await.expect("failed");
         assert!(deleted);
-        assert_eq!(store.count().await.unwrap(), 0);
+        assert_eq!(store.count().await.expect("failed"), 0);
 
-        let deleted_again = store.delete("1").await.unwrap();
+        let deleted_again = store.delete("1").await.expect("failed");
         assert!(!deleted_again);
     }
 
@@ -374,12 +374,12 @@ mod tests {
     async fn test_clear() {
         let mut store = InMemoryVectorStore::cosine();
 
-        store.upsert(make_chunk("1", "a", vec![1.0])).await.unwrap();
-        store.upsert(make_chunk("2", "b", vec![2.0])).await.unwrap();
-        assert_eq!(store.count().await.unwrap(), 2);
+        store.upsert(make_chunk("1", "a", vec![1.0])).await.expect("failed");
+        store.upsert(make_chunk("2", "b", vec![2.0])).await.expect("failed");
+        assert_eq!(store.count().await.expect("failed"), 2);
 
-        store.clear().await.unwrap();
-        assert_eq!(store.count().await.unwrap(), 0);
+        store.clear().await.expect("failed");
+        assert_eq!(store.count().await.expect("failed"), 0);
     }
 
     #[tokio::test]
@@ -395,7 +395,7 @@ mod tests {
             .await
             .unwrap();
 
-        let results = store.search(&[1.0, 0.0], 2, None).await.unwrap();
+        let results = store.search(&[1.0, 0.0], 2, None).await.expect("failed");
         assert_eq!(results[0].id, "near");
     }
 
@@ -412,7 +412,7 @@ mod tests {
             .await
             .unwrap();
 
-        let results = store.search(&[1.0, 1.0], 2, None).await.unwrap();
+        let results = store.search(&[1.0, 1.0], 2, None).await.expect("failed");
         assert_eq!(results[0].id, "big");
     }
 
@@ -455,14 +455,14 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(store.embedding_dimensions, Some(2));
-        store.clear().await.unwrap();
+        store.clear().await.expect("failed");
         assert_eq!(store.embedding_dimensions, None);
         store
             .upsert(make_chunk("b", "text", vec![0.0, 1.0]))
             .await
             .unwrap();
         assert_eq!(store.embedding_dimensions, Some(2));
-        store.delete("b").await.unwrap();
+        store.delete("b").await.expect("failed");
         assert_eq!(store.embedding_dimensions, None);
     }
 

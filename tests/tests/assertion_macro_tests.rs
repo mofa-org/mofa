@@ -75,9 +75,9 @@ async fn assert_tool_called_with_panics_on_mismatched_arguments() {
 async fn assert_infer_called_passes_after_infer_call() {
     let backend = MockLLMBackend::new();
     backend.add_response("hi", "hello");
-    backend.register_model(make_config("m")).await.unwrap();
-    backend.load_model("m").await.unwrap();
-    backend.infer("m", "hi").await.unwrap();
+    backend.register_model(make_config("m")).await.expect("failed");
+    backend.load_model("m").await.expect("failed");
+    backend.infer("m", "hi").await.expect("failed");
 
     mofa_testing::assert_infer_called!(backend);
 }

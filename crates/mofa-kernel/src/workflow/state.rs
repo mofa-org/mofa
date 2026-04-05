@@ -293,8 +293,8 @@ mod tests {
     async fn test_json_state() {
         let mut state = JsonState::new();
 
-        state.apply_update("name", json!("test")).await.unwrap();
-        state.apply_update("count", json!(42)).await.unwrap();
+        state.apply_update("name", json!("test")).await.expect("failed");
+        state.apply_update("count", json!(42)).await.expect("failed");
 
         assert_eq!(state.get_value("name"), Some(json!("test")));
         assert_eq!(state.get_value("count"), Some(json!(42)));

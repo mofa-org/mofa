@@ -90,7 +90,11 @@ pub trait PiiRedactor: Send + Sync {
     ///
     /// # Returns
     /// RedactionResult with the redacted text and metadata
-    async fn redact(&self, text: &str, strategy: RedactionStrategy) -> SecurityResult<RedactionResult>;
+    async fn redact(
+        &self,
+        text: &str,
+        strategy: RedactionStrategy,
+    ) -> SecurityResult<RedactionResult>;
 }
 
 /// Redaction result

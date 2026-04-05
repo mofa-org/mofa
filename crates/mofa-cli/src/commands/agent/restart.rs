@@ -37,19 +37,19 @@ mod tests {
     #[tokio::test]
     async fn test_restart_chain_start_stop_restart_list() {
         let temp = TempDir::new().unwrap();
-        let ctx = CliContext::with_temp_dir(temp.path()).await.unwrap();
+        let ctx = CliContext::with_temp_dir(temp.path()).await.expect("failed");
 
         start::run(&ctx, "chain-agent", None, None, false)
             .await
             .unwrap();
-        stop::run(&ctx, "chain-agent", false).await.unwrap();
-        run(&ctx, "chain-agent", None).await.unwrap();
+        stop::run(&ctx, "chain-agent", false).await.expect("failed");
+        run(&ctx, "chain-agent", None).await.expect("failed");
 
         assert!(ctx.agent_registry.contains("chain-agent").await);
         let persisted = ctx.agent_store.get("chain-agent").unwrap().unwrap();
         assert_eq!(persisted.state, "Running");
 
-        list::run(&ctx, false, false).await.unwrap();
-        list::run(&ctx, true, false).await.unwrap();
+        list::run(&ctx, false, false).await.expect("failed");
+        list::run(&ctx, true, false).await.expect("failed");
     }
 }

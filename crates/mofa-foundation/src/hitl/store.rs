@@ -215,10 +215,10 @@ mod tests {
         let review_id = review.id.clone();
 
         // Create review
-        store.create_review(&review).await.unwrap();
+        store.create_review(&review).await.expect("failed");
 
         // Get review
-        let retrieved = store.get_review(&review_id).await.unwrap();
+        let retrieved = store.get_review(&review_id).await.expect("failed");
         assert!(retrieved.is_some());
         assert_eq!(retrieved.unwrap().execution_id, "exec-1");
     }
@@ -229,7 +229,7 @@ mod tests {
         let review = create_test_review("exec-1");
         let review_id = review.id.clone();
 
-        store.create_review(&review).await.unwrap();
+        store.create_review(&review).await.expect("failed");
 
         // Update status
         store
@@ -243,7 +243,7 @@ mod tests {
             .unwrap();
 
         // Verify update
-        let updated = store.get_review(&review_id).await.unwrap().unwrap();
+        let updated = store.get_review(&review_id).await.expect("failed").unwrap();
         assert_eq!(updated.status, ReviewStatus::Approved);
         assert_eq!(updated.resolved_by, Some("reviewer@test.com".to_string()));
     }
@@ -257,16 +257,16 @@ mod tests {
         let review2 = create_test_review("exec-2");
         let review3 = create_test_review("exec-3");
 
-        store.create_review(&review1).await.unwrap();
-        store.create_review(&review2).await.unwrap();
-        store.create_review(&review3).await.unwrap();
+        store.create_review(&review1).await.expect("failed");
+        store.create_review(&review2).await.expect("failed");
+        store.create_review(&review3).await.expect("failed");
 
         // List pending
-        let pending = store.list_pending(None, None).await.unwrap();
+        let pending = store.list_pending(None, None).await.expect("failed");
         assert_eq!(pending.len(), 3);
 
         // List with limit
-        let limited = store.list_pending(None, Some(2)).await.unwrap();
+        let limited = store.list_pending(None, Some(2)).await.expect("failed");
         assert_eq!(limited.len(), 2);
     }
 
@@ -286,16 +286,16 @@ mod tests {
         let mut review3 = create_test_review("exec-3");
         review3.metadata.tenant_id = Some(tenant_1);
 
-        store.create_review(&review1).await.unwrap();
-        store.create_review(&review2).await.unwrap();
-        store.create_review(&review3).await.unwrap();
+        store.create_review(&review1).await.expect("failed");
+        store.create_review(&review2).await.expect("failed");
+        store.create_review(&review3).await.expect("failed");
 
         // List for tenant_1
-        let tenant_1_reviews = store.list_pending(Some(tenant_1), None).await.unwrap();
+        let tenant_1_reviews = store.list_pending(Some(tenant_1), None).await.expect("failed");
         assert_eq!(tenant_1_reviews.len(), 2);
 
         // List for tenant_2
-        let tenant_2_reviews = store.list_pending(Some(tenant_2), None).await.unwrap();
+        let tenant_2_reviews = store.list_pending(Some(tenant_2), None).await.expect("failed");
         assert_eq!(tenant_2_reviews.len(), 1);
     }
 
@@ -307,15 +307,15 @@ mod tests {
         let review2 = create_test_review("exec-1");
         let review3 = create_test_review("exec-2");
 
-        store.create_review(&review1).await.unwrap();
-        store.create_review(&review2).await.unwrap();
-        store.create_review(&review3).await.unwrap();
+        store.create_review(&review1).await.expect("failed");
+        store.create_review(&review2).await.expect("failed");
+        store.create_review(&review3).await.expect("failed");
 
         // List by execution ID
-        let exec_1_reviews = store.list_by_execution("exec-1").await.unwrap();
+        let exec_1_reviews = store.list_by_execution("exec-1").await.expect("failed");
         assert_eq!(exec_1_reviews.len(), 2);
 
-        let exec_2_reviews = store.list_by_execution("exec-2").await.unwrap();
+        let exec_2_reviews = store.list_by_execution("exec-2").await.expect("failed");
         assert_eq!(exec_2_reviews.len(), 1);
     }
 

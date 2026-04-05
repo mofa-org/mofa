@@ -158,9 +158,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .name("demo-chain")
         // Primary: uses default trigger (fallback on RateLimited, QuotaExceeded,
         // NetworkError, Timeout, AuthError)
-        .add(PrimaryProvider::new(999))  // always rate-limited
+        .add_provider(PrimaryProvider::new(999))  // always rate-limited
         // Secondary: same default trigger
-        .add(SecondaryProvider::new())   // always quota-exceeded
+        .add_provider(SecondaryProvider::new())   // always quota-exceeded
         // Local: terminal — never falls back from here
         .add_last(LocalProvider::new())
         .build();
@@ -180,7 +180,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let chain2 = FallbackChain::builder()
         .name("recovering-chain")
-        .add(PrimaryProvider::new(1))    // rate-limited only on first call
+        .add_provider(PrimaryProvider::new(1))    // rate-limited only on first call
         .add_last(LocalProvider::new())
         .build();
 
