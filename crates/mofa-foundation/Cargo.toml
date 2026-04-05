@@ -46,6 +46,7 @@ linux-candle = ["dep:candle-core", "dep:candle-transformers"]
 http-api = ["dep:axum"]
 # Enable scheduler telemetry (Prometheus metrics)
 scheduler-telemetry = ["dep:metrics"]
+swarm-telemetry = ["dep:metrics"]
 
 
 [dependencies]
