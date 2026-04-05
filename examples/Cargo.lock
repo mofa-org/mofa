@@ -723,6 +723,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "cdp_demo"
+version = "0.1.0"
+dependencies = [
+ "mofa-kernel",
+ "tokio",
+ "tracing",
+ "tracing-subscriber 0.3.22",
+]
+
+[[package]]
 name = "cedarwood"
 version = "0.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
