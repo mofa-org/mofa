@@ -89,7 +89,7 @@ async fn main() -> Result<()> {
         .with_namespace("/agents");
 
     let bridge = SocketIoBridge::new(config, bus.clone());
-    let (socket_layer, _socket_router) = bridge.build();
+    let (socket_layer, _socket_router, _socket_io) = bridge.build();
 
     // ── Axum app ─────────────────────────────────────────────────────────────
     let app = Router::new()
