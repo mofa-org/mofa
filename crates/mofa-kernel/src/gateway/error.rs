@@ -37,4 +37,12 @@ pub enum RegistryError {
     /// The route failed basic field validation.
     #[error("route is invalid: {0}")]
     InvalidRoute(String),
+
+    /// An internal error not covered by the above variants.
+    ///
+    /// Used by dispatch and adapter layers to surface errors through the
+    /// registry error type without introducing new error dependencies.
+    #[error("internal error: {0}")]
+    Internal(String),
 }
+

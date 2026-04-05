@@ -72,6 +72,8 @@
 #![warn(missing_docs)]
 #![warn(clippy::all)]
 
+#[cfg(feature = "mcp")]
+pub mod adapters;
 pub mod consensus;
 pub mod control_plane;
 pub mod error;
