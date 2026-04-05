@@ -4,7 +4,8 @@
 //! exposing core MoFA functionality across Python, Kotlin, Swift, and Java.
 
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex as StdMutex};
+use std::sync::Arc;
+use parking_lot::Mutex;
 use tokio::runtime::Runtime;
 use tokio::sync::RwLock;
 
@@ -584,7 +585,7 @@ struct BuilderState {
 /// This is the primary interface for building LLMAgent instances from Python,
 /// Kotlin, Swift, and Java.
 pub struct LLMAgentBuilder {
-    state: Arc<StdMutex<BuilderState>>,
+    state: Arc<Mutex<BuilderState>>,
     runtime: Arc<Runtime>,
 }
 
@@ -594,14 +595,14 @@ impl LLMAgentBuilder {
         let runtime =
             tokio::runtime::Runtime::new().map_err(|e| MoFaError::RuntimeError(e.to_string()))?;
         Ok(Arc::new(Self {
-            state: Arc::new(StdMutex::new(BuilderState::default())),
+            state: Arc::new(Mutex::new(BuilderState::default())),
             runtime: Arc::new(runtime),
         }))
     }
 
     /// Set agent ID
     pub fn set_id(self: Arc<Self>, id: String) -> Arc<Self> {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock();
         state.agent_id = Some(id);
         drop(state);
         self
@@ -609,7 +610,7 @@ impl LLMAgentBuilder {
 
     /// Set agent name
     pub fn set_name(self: Arc<Self>, name: String) -> Arc<Self> {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock();
         state.name = Some(name);
         drop(state);
         self
@@ -617,7 +618,7 @@ impl LLMAgentBuilder {
 
     /// Set system prompt
     pub fn set_system_prompt(self: Arc<Self>, prompt: String) -> Arc<Self> {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock();
         state.system_prompt = Some(prompt);
         drop(state);
         self
@@ -625,7 +626,7 @@ impl LLMAgentBuilder {
 
     /// Set temperature
     pub fn set_temperature(self: Arc<Self>, temperature: f32) -> Arc<Self> {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock();
         state.temperature = Some(temperature);
         drop(state);
         self
@@ -633,7 +634,7 @@ impl LLMAgentBuilder {
 
     /// Set max tokens
     pub fn set_max_tokens(self: Arc<Self>, max_tokens: u32) -> Arc<Self> {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock();
         state.max_tokens = Some(max_tokens);
         drop(state);
         self
@@ -641,7 +642,7 @@ impl LLMAgentBuilder {
 
     /// Set initial session ID
     pub fn set_session_id(self: Arc<Self>, session_id: String) -> Arc<Self> {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock();
         state.session_id = Some(session_id);
         drop(state);
         self
@@ -649,7 +650,7 @@ impl LLMAgentBuilder {
 
     /// Set user ID
     pub fn set_user_id(self: Arc<Self>, user_id: String) -> Arc<Self> {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock();
         state.user_id = Some(user_id);
         drop(state);
         self
@@ -657,7 +658,7 @@ impl LLMAgentBuilder {
 
     /// Set tenant ID
     pub fn set_tenant_id(self: Arc<Self>, tenant_id: String) -> Arc<Self> {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock();
         state.tenant_id = Some(tenant_id);
         drop(state);
         self
@@ -665,7 +666,7 @@ impl LLMAgentBuilder {
 
     /// Set context window size (in rounds)
     pub fn set_context_window_size(self: Arc<Self>, size: u32) -> Arc<Self> {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock();
         state.context_window_size = Some(size as usize);
         drop(state);
         self
@@ -678,7 +679,7 @@ impl LLMAgentBuilder {
         base_url: Option<String>,
         model: Option<String>,
     ) -> Result<Arc<Self>, MoFaError> {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock();
         state.openai_api_key = Some(api_key);
         state.openai_base_url = base_url;
         state.openai_model = model;
@@ -691,7 +692,7 @@ impl LLMAgentBuilder {
         use mofa_foundation::llm::{LLMAgentBuilder, OpenAIConfig, OpenAIProvider};
         use std::sync::Arc as StdArc;
 
-        let state = self.state.lock().unwrap();
+        let state = self.state.lock();
 
         let agent_id = state
             .agent_id
@@ -763,7 +764,7 @@ impl LLMAgentBuilder {
 /// A conversation session holding messages and metadata.
 /// Wraps mofa_foundation::agent::session::Session for FFI.
 pub struct Session {
-    inner: StdMutex<mofa_foundation::agent::session::Session>,
+    inner: Mutex<mofa_foundation::agent::session::Session>,
 }
 
 impl Session {
@@ -776,17 +777,17 @@ impl Session {
 
     /// Get the session key
     pub fn get_key(&self) -> String {
-        self.inner.lock().unwrap().key.clone()
+        self.inner.lock().key.clone()
     }
 
     /// Add a message to the session
     pub fn add_message(&self, role: String, content: String) {
-        self.inner.lock().unwrap().add_message(role, content);
+        self.inner.lock().add_message(role, content);
     }
 
     /// Get message history (most recent N messages)
     pub fn get_history(&self, max_messages: u32) -> Vec<SessionMessageInfo> {
-        let session = self.inner.lock().unwrap();
+        let session = self.inner.lock();
         session
             .get_history(max_messages as usize)
             .iter()
@@ -800,17 +801,17 @@ impl Session {
 
     /// Clear all messages
     pub fn clear(&self) {
-        self.inner.lock().unwrap().clear();
+        self.inner.lock().clear();
     }
 
     /// Get the number of messages
     pub fn message_count(&self) -> u32 {
-        self.inner.lock().unwrap().len() as u32
+        self.inner.lock().len() as u32
     }
 
     /// Check if empty
     pub fn is_empty(&self) -> bool {
-        self.inner.lock().unwrap().is_empty()
+        self.inner.lock().is_empty()
     }
 
     /// Set metadata value (JSON string)
@@ -818,7 +819,7 @@ impl Session {
         let value: serde_json::Value = serde_json::from_str(&value_json).map_err(|e| {
             MoFaError::InvalidArgument(format!("Invalid JSON for metadata value: {}", e))
         })?;
-        self.inner.lock().unwrap().metadata.insert(key, value);
+        self.inner.lock().metadata.insert(key, value);
         Ok(())
     }
 
@@ -834,13 +835,13 @@ impl Session {
 
     /// Convert to the inner foundation Session (for saving)
     fn to_inner(&self) -> mofa_foundation::agent::session::Session {
-        self.inner.lock().unwrap().clone()
+        self.inner.lock().clone()
     }
 
     /// Create from an inner foundation Session
     fn from_inner(session: mofa_foundation::agent::session::Session) -> Arc<Self> {
         Arc::new(Self {
-            inner: StdMutex::new(session),
+            inner: Mutex::new(session),
         })
     }
 }
@@ -1018,7 +1019,7 @@ impl mofa_kernel::agent::components::tool::Tool for CallbackToolAdapter {
 
 /// Registry for managing tools that agents can invoke
 pub struct ToolRegistry {
-    inner: StdMutex<mofa_foundation::agent::components::tool::SimpleToolRegistry>,
+    inner: Mutex<mofa_foundation::agent::components::tool::SimpleToolRegistry>,
 }
 
 impl Default for ToolRegistry {
@@ -1031,7 +1032,7 @@ impl ToolRegistry {
     /// Create a new empty tool registry
     pub fn new() -> Self {
         Self {
-            inner: StdMutex::new(
+            inner: Mutex::new(
                 mofa_foundation::agent::components::tool::SimpleToolRegistry::new(),
             ),
         }
@@ -1054,7 +1055,6 @@ impl ToolRegistry {
         use mofa_kernel::agent::components::tool::ToolRegistry as _;
         self.inner
             .lock()
-            .unwrap()
             .unregister(&name)
             .map_err(|e: mofa_kernel::agent::error::AgentError| MoFaError::ToolError(e.to_string()))
     }
@@ -1064,7 +1064,6 @@ impl ToolRegistry {
         use mofa_kernel::agent::components::tool::ToolRegistry as _;
         self.inner
             .lock()
-            .unwrap()
             .list()
             .into_iter()
             .map(|desc| ToolInfo {
@@ -1078,19 +1077,19 @@ impl ToolRegistry {
     /// Get tool names
     pub fn list_tool_names(&self) -> Vec<String> {
         use mofa_kernel::agent::components::tool::ToolRegistry as _;
-        self.inner.lock().unwrap().list_names()
+        self.inner.lock().list_names()
     }
 
     /// Check if a tool exists
     pub fn has_tool(&self, name: String) -> bool {
         use mofa_kernel::agent::components::tool::ToolRegistry as _;
-        self.inner.lock().unwrap().contains(&name)
+        self.inner.lock().contains(&name)
     }
 
     /// Get the number of registered tools
     pub fn tool_count(&self) -> u32 {
         use mofa_kernel::agent::components::tool::ToolRegistry as _;
-        self.inner.lock().unwrap().count() as u32
+        self.inner.lock().count() as u32
     }
 
     /// Execute a tool by name with JSON arguments
@@ -1101,7 +1100,7 @@ impl ToolRegistry {
     ) -> Result<FfiToolResult, MoFaError> {
         use mofa_kernel::agent::components::tool::ToolRegistry as _;
 
-        let registry = self.inner.lock().unwrap();
+        let registry = self.inner.lock();
         let tool = registry
             .get(&name)
             .ok_or_else(|| MoFaError::ToolError(format!("Tool not found: {}", name)))?;
