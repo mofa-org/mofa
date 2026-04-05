@@ -14,6 +14,7 @@ pub use patterns::CoordinationPattern;
 pub mod scheduler;
 pub use scheduler::{
     FailurePolicy, ParallelScheduler, SchedulerSummary, SequentialScheduler, SubtaskExecutorFn,
-    SwarmScheduler, SwarmSchedulerConfig, TaskExecutionResult, TaskOutcome,
+    SwarmScheduler, SwarmSchedulerConfig, TaskDependencyContext, TaskExecutionContext,
+    TaskExecutionResult, TaskOutcome,
 };
 pub use telemetry::{audit_batch_to_debug, audit_to_debug};

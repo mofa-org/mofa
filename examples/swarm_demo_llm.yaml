@@ -1,0 +1,65 @@
+# swarm_demo_llm.yaml
+# Run with: mofa swarm run examples/swarm_demo_llm.yaml
+#
+# Alternative LLM-backed swarm CLI example.
+# Required environment:
+#   OPENAI_API_KEY=...
+# Optional environment:
+#   OPENAI_BASE_URL=...
+#   OPENAI_MODEL=...
+#
+# The scheduler runs the DAG and each node executes through the LLM executor,
+# receiving upstream dependency outputs as part of its prompt context.
+executor: llm
+name: research-and-summarize-llm
+description: "Research recent AI breakthroughs and synthesize them using LLM-backed subtasks"
+task: "Find and summarize 3 recent AI research breakthroughs from 2025"
+pattern: parallel
+agents:
+  - id: researcher
+    capabilities: [web_search, document_read]
+    model: llama3-8b-8192
+    max_concurrency: 2
+  - id: analyst
+    capabilities: [analyze, compare]
+    model: llama3-8b-8192
+  - id: writer
+    capabilities: [summarize, write]
+    model: llama3-8b-8192
+dag:
+  tasks:
+    - id: decompose
+      description: "Break the research goal into concrete sub-questions to investigate"
+      capabilities: [analyze]
+    - id: web_search
+      description: "Identify candidate AI breakthroughs from 2025 and note why they matter"
+      capabilities: [web_search]
+    - id: collect_stats
+      description: "Collect supporting metrics, release details, and factual context for the candidates"
+      capabilities: [document_read]
+    - id: analyze
+      description: "Compare the findings, filter weak candidates, and rank the top 3 breakthroughs"
+      capabilities: [analyze, compare]
+    - id: summarize
+      description: "Write a concise final summary with the top 3 breakthroughs and brief rationale"
+      capabilities: [summarize, write]
+  dependencies:
+    - from: decompose
+      to: web_search
+    - from: decompose
+      to: collect_stats
+    - from: web_search
+      to: analyze
+    - from: collect_stats
+      to: analyze
+    - from: analyze
+      to: summarize
+sla:
+  max_duration_secs: 300
+  max_cost_tokens: 20000
+  min_quality: 0.7
+hitl: optional
+metadata:
+  author: "MoFA Swarm Demo"
+  variant: "llm"
+  version: "1.0"

@@ -106,7 +106,9 @@ async fn run_command(cli: Cli) -> CliResult<()> {
         }) => {
             commands::new::run(&name, &template, output.as_deref())
                 .into_report()
-                .attach_with(|| format!("scaffolding project '{name}' with template '{template}'"))?;
+                .attach_with(|| {
+                    format!("scaffolding project '{name}' with template '{template}'")
+                })?;
         }
 
         Some(Commands::Init { path }) => {
@@ -387,6 +389,15 @@ async fn run_command(cli: Cli) -> CliResult<()> {
             }
         },
 
+        Some(Commands::Swarm { action }) => match action {
+            cli::SwarmCommands::Run { file, json } => {
+                commands::swarm::run_swarm(&file, json).await?;
+            }
+            cli::SwarmCommands::Validate { file } => {
+                commands::swarm::validate_swarm(&file).await?;
+            }
+        },
+
         None => {
             // Should have been handled by TUI check above
             // If we get here, show help
@@ -404,7 +415,7 @@ async fn run_command(cli: Cli) -> CliResult<()> {
 fn normalize_legacy_output_flags(args: &mut [String]) {
     const TOP_LEVEL_COMMANDS: &[&str] = &[
         "new", "init", "build", "run", "dataflow", "generate", "info", "db", "agent", "config",
-        "plugin", "session", "tool", "doctor", "rag",
+        "plugin", "session", "tool", "doctor", "rag", "swarm",
     ];
 
     let top_command_index = args
