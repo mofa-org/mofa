@@ -297,6 +297,10 @@ fn test_dsl_command_fails_on_baseline_mismatch_when_flag_set() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_dsl_command_records_tape_from_live_provider() {
+    fn toml_string(path: &std::path::Path) -> String {
+        path.display().to_string().replace('\\', "\\\\")
+    }
+
     async fn completions(Json(_request): Json<serde_json::Value>) -> Json<serde_json::Value> {
         Json(json!({
             "choices": [
@@ -332,7 +336,7 @@ async fn test_dsl_command_records_tape_from_live_provider() {
         &case_path,
         format!(
             "name = \"record_case\"\nprompt = \"hello\"\n\n[llm]\nrecord_tape = \"{}\"\n\n[llm.provider]\nkind = \"open_ai_compatible\"\nbase_url = \"http://{}/v1\"\nmodel = \"mock-model\"\n",
-            tape_path.display(),
+            toml_string(&tape_path),
             address
         ),
     )
