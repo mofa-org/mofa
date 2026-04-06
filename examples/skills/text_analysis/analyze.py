@@ -64,7 +64,7 @@ def analyze_text(text, analysis_type="all"):
     }
 
     if analysis_type in ["all", "sentiment"]:
-        result["analyses.append("sentiment")
+        result["analyses"].append("sentiment")
         result["sentiment"] = analyze_sentiment(text)
 
     if analysis_type in ["all", "entities"]:
