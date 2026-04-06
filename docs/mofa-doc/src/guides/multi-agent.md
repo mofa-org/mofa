@@ -112,13 +112,176 @@ let debate = Debate::new()
 let result = debate.debide(&topic).await?;
 ```
 
+## Risk-Aware Swarm Orchestration
+
+Every `SwarmSubtask` carries a `RiskLevel` (Low / Medium / High / Critical) that drives two capabilities: automatic HITL routing and critical-path scheduling.
+
+### Risk Classification
+
+Use `TaskAnalyzer::analyze_offline_with_risk()` for instant, no-API-key decomposition with keyword-based risk heuristics:
+
+```rust,ignore
+use mofa_foundation::swarm::TaskAnalyzer;
+
+let analysis = TaskAnalyzer::analyze_offline_with_risk(
+    "fetch customer records then charge payment card then send email"
+);
+
+println!("critical path: {:?}", analysis.critical_path);
+println!("hitl required: {:?}", analysis.hitl_required_tasks);
+println!("critical tasks: {}", analysis.risk_summary.critical);
+```
+
+Risk levels are inferred from keywords in the task description:
+
+| Keyword examples | Assigned level |
+|-----------------|---------------|
+| `delete`, `pay`, `deploy`, `destroy` | Critical |
+| `write`, `create`, `post`, `send`, `update` | High |
+| `read`, `search`, `fetch`, `list` | Low |
+
+Or use `analyze_with_risk()` for full LLM decomposition — the enhanced prompt asks the model to justify each risk assignment.
+
+### Critical Path
+
+`RiskAwareAnalysis` exposes the longest-duration execution chain before a single task runs:
+
+```rust,ignore
+// Forward-pass DP over topological order
+println!("bottleneck: {:?}", analysis.critical_path);
+println!("min wall time: {}s", analysis.critical_path_duration_secs);
+```
+
+This lets callers set tighter concurrency limits or escalate high-duration paths before committing to a run.
+
+---
+
+## HITL Gate
+
+`SwarmHITLGate` wraps any `SubtaskExecutorFn` and routes High / Critical tasks through the production `ReviewManager` for human approval before they execute. It is a drop-in wrapper — no scheduler changes required.
+
+```rust,ignore
+use mofa_foundation::swarm::{SwarmHITLGate, HITLMode, ParallelScheduler, SwarmSchedulerConfig};
+use mofa_foundation::hitl::manager::{ReviewManager, ReviewManagerConfig};
+use mofa_foundation::hitl::notifier::ReviewNotifier;
+use mofa_foundation::hitl::policy_engine::ReviewPolicyEngine;
+use mofa_foundation::hitl::store::InMemoryReviewStore;
+use std::sync::Arc;
+
+let store = Arc::new(InMemoryReviewStore::new());
+let notifier = Arc::new(ReviewNotifier::default());
+let policy = Arc::new(ReviewPolicyEngine::default());
+let manager = Arc::new(ReviewManager::new(store, notifier, policy, None, ReviewManagerConfig::default()));
+
+let gate = Arc::new(SwarmHITLGate::new(
+    Arc::clone(&manager),
+    HITLMode::Optional,   // only intercept hitl_required or risk >= High
+    analysis.dag.id.clone(),
+));
+
+let gated_executor = gate.wrap_executor(inner_executor);
+let summary = ParallelScheduler::default()
+    .execute(&mut analysis.dag, gated_executor)
+    .await?;
+```
+
+### HITLMode
+
+| Mode | Behaviour |
+|------|-----------|
+| `None` | All tasks bypass the gate — no reviews submitted |
+| `Required` | Every task is intercepted regardless of risk |
+| `Optional` | Only tasks where `hitl_required == true` or `risk_level >= threshold`; timeout auto-approves |
+
+### Custom Interception Predicate
+
+`with_intercept_when` replaces the built-in risk threshold with any predicate over the task:
+
+```rust,ignore
+let gate = Arc::new(
+    SwarmHITLGate::new(manager, HITLMode::Optional, "exec-1")
+        .with_intercept_when(|task| {
+            // Intercept tasks that touch payment or require a specific capability,
+            // regardless of their assigned risk level.
+            task.description.to_lowercase().contains("pay")
+                || task.required_capabilities.contains(&"write_production_db".to_string())
+        }),
+);
+```
+
+### HITLGateMetrics
+
+Call `gate.enrich_summary(summary)` after the scheduler returns to embed a metrics snapshot in the `SchedulerSummary`:
+
+```rust,ignore
+let summary = scheduler.execute(&mut dag, gated_executor).await?;
+let summary = gate.enrich_summary(summary);
+
+if let Some(m) = &summary.hitl_stats {
+    println!("intercepted: {}", m.intercepted);
+    println!("approved: {}  modified: {}  rejected: {}", m.approved, m.modified, m.rejected);
+    println!("auto-approved on timeout: {}", m.auto_approved_timeout);
+    println!("avg review latency: {} ms", m.avg_review_latency_ms());
+}
+```
+
+Fields tracked: `intercepted`, `approved`, `modified`, `rejected`, `auto_approved_timeout`, `total_review_latency_ms`. Uses `AtomicU64` internally so parallel tasks never contend on a lock.
+
+### HITLNotifier
+
+Attach an observer to fan out gate events to any secondary sink — Slack, PagerDuty, a CLI prompt — without changing the approval flow:
+
+```rust,ignore
+use mofa_foundation::swarm::{HITLDecision, HITLNotifier, SwarmSubtask};
+
+struct SlackNotifier { webhook_url: String }
+
+impl HITLNotifier for SlackNotifier {
+    fn on_intercepted(&self, task: &SwarmSubtask) {
+        // post "task X is awaiting review" to Slack
+    }
+
+    fn on_decision(&self, task: &SwarmSubtask, decision: HITLDecision, latency_ms: u64) {
+        // post "task X was approved/rejected in N ms" to Slack
+    }
+}
+
+let gate = SwarmHITLGate::new(manager, HITLMode::Optional, "exec-1")
+    .with_notifier(Arc::new(SlackNotifier { webhook_url: "...".into() }));
+```
+
+`HITLDecision` variants: `Approved`, `Modified`, `Rejected`, `AutoApprovedTimeout`.
+
+### Full Pipeline
+
+```text
+analyze_offline_with_risk()         ← risk classification
+        │
+        ▼  RiskAwareAnalysis
+SwarmHITLGate::wrap_executor()      ← intercepts tasks (risk threshold or custom predicate)
+        │   with_intercept_when()   ← swap what gets intercepted
+        │   with_notifier()         ← fan out events to Slack / PagerDuty / CLI
+        │                              submits ReviewRequest → ReviewManager
+        │                              waits for Approved / Rejected / ChangesRequested
+        ▼
+ParallelScheduler::execute()        ← runs DAG concurrently
+        │
+        ▼  SchedulerSummary
+gate.enrich_summary()               ← attach HITLGateMetrics to summary
+```
+
+The gate plugs directly into `ReviewManager`, giving swarm tasks access to audit trail, webhook notifications, and the REST review API out of the box.
+
+---
+
 ## Best Practices
 
 1. **Clear Responsibilities** — Each agent should have one job
 2. **Well-Defined Interfaces** — Use consistent input/output types
 3. **Error Handling** — Plan for agent failures
-4. **Timeouts** — Set appropriate timeouts
+4. **Timeouts** — Set appropriate timeouts for both tasks and HITL reviews
 5. **Logging** — Log inter-agent communication
+6. **Risk tagging** — Use `with_risk_level()` on hand-built subtasks; use `analyze_offline_with_risk()` for LLM-free decomposition
 
 ## See Also
 
