@@ -5,6 +5,7 @@ use petgraph::Direction;
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::visit::EdgeRef;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::collections::HashMap;
 use uuid::Uuid;
 
@@ -73,12 +74,30 @@ pub enum SubtaskStatus {
     Skipped,
 }
 
+/// How a subtask should resolve its declared capabilities at execution time.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum CapabilityExecutionPolicy {
+    /// Use a matching registered capability when available, otherwise fall back.
+    #[default]
+    PreferCapability,
+    /// Require a matching registered capability and fail when none is available.
+    RequireCapability,
+    /// Ignore registered capabilities and always use the local executor path.
+    LocalOnly,
+}
+
 /// A single subtask node in the DAG
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SwarmSubtask {
     pub id: String,
     pub description: String,
+    #[serde(default, alias = "capabilities")]
     pub required_capabilities: Vec<String>,
+    #[serde(default)]
+    pub capability_params: HashMap<String, Value>,
+    #[serde(default)]
+    pub capability_policy: CapabilityExecutionPolicy,
     pub status: SubtaskStatus,
     pub assigned_agent: Option<String>,
     pub output: Option<String>,
@@ -109,6 +128,8 @@ impl SwarmSubtask {
             id: id.into(),
             description: description.into(),
             required_capabilities: Vec::new(),
+            capability_params: HashMap::new(),
+            capability_policy: CapabilityExecutionPolicy::default(),
             status: SubtaskStatus::Pending,
             assigned_agent: None,
             output: None,
@@ -124,6 +145,18 @@ impl SwarmSubtask {
     /// Set required capabilities for this subtask
     pub fn with_capabilities(mut self, caps: Vec<String>) -> Self {
         self.required_capabilities = caps;
+        self
+    }
+
+    /// Set structured capability parameters for this subtask.
+    pub fn with_capability_params(mut self, params: HashMap<String, Value>) -> Self {
+        self.capability_params = params;
+        self
+    }
+
+    /// Set the capability execution policy for this subtask.
+    pub fn with_capability_policy(mut self, policy: CapabilityExecutionPolicy) -> Self {
+        self.capability_policy = policy;
         self
     }
 
@@ -191,6 +224,37 @@ pub struct SubtaskDAG {
 }
 
 impl SubtaskDAG {
+    /// Build a DAG from validated subtasks and dependency records.
+    pub fn from_subtasks(
+        name: impl Into<String>,
+        tasks: Vec<SwarmSubtask>,
+        dependencies: Vec<(String, String, DependencyKind)>,
+    ) -> GlobalResult<Self> {
+        let mut dag = Self::new(name);
+
+        for task in tasks {
+            let id = task.id.trim();
+            if id.is_empty() {
+                return Err(GlobalError::Other(
+                    "Subtask 'id' must not be empty".to_string(),
+                ));
+            }
+            if dag.find_by_id(id).is_some() {
+                return Err(GlobalError::Other(format!(
+                    "Duplicate subtask id '{}' all ids must be unique",
+                    task.id
+                )));
+            }
+            dag.add_task(task);
+        }
+
+        for (from_id, to_id, kind) in dependencies {
+            dag.add_dependency_by_id(&from_id, &to_id, kind)?;
+        }
+
+        Ok(dag)
+    }
+
     /// Create a new empty DAG
     pub fn new(name: impl Into<String>) -> Self {
         Self {
@@ -233,6 +297,22 @@ impl SubtaskDAG {
         }
 
         Ok(())
+    }
+
+    /// Add a dependency edge by subtask id.
+    pub fn add_dependency_by_id(
+        &mut self,
+        from_id: &str,
+        to_id: &str,
+        kind: DependencyKind,
+    ) -> GlobalResult<()> {
+        let from = self.find_by_id(from_id).ok_or_else(|| {
+            GlobalError::Other(format!("dependency references unknown task id '{}'", from_id))
+        })?;
+        let to = self.find_by_id(to_id).ok_or_else(|| {
+            GlobalError::Other(format!("dependency references unknown task id '{}'", to_id))
+        })?;
+        self.add_dependency_with_kind(from, to, kind)
     }
 
     /// Return tasks that are pending and have all hard dependencies satisfied
@@ -405,6 +485,22 @@ impl SubtaskDAG {
         if let Some(task) = self.graph.node_weight_mut(idx) {
             task.assigned_agent = Some(agent_id.into());
         }
+    }
+
+    /// Rebuild the internal task-id index after deserialization.
+    pub fn rebuild_index(&mut self) -> GlobalResult<()> {
+        let mut rebuilt = HashMap::new();
+        for idx in self.graph.node_indices() {
+            let task = &self.graph[idx];
+            if rebuilt.insert(task.id.clone(), idx).is_some() {
+                return Err(GlobalError::Other(format!(
+                    "Duplicate subtask id '{}' found while rebuilding DAG index",
+                    task.id
+                )));
+            }
+        }
+        self.id_to_index = rebuilt;
+        Ok(())
     }
 
     /// Number of tasks in the Failed state
@@ -923,6 +1019,11 @@ mod tests {
         assert_eq!(t.risk_level, RiskLevel::Low);
         assert!(!t.hitl_required);
         assert!(t.estimated_duration_secs.is_none());
+        assert!(t.capability_params.is_empty());
+        assert_eq!(
+            t.capability_policy,
+            CapabilityExecutionPolicy::PreferCapability
+        );
     }
 
     #[test]
@@ -949,6 +1050,17 @@ mod tests {
         let mut hitl = dag.hitl_required_tasks();
         hitl.sort();
         assert_eq!(hitl, vec!["crit", "high"]);
+    }
+
+    #[test]
+    fn test_rebuild_index_restores_lookup_state() {
+        let mut dag = SubtaskDAG::new("rebuild");
+        let idx = dag.add_task(SwarmSubtask::new("task-1", "Task"));
+        dag.id_to_index.clear();
+        assert_eq!(dag.find_by_id("task-1"), None);
+
+        dag.rebuild_index().unwrap();
+        assert_eq!(dag.find_by_id("task-1"), Some(idx));
     }
 
     #[test]
