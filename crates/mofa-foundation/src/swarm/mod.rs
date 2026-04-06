@@ -1,4 +1,5 @@
 pub mod analyzer;
+pub mod capability_registry;
 pub mod config;
 pub mod dag;
 pub mod patterns;
@@ -17,3 +18,4 @@ pub use scheduler::{
     SwarmScheduler, SwarmSchedulerConfig, TaskExecutionResult, TaskOutcome,
 };
 pub use telemetry::{audit_batch_to_debug, audit_to_debug};
+pub use capability_registry::{CoverageReport, SwarmCapabilityRegistry};
