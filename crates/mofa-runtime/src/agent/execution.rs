@@ -420,7 +420,7 @@ impl ExecutionEngine {
                     let mut r = ExecutionResult::success(
                         execution_id,
                         agent_id.to_string(),
-                        fallback_output,
+                        (*fallback_output).clone(),
                         duration_ms,
                     );
                     r.retries = attempts.saturating_sub(1);
