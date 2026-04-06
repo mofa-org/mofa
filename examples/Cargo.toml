@@ -54,6 +54,7 @@ members = [
     "cron_scheduler",
     "native_dataflow",
     "mcp_tools",
+    "mcp_server",
     "memory_scheduler_demo",
     "cli_doctor_demo",
     "capability_discovery",
