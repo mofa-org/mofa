@@ -9,6 +9,7 @@ pub mod builder;
 pub mod components;
 pub mod context;
 pub mod executor;
+pub mod governance;
 pub mod session;
 pub mod tools;
 
@@ -109,6 +110,7 @@ pub use session::{
 
 // Re-export executor module
 pub use executor::{AgentExecutor, AgentExecutorConfig};
+pub use governance::{GovernancePipeline, GovernancePolicy};
 
 // Re-export builder module
 pub use builder::{AgentBuilder, AgentProfile, AgentRegistry};
