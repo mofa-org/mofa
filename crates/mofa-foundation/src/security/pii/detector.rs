@@ -7,9 +7,7 @@ use crate::security::pii::patterns::{
     SSN_PATTERN, validate_luhn,
 };
 use async_trait::async_trait;
-use mofa_kernel::security::{
-    PiiDetector, RedactionMatch, SecurityResult, SensitiveDataCategory,
-};
+use mofa_kernel::security::{PiiDetector, RedactionMatch, SecurityResult, SensitiveDataCategory};
 
 /// Regex-based PII detector
 pub struct RegexPiiDetector {
@@ -79,7 +77,8 @@ impl RegexPiiDetector {
             .filter(|m| {
                 if self.validate_credit_cards {
                     // Remove spaces and dashes for validation
-                    let cleaned: String = m.as_str().chars().filter(|c| c.is_ascii_digit()).collect();
+                    let cleaned: String =
+                        m.as_str().chars().filter(|c| c.is_ascii_digit()).collect();
                     validate_luhn(&cleaned)
                 } else {
                     true
@@ -125,9 +124,7 @@ impl RegexPiiDetector {
                 if parts.len() != 4 {
                     return false;
                 }
-                parts.iter().all(|part| {
-                    part.parse::<u8>().is_ok()
-                })
+                parts.iter().all(|part| part.parse::<u8>().is_ok())
             })
             .map(|m| {
                 let original = m.as_str().to_string();
@@ -189,6 +186,7 @@ impl PiiDetector for RegexPiiDetector {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Arc;
 
     #[tokio::test]
     async fn test_detect_emails() {
@@ -244,11 +242,127 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_no_pii() {
+    async fn test_invalid_credit_card_rejected_with_validation() {
         let detector = RegexPiiDetector::new();
-        let text = "This is just regular text with no sensitive information.";
+        let text = "Card: 4111-1111-1111-1112";
         let results = detector.detect(text).await.unwrap();
 
-        assert_eq!(results.len(), 0);
+        assert!(results.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_invalid_credit_card_detected_without_validation() {
+        let detector = RegexPiiDetector::without_validation();
+        let text = "Card: 4111-1111-1111-1112";
+        let results = detector.detect(text).await.unwrap();
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].category, SensitiveDataCategory::CreditCard);
+    }
+
+    #[tokio::test]
+    async fn test_invalid_ip_filtered() {
+        let detector = RegexPiiDetector::new();
+        let text = "Bad IP 999.10.10.10 and valid IP 192.168.1.1";
+        let results = detector.detect(text).await.unwrap();
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].category, SensitiveDataCategory::IpAddress);
+        assert_eq!(results[0].original, "192.168.1.1");
+    }
+
+    #[tokio::test]
+    async fn test_empty_input() {
+        let detector = RegexPiiDetector::new();
+        let results = detector.detect("").await.unwrap();
+
+        assert!(results.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_concurrent_detection_consistency() {
+        let detector = Arc::new(RegexPiiDetector::new());
+        let text = "Email: user@example.com, Phone: (555) 123-4567, SSN: 123-45-6789";
+
+        let mut tasks = Vec::new();
+        for _ in 0..16 {
+            let detector = Arc::clone(&detector);
+            let text = text.to_string();
+            tasks.push(tokio::spawn(async move {
+                detector.detect(&text).await.unwrap().len()
+            }));
+        }
+
+        for task in tasks {
+            assert_eq!(task.await.unwrap(), 3);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_detect_plus_tag_email() {
+        let detector = RegexPiiDetector::new();
+        let text = "Reach me at test.user+tag@example.co.uk";
+        let results = detector.detect(text).await.unwrap();
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].category, SensitiveDataCategory::Email);
+        assert_eq!(results[0].original, "test.user+tag@example.co.uk");
+    }
+
+    #[tokio::test]
+    async fn test_email_like_text_not_detected() {
+        let detector = RegexPiiDetector::new();
+        let text = "Contact user at example dot com";
+        let results = detector.detect(text).await.unwrap();
+
+        assert!(results.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_detect_api_key() {
+        let detector = RegexPiiDetector::new();
+        let text = "Token: sk-1234567890abcdefghijklmn";
+        let results = detector.detect(text).await.unwrap();
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].category, SensitiveDataCategory::ApiKey);
+    }
+
+    #[tokio::test]
+    async fn test_short_api_key_not_detected() {
+        let detector = RegexPiiDetector::new();
+        let text = "Token: sk-short";
+        let results = detector.detect(text).await.unwrap();
+
+        assert!(results.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_invalid_ssn_not_detected() {
+        let detector = RegexPiiDetector::new();
+        let text = "SSN 123-456-789 is invalid format";
+        let results = detector.detect(text).await.unwrap();
+
+        assert!(results.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_phone_with_country_code_detected() {
+        let detector = RegexPiiDetector::new();
+        let text = "Call +1 555-123-4567 now";
+        let results = detector.detect(text).await.unwrap();
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].category, SensitiveDataCategory::Phone);
+    }
+
+    #[tokio::test]
+    async fn test_results_are_sorted_by_start_position() {
+        let detector = RegexPiiDetector::new();
+        let text = "SSN: 123-45-6789 then email user@example.com then IP 10.0.0.1";
+        let results = detector.detect(text).await.unwrap();
+
+        assert!(results.len() >= 3);
+        assert!(results.windows(2).all(|w| w[0].start <= w[1].start));
     }
 }
