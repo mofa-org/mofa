@@ -1,0 +1,43 @@
+# Workflow Configuration for Local Compute Mesh Demo
+#
+# This is a placeholder workflow definition for the compute mesh demo.
+# It demonstrates the pipeline structure but does not contain executable logic.
+#
+# The actual workflow execution will be implemented in future issues.
+
+workflow:
+  name: local_compute_mesh_demo
+  description: Example workflow for demonstrating MoFA compute mesh architecture
+  version: "1.0"
+  steps:
+    - id: user_prompt
+      type: input
+      description: Accept user prompt
+
+    - id: workflow_processing
+      type: workflow
+      description: Process prompt through workflow engine
+
+    - id: inference_step
+      type: inference
+      description: Placeholder for compute mesh inference routing
+
+    - id: response
+      type: output
+      description: Return generated response
+
+# Pipeline Architecture:
+#
+# User Prompt → Workflow Engine → Inference Router → Local Backend → Response
+#
+# This workflow demonstrates:
+# 1. User input handling
+# 2. Workflow processing
+# 3. Inference routing (placeholder)
+# 4. Response generation (placeholder)
+#
+# Future implementation will integrate:
+# - Full workflow DSL parser and executor
+# - Smart routing policies
+# - Local LLM backend integration (Ollama, candle, etc.)
+# - Streaming response support
