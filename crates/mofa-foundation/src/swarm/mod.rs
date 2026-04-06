@@ -1,10 +1,12 @@
 pub mod analyzer;
+pub mod audit_log;
 pub mod config;
 pub mod dag;
 pub mod patterns;
 pub mod telemetry;
 
 pub use analyzer::{RiskAwareAnalysis, RiskSummary, TaskAnalyzer};
+pub use audit_log::{AuditEntry, SwarmAuditLog, SwarmAuditor};
 pub use config::{
     AgentSpec, AuditEvent, AuditEventKind, HITLMode, SLAConfig, SwarmConfig, SwarmMetrics,
     SwarmResult, SwarmStatus,

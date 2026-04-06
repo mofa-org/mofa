@@ -1,0 +1,11 @@
+[package]
+name = "swarm_audit_log"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+mofa-foundation = { path = "../../crates/mofa-foundation" }
+tokio = { workspace = true, features = ["full"] }
+serde_json.workspace = true
+chrono.workspace = true
