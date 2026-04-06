@@ -1,0 +1,36 @@
+[package]
+name = "voice_agent"
+version = "0.1.0"
+edition.workspace = true
+description = "End-to-end voice agent: mic → Deepgram ASR → OpenAI LLM → ElevenLabs TTS → speaker"
+
+[[bin]]
+name = "voice_agent"
+path = "src/main.rs"
+
+[[bin]]
+name = "file_transcription"
+path = "src/file_transcription.rs"
+
+[[bin]]
+name = "adapter_registry"
+path = "src/adapter_registry.rs"
+
+[[bin]]
+name = "streaming_tts"
+path = "src/streaming_tts.rs"
+
+[dependencies]
+mofa-kernel = { path = "../../crates/mofa-kernel" }
+mofa-foundation = { path = "../../crates/mofa-foundation" }
+mofa-integrations = { path = "../../crates/mofa-integrations", features = ["deepgram", "elevenlabs", "openai-speech"] }
+tokio = { workspace = true, features = ["full"] }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow = { workspace = true }
+futures = { workspace = true }
+
+# Audio I/O
+cpal = "0.15"     # microphone capture (cross-platform via ALSA / CoreAudio / WASAPI)
+hound = "3.5"     # WAV encode/decode — Deepgram ASR accepts WAV
+rodio = "0.17"    # audio playback — decodes ElevenLabs MP3 output
