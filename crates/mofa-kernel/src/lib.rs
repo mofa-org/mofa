@@ -69,6 +69,10 @@ pub mod llm;
 pub mod metrics;
 pub use metrics::*;
 
+// Async runtime abstraction
+pub mod async_runtime;
+pub use async_runtime::{AsyncRuntime, JoinHandle, SleepFuture, TimeoutError, TimeoutFuture};
+
 // Human-in-the-Loop (HITL) module
 pub mod hitl;
 // Explicit re-exports instead of `pub use hitl::*` to avoid ambiguous
@@ -88,6 +92,7 @@ pub mod budget;
 // Structured output parsing with JSON schema validation
 pub mod structured_output;
 pub use structured_output::StructuredOutput;
+
 // Security governance (PII redaction, content moderation, prompt guard)
 pub mod security;
 
