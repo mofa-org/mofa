@@ -5,5 +5,5 @@ mod format;
 mod types;
 
 pub use builder::TestReportBuilder;
-pub use format::{JsonFormatter, ReportFormatter, TextFormatter};
+pub use format::{JsonFormatter, JUnitFormatter, ReportFormatter, TextFormatter};
 pub use types::{TestCaseResult, TestReport, TestStatus};
