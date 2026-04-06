@@ -8,12 +8,14 @@ pub mod assertions;
 pub mod backend;
 pub mod bus;
 pub mod clock;
+pub mod hitl;
 pub mod report;
 pub mod tools;
 
 pub use backend::MockLLMBackend;
 pub use bus::MockAgentBus;
 pub use clock::{Clock, MockClock, SystemClock};
+pub use hitl::{HitlTestHarness, ScriptedDecision, ScriptedReviewer};
 pub use report::{
     JsonFormatter, ReportFormatter, TestCaseResult, TestReport, TestReportBuilder, TestStatus,
     TextFormatter,
