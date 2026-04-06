@@ -1,0 +1,96 @@
+﻿cargo :    Compiling 
+mofa-runtime v0.1.0 (D:
+\mofa\crates\mofa-runti
+me)
+At line:1 char:1
++ cargo test -p 
+mofa-runtime 2>&1 | 
+Out-File check_runtime_
+tests.txt -E ...
++ ~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~
+    + CategoryInfo     
+         : NotSpecifi  
+  ed: (   Compiling    
+ mo...s\mofa-runtim    
+e):String) [], Rem    
+oteException
+    + FullyQualifiedEr 
+   rorId : NativeComm  
+  andError
+ 
+    Finished `test` 
+profile [unoptimized + 
+debuginfo] target(s) 
+in 19.43s
+     Running unittests 
+src\lib.rs (target\debu
+g\deps\mofa_runtime-10a
+cbd0f7ca674e7.exe)
+
+running 47 tests
+test agent::config::loader::tests::test_default_extensions ... ok
+test agent::config::loader::tests::test_format_names ... ok
+test agent::config::loader::tests::test_format_to_file_format ... ok
+test agent::config::loader::tests::test_format_from_extension ... ok
+test agent::config::schema::tests::test_empty_config_validation ... ok
+test agent::config::loader::tests::test_merge_configs ... ok
+test agent::config::schema::tests::test_agent_config_validation ... ok
+test agent::config::schema::tests::test_team_config_validation ... ok
+test agent::config::schema::tests::test_llm_config_serialization ... ok
+test agent::config::schema::tests::test_react_config_serialization ... ok
+test agent::execution::tests::test_execution_options ... ok
+test agent::registry::tests::test_factory_create ... ok
+test agent::execution::tests::test_execution_timeout ... ok
+test agent::registry::tests::test_find_by_tag ... ok
+test agent::execution::tests::test_execution_engine_basic ... ok
+test agent::registry::tests::test_register_and_get ... ok
+test agent::registry::tests::test_stats ... ok
+test agent::registry::tests::test_unregister ... ok
+test agent::config::loader::tests::test_load_ini_string ... ok
+test agent::config::loader::tests::test_load_yaml_string ... ok
+test agent::config::loader::tests::test_load_ron_string ... ok
+test agent::config::loader::tests::test_load_json_string ... ok
+test retry::tests::test_fixed_policy_delay ... ok
+test retry::tests::test_exponential_policy_delay ... ok
+test retry::tests::test_linear_policy_delay ... ok
+test retry::tests::test_retry_helper_fails_on_non_retryable ... ok
+test retry::tests::test_jitter_does_not_exceed_cap ... ok
+test agent::config::loader::tests::test_load_toml_string ... ok
+test agent::config::loader::tests::test_load_json5_string ... ok
+test agent::config::loader::tests::test_serialize_config ... ok
+test runner::tests::test_agent_runner_execute ... ok
+test runner::tests::test_agent_runner_new ... ok
+test runner::tests::test_agent_runner_run_periodic_rejects_invalid_config ... ok
+test retry::tests::test_retry_helper_succeeds_on_second_attempt ... ok
+test runner::tests::test_agent_runner_run_periodic_cron_rejects_invalid_config ... ok
+test runner::tests::test_run_agents_function ... ok
+test test_agent_context::test_agent_context_persistence ... ok
+test runner::tests::test_agent_runner_run_periodic_initial_delay_when_not_immediate ... ok
+test runner::tests::test_agent_runner_run_periodic_executes_max_runs ... ok
+test builder::tests::send_to_does_not_block_register_on_backpressure ... ok
+test tests::send_stream_message_does_not_block_pause_on_backpressure ... ok
+test builder::tests::publish_does_not_block_subscribe_on_backpressure ... ok
+test tests::send_to_does_not_block_register_on_backpressure ... ok
+test builder::tests::broadcast_does_not_block_register_on_backpressure ... ok
+test runner::tests::test_agent_runner_deadlock_watchdog_timeout ... FAILED
+test runner::tests::test_agent_runner_run_periodic_cron_executes_max_runs ... ok
+test runner::tests::test_agent_runner_run_periodic_cron_misfire_policy_run_once ... ok
+
+failures:
+
+---- runner::tests::test_agent_runner_deadlock_watchdog_timeout stdout ----
+
+thread 'runner::tests::test_agent_runner_deadlock_watchdog_timeout' (3752) panicked at crates\mofa-runtime\src\runner.rs:1248:9:
+Expected timeout error message, got: Operation timed out after 50ms
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    runner::tests::test_agent_runner_deadlock_watchdog_timeout
+
+test result: FAILED. 46 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 7.03s
+
+error: test failed, to 
+rerun pass `-p 
+mofa-runtime --lib`

@@ -1,0 +1,259 @@
+﻿cargo :     Checking 
+mofa-foundation v0.1.0 (D:\m
+ofa\crates\mofa-foundation)
+At line:1 char:1
++ cargo check --test 
+state_graph_bug_test 2>&1 | 
+Out-File -Encoding utf ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          
+    : NotSpecified: (    C  
+  hecking mo...ofa-founda   
+ tion):String) [], Remot    
+eException
+    + FullyQualifiedErrorId 
+    : NativeCommandError
+ 
+error[E0195]: lifetime 
+parameters do not match the 
+trait definition
+  --> crates\mofa-foundation
+\tests\state_graph_bug_test.
+rs:11:21
+   |
+11 |     fn 
+apply_update<'a, V: 
+serde::Serialize + Send + 
+Sync + 'static>(&'a mut 
+self, _key: &'a str, 
+_value: V) -> 
+futures::future::Box...
+   |                     ^^
+   |
+   = note: lifetime 
+parameters differ in 
+whether they are early- or 
+late-bound
+note: `'a` differs between 
+the trait and impl
+  --> crates\mofa-foundation
+\tests\state_graph_bug_test.
+rs:11:21
+   |
+ 8 | impl GraphState for 
+DummyState {
+   | -----------------------
+------- in this impl...
+...
+11 |     fn 
+apply_update<'a, V: 
+serde::Serialize + Send + 
+Sync + 'static>(&'a mut 
+self, _key: &'a str, 
+_value: V) -> 
+futures::future::Box...
+   |                     ^^ 
+`'a` is late-bound
+   |
+  ::: crates\mofa-kernel\src
+\workflow\state.rs:61:1
+   |
+61 | pub trait GraphState: 
+Clone + Send + Sync + 
+'static {
+   | -----------------------
+----------------------------
+ in this trait...
+...
+66 |     async fn 
+apply_update<V: 
+serde::Serialize + Send + 
+Sync + 'static>(&mut self, 
+key: &str, value: V) -> 
+AgentResult<()>;
+   |                        
+                            
+                    ^
+   |                        
+                            
+                    |
+   |                        
+                            
+                    
+`'life0` is early-bound
+   |                        
+                            
+                    this 
+lifetime bound makes 
+`'life0` early-bound
+note: `'a` differs between 
+the trait and impl
+  --> crates\mofa-foundation
+\tests\state_graph_bug_test.
+rs:11:21
+   |
+ 8 | impl GraphState for 
+DummyState {
+   | -----------------------
+------- in this impl...
+...
+11 |     fn 
+apply_update<'a, V: 
+serde::Serialize + Send + 
+Sync + 'static>(&'a mut 
+self, _key: &'a str, 
+_value: V) -> 
+futures::future::Box...
+   |                     ^^ 
+`'a` is late-bound
+   |
+  ::: crates\mofa-kernel\src
+\workflow\state.rs:61:1
+   |
+61 | pub trait GraphState: 
+Clone + Send + Sync + 
+'static {
+   | -----------------------
+----------------------------
+ in this trait...
+...
+66 |     async fn 
+apply_update<V: 
+serde::Serialize + Send + 
+Sync + 'static>(&mut self, 
+key: &str, value: V) -> 
+AgentResult<()>;
+   |                        
+                            
+                            
+        ^
+   |                        
+                            
+                            
+        |
+   |                        
+                            
+                            
+        `'life1` is 
+early-bound
+   |                        
+                            
+                            
+        this lifetime bound 
+makes `'life1` early-bound
+note: `'a` differs between 
+the trait and impl
+  --> crates\mofa-foundation
+\tests\state_graph_bug_test.
+rs:11:21
+   |
+ 8 | impl GraphState for 
+DummyState {
+   | -----------------------
+------- in this impl...
+...
+11 |     fn 
+apply_update<'a, V: 
+serde::Serialize + Send + 
+Sync + 'static>(&'a mut 
+self, _key: &'a str, 
+_value: V) -> 
+futures::future::Box...
+   |                     ^^ 
+`'a` is late-bound
+   |
+  ::: crates\mofa-kernel\src
+\workflow\state.rs:60:1
+   |
+60 | #[async_trait]
+   | ^^^^^^^^^^^^^^ 
+`'async_trait` is 
+early-bound
+61 | pub trait GraphState: 
+Clone + Send + Sync + 
+'static {
+   | -----------------------
+----------------------------
+ in this trait...
+...
+66 |     async fn 
+apply_update<V: 
+serde::Serialize + Send + 
+Sync + 'static>(&mut self, 
+key: &str, value: V) -> 
+AgentResult<()>;
+   |                        
+    - this lifetime bound 
+makes `'async_trait` 
+early-bound
+   = note: this error 
+originates in the attribute 
+macro `async_trait` (in 
+Nightly builds, run with -Z 
+macro-backtrace for more 
+info)
+
+error[E0560]: struct 
+`NodePolicy` has no field 
+named `backoff_ms`
+  --> crates\mofa-foundation
+\tests\state_graph_bug_test.
+rs:38:9
+   |
+38 |         backoff_ms: 0,
+   |         ^^^^^^^^^^ 
+`NodePolicy` does not have 
+this field
+   |
+   = note: available fields 
+are: `retry_backoff`, 
+`circuit_open_after`, 
+`circuit_reset_after`
+
+error[E0560]: struct 
+`NodePolicy` has no field 
+named `timeout_ms`
+  --> crates\mofa-foundation
+\tests\state_graph_bug_test.
+rs:39:9
+   |
+39 |         timeout_ms: 
+Some(100),
+   |         ^^^^^^^^^^ 
+`NodePolicy` does not have 
+this field
+   |
+   = note: available fields 
+are: `retry_backoff`, 
+`circuit_open_after`, 
+`circuit_reset_after`
+
+error[E0560]: struct 
+`NodePolicy` has no field 
+named `circuit_breaker`
+  --> crates\mofa-foundation
+\tests\state_graph_bug_test.
+rs:40:9
+   |
+40 |         
+circuit_breaker: None,
+   |         
+^^^^^^^^^^^^^^^ 
+`NodePolicy` does not have 
+this field
+   |
+   = note: available fields 
+are: `retry_backoff`, 
+`circuit_open_after`, 
+`circuit_reset_after`
+
+Some errors have detailed 
+explanations: E0195, E0560.
+For more information about 
+an error, try `rustc 
+--explain E0195`.
+error: could not compile 
+`mofa-foundation` (test 
+"state_graph_bug_test") due 
+to 4 previous errors

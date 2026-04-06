@@ -1,0 +1,167 @@
+﻿cargo :     Checking 
+mofa-foundation v0.1.0 (D:\m
+ofa\crates\mofa-foundation)
+At line:1 char:1
++ cargo check --test 
+state_graph_bug_test 2>&1 | 
+Out-File -Encoding utf ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          
+    : NotSpecified: (    C  
+  hecking mo...ofa-founda   
+ tion):String) [], Remot    
+eException
+    + FullyQualifiedErrorId 
+    : NativeCommandError
+ 
+error[E0603]: module 
+`state_graph` is private
+  --> crates\mofa-foundation
+\tests\state_graph_bug_test.
+rs:3:32
+   |
+ 3 | use mofa_foundation::wo
+rkflow::state_graph::StateGr
+aphImpl;
+   |                        
+        ^^^^^^^^^^^ private 
+module
+   |
+note: the module 
+`state_graph` is defined 
+here
+  --> crates\mofa-foundation
+\src\workflow\mod.rs:50:1
+   |
+50 | mod state_graph;
+   | ^^^^^^^^^^^^^^^
+
+error[E0603]: module 
+`fault_tolerance` is private
+  --> crates\mofa-foundation
+\tests\state_graph_bug_test.
+rs:4:32
+   |
+ 4 | use mofa_foundation::wo
+rkflow::fault_tolerance::Nod
+ePolicy;
+   |                        
+        ^^^^^^^^^^^^^^^ 
+private module
+   |
+note: the module 
+`fault_tolerance` is 
+defined here
+  --> crates\mofa-foundation
+\src\workflow\mod.rs:43:1
+   |
+43 | mod fault_tolerance;
+   | ^^^^^^^^^^^^^^^^^^^
+
+error[E0049]: method 
+`get_value` has 0 type 
+parameters but its trait 
+declaration has 1 type 
+parameter
+  --> crates\mofa-foundation
+\tests\state_graph_bug_test.
+rs:11:17
+   |
+11 |     fn 
+get_value(&self, _key: 
+&str) -> 
+Option<serde_json::Value> { 
+None }
+   |                 ^ 
+found 0 type parameters
+   |
+  ::: crates\mofa-kernel\src
+\workflow\state.rs:79:5
+   |
+79 |     fn get_value<V: 
+serde::de::DeserializeOwned 
++ Send + Sync + 
+'static>(&self, key: &str) 
+-> Option<V>;
+   |     -------------------
+----------------------------
+----------------------------
+------------------------- 
+expected 1 type parameter
+
+error[E0049]: method 
+`apply_update` has 0 type 
+parameters but its trait 
+declaration has 1 type 
+parameter
+  --> crates\mofa-foundation
+\tests\state_graph_bug_test.
+rs:12:21
+   |
+12 |     fn 
+apply_update<'a>(&'a mut 
+self, _key: &'a str, 
+_value: serde_json::Value) 
+-> futures::future::BoxFutur
+e<'a, AgentResult<()>> {
+   |                     ^^ 
+found 0 type parameters
+   |
+  ::: crates\mofa-kernel\src
+\workflow\state.rs:66:5
+   |
+66 |     async fn 
+apply_update<V: 
+serde::Serialize + Send + 
+Sync + 'static>(&mut self, 
+key: &str, value: V) -> 
+AgentResult<()>;
+   |     -------------------
+----------------------------
+----------------------------
+----------------------------
+--------------- expected 1 
+type parameter
+
+error[E0046]: not all trait 
+items implemented, missing: 
+`keys`, `to_json`, 
+`from_json`
+  --> crates\mofa-foundation
+\tests\state_graph_bug_test.
+rs:10:1
+   |
+10 | impl GraphState for 
+DummyState {
+   | ^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^ missing `keys`, 
+`to_json`, `from_json` in 
+implementation
+   |
+   = help: implement the 
+missing item: `fn 
+keys(&self) -> Vec<&str> { 
+todo!() }`
+   = help: implement the 
+missing item: `fn 
+to_json(&self) -> 
+Result<serde_json::Value, 
+AgentError> { todo!() }`
+   = help: implement the 
+missing item: `fn 
+from_json(_: 
+serde_json::Value) -> 
+Result<Self, AgentError> { 
+todo!() }`
+
+Some errors have detailed 
+explanations: E0046, E0049, 
+E0603.
+For more information about 
+an error, try `rustc 
+--explain E0046`.
+error: could not compile 
+`mofa-foundation` (test 
+"state_graph_bug_test") due 
+to 5 previous errors
