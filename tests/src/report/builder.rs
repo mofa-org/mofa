@@ -5,7 +5,10 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use crate::clock::{Clock, SystemClock};
-use crate::report::types::{TestCaseResult, TestReport, TestStatus};
+use crate::report::types::{
+    AgentRunResult, BehaviorMetadata, TestCaseResult, TestReport, TestStatus,
+};
+use mofa_runtime::agent::execution::ExecutionResult;
 
 /// Collects [`TestCaseResult`]s and produces a [`TestReport`].
 pub struct TestReportBuilder {
@@ -62,9 +65,102 @@ impl TestReportBuilder {
         self
     }
 
+    /// Run an async test closure, record its outcome, and attach metadata.
+    pub async fn record_with_metadata<F, Fut, I, K, V>(
+        mut self,
+        name: impl Into<String>,
+        metadata: I,
+        f: F,
+    ) -> Self
+    where
+        F: FnOnce() -> Fut,
+        Fut: Future<Output = Result<(), String>>,
+        I: IntoIterator<Item = (K, V)>,
+        K: Into<String>,
+        V: Into<String>,
+    {
+        let name = name.into();
+        let start = Instant::now();
+        let outcome = f().await;
+        let duration = start.elapsed();
+
+        let (status, error) = match outcome {
+            Ok(()) => (TestStatus::Passed, None),
+            Err(msg) => (TestStatus::Failed, Some(msg)),
+        };
+
+        self.results.push(
+            TestCaseResult {
+                name,
+                status,
+                duration,
+                error,
+                metadata: Vec::new(),
+            }
+            .with_metadata(metadata),
+        );
+        self
+    }
+
+    /// Run an async test closure, record its outcome, and attach canonical behavior metadata.
+    pub async fn record_with_behavior<F, Fut>(
+        mut self,
+        name: impl Into<String>,
+        behavior: BehaviorMetadata,
+        f: F,
+    ) -> Self
+    where
+        F: FnOnce() -> Fut,
+        Fut: Future<Output = Result<(), String>>,
+    {
+        let name = name.into();
+        let start = Instant::now();
+        let outcome = f().await;
+        let duration = start.elapsed();
+
+        let (status, error) = match outcome {
+            Ok(()) => (TestStatus::Passed, None),
+            Err(msg) => (TestStatus::Failed, Some(msg)),
+        };
+
+        self.results.push(
+            TestCaseResult {
+                name,
+                status,
+                duration,
+                error,
+                metadata: Vec::new(),
+            }
+            .with_behavior(&behavior),
+        );
+        self
+    }
+
     /// Manually add a pre-built result.
     pub fn add_result(mut self, result: TestCaseResult) -> Self {
         self.results.push(result);
+        self
+    }
+
+    /// Add a runtime execution result using the canonical report mapping.
+    pub fn add_execution_result(
+        mut self,
+        name: impl Into<String>,
+        execution_result: &ExecutionResult,
+    ) -> Self {
+        self.results
+            .push(TestCaseResult::from_execution_result(name, execution_result));
+        self
+    }
+
+    /// Add a canonical run artifact using the canonical report mapping.
+    pub fn add_agent_run_result(
+        mut self,
+        name: impl Into<String>,
+        run_result: &AgentRunResult,
+    ) -> Self {
+        self.results
+            .push(TestCaseResult::from_agent_run_result(name, run_result));
         self
     }
 

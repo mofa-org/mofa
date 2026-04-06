@@ -6,4 +6,6 @@ mod types;
 
 pub use builder::TestReportBuilder;
 pub use format::{JsonFormatter, ReportFormatter, TextFormatter};
-pub use types::{TestCaseResult, TestReport, TestStatus};
+pub use types::{
+    AgentRunResult, BehaviorMetadata, FallbackStatus, TestCaseResult, TestReport, TestStatus,
+};
