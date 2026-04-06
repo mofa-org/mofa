@@ -388,6 +388,11 @@ pub struct CompiledGraphImpl<S: GraphState> {
     telemetry: Option<Arc<dyn TelemetryEmitter>>,
 }
 
+enum NodeAdvance {
+    Command(Command),
+    Fallback(String),
+}
+
 impl<S: GraphState> CompiledGraphImpl<S> {
     /// Attach a telemetry emitter for checkpoint events during invocation.
     pub fn with_telemetry(mut self, telemetry: Arc<dyn TelemetryEmitter>) -> Self {
@@ -466,74 +471,114 @@ impl<S: GraphState> CompiledGraphImpl<S> {
             .collect()
     }
 
-    /// Get the next node(s) based on the current node and command
-    fn get_next_nodes(&self, current_node: &str, command: &Command) -> AgentResult<Vec<String>> {
+    async fn execute_node_advance(
+        nodes: &HashMap<NodeId, Arc<dyn NodeFunc<S>>>,
+        policies: &HashMap<NodeId, NodePolicy>,
+        circuit_states: &CircuitBreakerRegistry,
+        node_id: &str,
+        state: &mut S,
+        ctx: &RuntimeContext,
+        event_tx: Option<&tokio::sync::mpsc::Sender<AgentResult<StreamEvent<S>>>>,
+    ) -> AgentResult<NodeAdvance> {
+        let node = nodes
+            .get(node_id)
+            .ok_or_else(|| AgentError::NotFound(format!("Node '{}'", node_id)))?;
+        let default_policy = NodePolicy::default();
+        let policy = policies.get(node_id).unwrap_or(&default_policy);
+
+        match execute_with_policy(
+            node.as_ref(),
+            state,
+            ctx,
+            policy,
+            circuit_states,
+            node_id,
+            event_tx,
+        )
+        .await
+        {
+            Ok(command) => Ok(NodeAdvance::Command(command)),
+            Err(NodeExecutionOutcome::Fallback(fallback_id)) => {
+                Ok(NodeAdvance::Fallback(fallback_id))
+            }
+            Err(NodeExecutionOutcome::Error(error)) => Err(error),
+        }
+    }
+
+    fn resolve_next_nodes(
+        edges: &HashMap<NodeId, EdgeTarget>,
+        current_node: &str,
+        command: &Command,
+    ) -> AgentResult<Vec<String>> {
         match &command.control {
             ControlFlow::Goto(target) => Ok(vec![target.clone()]),
-            ControlFlow::Return => {
-                Ok(vec![]) // End execution
-            }
-            ControlFlow::Send(sends) => {
-                // MapReduce: create branches for each send target
-                Ok(sends.iter().map(|s| s.target.clone()).collect())
-            }
-            ControlFlow::Continue => {
-                // Follow graph edges
-                match self.edges.get(current_node) {
-                    Some(EdgeTarget::Single(target)) => Ok(vec![target.clone()]),
-                    Some(EdgeTarget::Parallel(targets)) => Ok(targets.clone()),
-                    Some(EdgeTarget::Conditional(routes)) => {
-                        // Priority 1: explicit route decision
-                        if let Some(decision) = command.route_value()
-                            && let Some(target) = routes.get(decision)
-                        {
+            ControlFlow::Return => Ok(vec![]),
+            ControlFlow::Send(sends) => Ok(sends.iter().map(|s| s.target.clone()).collect()),
+            ControlFlow::Continue => match edges.get(current_node) {
+                Some(EdgeTarget::Single(target)) => Ok(vec![target.clone()]),
+                Some(EdgeTarget::Parallel(targets)) => Ok(targets.clone()),
+                Some(EdgeTarget::Conditional(routes)) => {
+                    if let Some(decision) = command.route_value()
+                        && let Some(target) = routes.get(decision)
+                    {
+                        return Ok(vec![target.clone()]);
+                    }
+
+                    for update in &command.updates {
+                        if let Some(target) = routes.get(&update.key) {
                             return Ok(vec![target.clone()]);
                         }
-                        // Priority 2: legacy key-name matching (backward compatible)
-                        for update in &command.updates {
-                            if let Some(target) = routes.get(&update.key) {
-                                return Ok(vec![target.clone()]);
-                            }
-                        }
-                        // No route matched — report error instead of silent fallback
-                        let update_keys: Vec<&str> =
-                            command.updates.iter().map(|u| u.key.as_str()).collect();
-                        let route_keys: Vec<&String> = routes.keys().collect();
-                        warn!(
-                            node_id = current_node,
-                            ?update_keys,
-                            ?route_keys,
-                            "Conditional routing: no route matched for node"
-                        );
-                        Err(AgentError::Internal(format!(
-                            "No conditional route matched for node '{}': update keys {:?}, available routes {:?}",
-                            current_node, update_keys, route_keys
-                        )))
                     }
-                    None => Ok(vec![]),
-                    _ => Ok(vec![]),
+
+                    let update_keys: Vec<&str> =
+                        command.updates.iter().map(|u| u.key.as_str()).collect();
+                    let route_keys: Vec<&String> = routes.keys().collect();
+                    warn!(
+                        node_id = current_node,
+                        ?update_keys,
+                        ?route_keys,
+                        "Conditional routing: no route matched for node"
+                    );
+                    Err(AgentError::Internal(format!(
+                        "No conditional route matched for node '{}': update keys {:?}, available routes {:?}",
+                        current_node, update_keys, route_keys
+                    )))
                 }
-            }
+                None => Ok(vec![]),
+                _ => Ok(vec![]),
+            },
             _ => Ok(vec![]),
         }
     }
 
-    /// Apply state updates using reducers
-    async fn apply_updates(&self, state: &mut S, updates: &[StateUpdate]) -> AgentResult<()> {
+    async fn apply_updates_with_reducers(
+        reducers: &HashMap<String, Box<dyn Reducer>>,
+        state: &mut S,
+        updates: &[StateUpdate],
+    ) -> AgentResult<()> {
         for update in updates {
             let current = state.get_value(&update.key);
 
-            // Get or create reducer
-            let new_value = if let Some(reducer) = self.reducers.get(&update.key) {
+            let new_value = if let Some(reducer) = reducers.get(&update.key) {
                 reducer.reduce(current.as_ref(), &update.value).await?
             } else {
-                // Default: overwrite
                 update.value.clone()
             };
 
             state.apply_update(&update.key, new_value).await?;
         }
+
         Ok(())
+    }
+
+    /// Get the next node(s) based on the current node and command
+    fn get_next_nodes(&self, current_node: &str, command: &Command) -> AgentResult<Vec<String>> {
+        Self::resolve_next_nodes(&self.edges, current_node, command)
+    }
+
+    /// Apply state updates using reducers
+    async fn apply_updates(&self, state: &mut S, updates: &[StateUpdate]) -> AgentResult<()> {
+        Self::apply_updates_with_reducers(&self.reducers, state, updates).await
     }
 
     async fn invoke_with_context(&self, input: S, ctx: RuntimeContext) -> AgentResult<S> {
@@ -544,7 +589,6 @@ impl<S: GraphState> CompiledGraphImpl<S> {
 
         let mut state = input;
         let mut current_nodes = vec![self.entry_point.clone()];
-        let default_policy = NodePolicy::default();
 
         while !current_nodes.is_empty() {
             if ctx.is_recursion_limit_reached().await {
@@ -577,34 +621,27 @@ impl<S: GraphState> CompiledGraphImpl<S> {
 
             if current_nodes.len() == 1 {
                 let node_id = current_nodes.remove(0);
-                let node = self
-                    .nodes
-                    .get(&node_id)
-                    .ok_or_else(|| AgentError::NotFound(format!("Node '{}'", node_id)))?;
-
                 ctx.set_current_node(&node_id).await;
                 debug!("Executing node '{}' in graph '{}'", node_id, self.id);
 
-                let policy = self.policies.get(&node_id).unwrap_or(&default_policy);
-
-                let command = match execute_with_policy(
-                    node.as_ref(),
-                    &mut state,
-                    &ctx,
-                    policy,
+                let command = match Self::execute_node_advance(
+                    &self.nodes,
+                    &self.policies,
                     &self.circuit_states,
                     &node_id,
+                    &mut state,
+                    &ctx,
                     None,
                 )
                 .await
                 {
-                    Ok(cmd) => cmd,
-                    Err(NodeExecutionOutcome::Fallback(fallback_id)) => {
+                    Ok(NodeAdvance::Command(command)) => command,
+                    Ok(NodeAdvance::Fallback(fallback_id)) => {
                         debug!("Node '{}' falling back to '{}'", node_id, fallback_id);
                         current_nodes = vec![fallback_id];
                         continue;
                     }
-                    Err(NodeExecutionOutcome::Error(e)) => return Err(e),
+                    Err(error) => return Err(error),
                 };
 
                 self.apply_updates(&mut state, &command.updates).await?;
@@ -711,56 +748,6 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
             let stream_task = async move {
                 let mut state = input;
                 let mut current_nodes = vec![entry_point];
-                let default_policy = NodePolicy::default();
-
-            // Helper function to get next nodes based on command and edges
-            let get_next_nodes = |current_node: &str, command: &Command| -> AgentResult<Vec<String>> {
-                match &command.control {
-                    ControlFlow::Goto(target) => Ok(vec![target.clone()]),
-                    ControlFlow::Return => Ok(vec![]), // End execution
-                    ControlFlow::Send(sends) => {
-                        // MapReduce: create branches for each send target
-                        Ok(sends.iter().map(|s| s.target.clone()).collect())
-                    }
-                    ControlFlow::Continue => {
-                        // Follow graph edges
-                        match edges.get(current_node) {
-                            Some(EdgeTarget::Single(target)) => Ok(vec![target.clone()]),
-                            Some(EdgeTarget::Parallel(targets)) => Ok(targets.clone()),
-                            Some(EdgeTarget::Conditional(routes)) => {
-                                // Priority 1: explicit route decision
-                                if let Some(decision) = command.route_value()
-                                    && let Some(target) = routes.get(decision)
-                                {
-                                    return Ok(vec![target.clone()]);
-                                }
-                                // Priority 2: legacy key-name matching (backward compatible)
-                                for update in &command.updates {
-                                    if let Some(target) = routes.get(&update.key) {
-                                        return Ok(vec![target.clone()]);
-                                    }
-                                }
-                                // No route matched — report error instead of silent fallback
-                                let update_keys: Vec<&str> = command.updates.iter().map(|u| u.key.as_str()).collect();
-                                let route_keys: Vec<&String> = routes.keys().collect();
-                                warn!(
-                                    node_id = current_node,
-                                    ?update_keys,
-                                    ?route_keys,
-                                    "Conditional routing: no route matched for node"
-                                );
-                                Err(AgentError::Internal(format!(
-                                    "No conditional route matched for node '{}': update keys {:?}, available routes {:?}",
-                                    current_node, update_keys, route_keys
-                                )))
-                            }
-                            None => Ok(vec![]),
-                            _ => Ok(vec![]),
-                        }
-                    }
-                    _ => Ok(vec![]),
-                }
-            };
 
             while !current_nodes.is_empty() {
                 // Check recursion limit
@@ -779,16 +766,6 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
 
                 if nodes_to_execute.len() == 1 {
                     let node_id = nodes_to_execute[0].clone();
-                    let node = match nodes.get(&node_id) {
-                        Some(n) => n,
-                        None => {
-                            let _ = tx
-                                .send(Err(AgentError::NotFound(format!("Node '{}'", node_id))))
-                                .await;
-                            return;
-                        }
-                    };
-
                     ctx.set_current_node(&node_id).await;
 
                     // Send start event — abort if receiver disconnected
@@ -804,22 +781,19 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
                         return;
                     }
 
-                    // 使用重试/断路器执行节点
-                    // Execute node with retry/circuit-breaker
-                    let policy = policies.get(&node_id).unwrap_or(&default_policy);
-                    let command = match execute_with_policy(
-                        node.as_ref(),
-                        &mut state,
-                        &ctx,
-                        policy,
+                    let command = match Self::execute_node_advance(
+                        &nodes,
+                        &policies,
                         &circuit_states,
                         &node_id,
+                        &mut state,
+                        &ctx,
                         Some(&tx),
                     )
                     .await
                     {
-                        Ok(cmd) => cmd,
-                        Err(NodeExecutionOutcome::Fallback(fallback_id)) => {
+                        Ok(NodeAdvance::Command(command)) => command,
+                        Ok(NodeAdvance::Fallback(fallback_id)) => {
                             // Route to fallback node on next iteration
                             // (execute_with_policy already emitted NodeFallback event)
                             next_nodes.push(fallback_id);
@@ -827,7 +801,7 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
                             current_nodes = node_set.into_iter().collect();
                             continue;
                         }
-                        Err(NodeExecutionOutcome::Error(e)) => {
+                        Err(e) => {
                             let _ = tx
                                 .send(Ok(StreamEvent::Error {
                                     node_id: Some(node_id),
@@ -838,33 +812,17 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
                         }
                     };
 
-                    for update in &command.updates {
-                        let current = state.get_value(&update.key);
-                        let new_value = if let Some(reducer) = reducers.get(&update.key) {
-                            match reducer.reduce(current.as_ref(), &update.value).await {
-                                Ok(v) => v,
-                                Err(e) => {
-                                    let _ = tx
-                                        .send(Ok(StreamEvent::Error {
-                                            node_id: Some(node_id.clone()),
-                                            error: e.to_string(),
-                                        }))
-                                        .await;
-                                    return;
-                                }
-                            }
-                        } else {
-                            update.value.clone()
-                        };
-                        if let Err(e) = state.apply_update(&update.key, new_value).await {
-                            let _ = tx
-                                .send(Ok(StreamEvent::Error {
-                                    node_id: Some(node_id.clone()),
-                                    error: e.to_string(),
-                                }))
-                                .await;
-                            return;
-                        }
+                    if let Err(e) =
+                        Self::apply_updates_with_reducers(&reducers, &mut state, &command.updates)
+                            .await
+                    {
+                        let _ = tx
+                            .send(Ok(StreamEvent::Error {
+                                node_id: Some(node_id.clone()),
+                                error: e.to_string(),
+                            }))
+                            .await;
+                        return;
                     }
 
                     // Send end event — abort if receiver disconnected
@@ -881,7 +839,7 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
                         return;
                     }
 
-                    match get_next_nodes(&node_id, &command) {
+                    match Self::resolve_next_nodes(&edges, &node_id, &command) {
                         Ok(nodes) => next_nodes.extend(nodes),
                         Err(e) => {
                             let _ = tx
@@ -931,33 +889,17 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
                     };
 
                     for (node_id, command) in commands {
-                        for update in &command.updates {
-                            let current = state.get_value(&update.key);
-                            let new_value = if let Some(reducer) = reducers.get(&update.key) {
-                                match reducer.reduce(current.as_ref(), &update.value).await {
-                                    Ok(v) => v,
-                                    Err(e) => {
-                                        let _ = tx
-                                            .send(Ok(StreamEvent::Error {
-                                                node_id: Some(node_id.clone()),
-                                                error: e.to_string(),
-                                            }))
-                                            .await;
-                                        return;
-                                    }
-                                }
-                            } else {
-                                update.value.clone()
-                            };
-                            if let Err(e) = state.apply_update(&update.key, new_value).await {
-                                let _ = tx
-                                    .send(Ok(StreamEvent::Error {
-                                        node_id: Some(node_id.clone()),
-                                        error: e.to_string(),
-                                    }))
-                                    .await;
-                                return;
-                            }
+                        if let Err(e) =
+                            Self::apply_updates_with_reducers(&reducers, &mut state, &command.updates)
+                                .await
+                        {
+                            let _ = tx
+                                .send(Ok(StreamEvent::Error {
+                                    node_id: Some(node_id.clone()),
+                                    error: e.to_string(),
+                                }))
+                                .await;
+                            return;
                         }
 
                         if tx
@@ -973,7 +915,7 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
                             return;
                         }
 
-                        match get_next_nodes(&node_id, &command) {
+                        match Self::resolve_next_nodes(&edges, &node_id, &command) {
                             Ok(nodes) => next_nodes.extend(nodes),
                             Err(e) => {
                                 let _ = tx
@@ -1034,19 +976,42 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
 
         // Get current node from context or use entry point
         let current_node_id = ctx.current_node().await;
+        if current_node_id == END {
+            return Ok(StepResult {
+                state,
+                node_id: END.to_string(),
+                command: Command::new().return_(),
+                is_complete: true,
+                next_node: None,
+            });
+        }
+
+        if ctx.is_recursion_limit_reached().await {
+            return Err(AgentError::Internal("Recursion limit reached".to_string()));
+        }
+        ctx.decrement_steps().await;
+
         let node_id = if current_node_id.is_empty() {
             self.entry_point.clone()
         } else {
             current_node_id
         };
 
-        let node = self
-            .nodes
-            .get(&node_id)
-            .ok_or_else(|| AgentError::NotFound(format!("Node '{}'", node_id)))?;
-
         ctx.set_current_node(&node_id).await;
-        let command = node.call(&mut state, &ctx).await?;
+        let command = match Self::execute_node_advance(
+            &self.nodes,
+            &self.policies,
+            &self.circuit_states,
+            &node_id,
+            &mut state,
+            &ctx,
+            None,
+        )
+        .await?
+        {
+            NodeAdvance::Command(command) => command,
+            NodeAdvance::Fallback(fallback_id) => Command::new().goto(fallback_id),
+        };
 
         // Apply updates
         self.apply_updates(&mut state, &command.updates).await?;
@@ -1055,6 +1020,8 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
         let next_nodes = self.get_next_nodes(&node_id, &command)?;
         let is_complete = next_nodes.is_empty();
         let next_node = next_nodes.into_iter().next();
+        ctx.set_current_node(next_node.clone().unwrap_or_else(|| END.to_string()))
+            .await;
 
         Ok(StepResult {
             state,
@@ -1082,8 +1049,9 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
 mod tests {
     use super::*;
     use futures::StreamExt;
-    use mofa_kernel::workflow::telemetry::TelemetryEmitter;
     use mofa_kernel::workflow::GraphConfig;
+    use mofa_kernel::workflow::policy::{NodePolicy, RetryCondition};
+    use mofa_kernel::workflow::telemetry::TelemetryEmitter;
     use mofa_kernel::workflow::{JsonState, StateGraph};
     use serde_json::json;
     use std::collections::HashMap;
@@ -1168,6 +1136,59 @@ mod tests {
     struct SlowNode {
         name: String,
         delay_ms: u64,
+    }
+
+    struct FlakyNode {
+        name: String,
+        attempts: Arc<AtomicUsize>,
+        succeed_on_attempt: usize,
+        update_key: &'static str,
+    }
+
+    #[async_trait]
+    impl NodeFunc<JsonState> for FlakyNode {
+        async fn call(
+            &self,
+            _state: &mut JsonState,
+            _ctx: &RuntimeContext,
+        ) -> AgentResult<Command> {
+            let attempt = self.attempts.fetch_add(1, Ordering::SeqCst) + 1;
+            if attempt < self.succeed_on_attempt {
+                return Err(AgentError::ResourceUnavailable(
+                    "timeout while contacting model".into(),
+                ));
+            }
+
+            Ok(Command::new()
+                .update(self.update_key, json!(attempt))
+                .continue_())
+        }
+
+        fn name(&self) -> &str {
+            &self.name
+        }
+    }
+
+    struct AlwaysTransientErrorNode {
+        name: String,
+        attempts: Arc<AtomicUsize>,
+        message: &'static str,
+    }
+
+    #[async_trait]
+    impl NodeFunc<JsonState> for AlwaysTransientErrorNode {
+        async fn call(
+            &self,
+            _state: &mut JsonState,
+            _ctx: &RuntimeContext,
+        ) -> AgentResult<Command> {
+            self.attempts.fetch_add(1, Ordering::SeqCst);
+            Err(AgentError::ResourceUnavailable(self.message.to_string()))
+        }
+
+        fn name(&self) -> &str {
+            &self.name
+        }
     }
 
     #[async_trait]
@@ -1315,6 +1336,166 @@ mod tests {
         let final_state = result.unwrap();
         assert_eq!(final_state.get_value("processed"), Some(json!(true)));
         assert_eq!(final_state.get_value("count"), Some(json!(1)));
+    }
+
+    #[tokio::test]
+    async fn test_step_advances_current_node_and_uses_retry_policy() {
+        let attempts = Arc::new(AtomicUsize::new(0));
+        let mut graph = StateGraphImpl::<JsonState>::new("step_retry_graph");
+
+        graph
+            .add_node(
+                "flaky",
+                Box::new(FlakyNode {
+                    name: "flaky".to_string(),
+                    attempts: attempts.clone(),
+                    succeed_on_attempt: 2,
+                    update_key: "primary_attempt",
+                }),
+            )
+            .add_node(
+                "finalize",
+                Box::new(TestNode {
+                    name: "finalize".to_string(),
+                    updates: vec![StateUpdate::new("done", json!(true))],
+                }),
+            )
+            .add_edge(START, "flaky")
+            .add_edge("flaky", "finalize")
+            .add_edge("finalize", END)
+            .with_node_policy(
+                "flaky",
+                NodePolicy {
+                    max_retries: 1,
+                    retry_backoff_ms: 0,
+                    retry_condition: RetryCondition::OnTransient(vec!["timeout".to_string()]),
+                    ..NodePolicy::default()
+                },
+            );
+
+        let compiled = graph.compile().unwrap();
+        let ctx = RuntimeContext::with_config("step_retry_graph", GraphConfig::default());
+
+        let step1 = compiled
+            .step(JsonState::new(), Some(ctx.clone()))
+            .await
+            .unwrap();
+        assert_eq!(step1.node_id, "flaky");
+        assert_eq!(step1.next_node.as_deref(), Some("finalize"));
+        assert!(!step1.is_complete);
+        assert_eq!(attempts.load(Ordering::SeqCst), 2);
+        assert_eq!(step1.state.get_value("primary_attempt"), Some(json!(2)));
+        assert_eq!(ctx.current_node().await, "finalize");
+
+        let step2 = compiled
+            .step(step1.state.clone(), Some(ctx.clone()))
+            .await
+            .unwrap();
+        assert_eq!(step2.node_id, "finalize");
+        assert!(step2.is_complete);
+        assert_eq!(step2.next_node, None);
+        assert_eq!(step2.state.get_value("done"), Some(json!(true)));
+        assert_eq!(ctx.current_node().await, END);
+    }
+
+    #[tokio::test]
+    async fn test_step_routes_to_fallback_node() {
+        let attempts = Arc::new(AtomicUsize::new(0));
+        let mut graph = StateGraphImpl::<JsonState>::new("step_fallback_graph");
+
+        graph
+            .add_node(
+                "primary",
+                Box::new(AlwaysTransientErrorNode {
+                    name: "primary".to_string(),
+                    attempts: attempts.clone(),
+                    message: "timeout while contacting model",
+                }),
+            )
+            .add_node(
+                "fallback",
+                Box::new(TestNode {
+                    name: "fallback".to_string(),
+                    updates: vec![StateUpdate::new("used_fallback", json!(true))],
+                }),
+            )
+            .add_edge(START, "primary")
+            .add_edge("primary", "fallback")
+            .add_edge("fallback", END)
+            .with_node_policy(
+                "primary",
+                NodePolicy {
+                    max_retries: 0,
+                    retry_condition: RetryCondition::OnTransient(vec!["timeout".to_string()]),
+                    fallback_node: Some("fallback".to_string()),
+                    ..NodePolicy::default()
+                },
+            );
+
+        let compiled = graph.compile().unwrap();
+        let ctx = RuntimeContext::with_config("step_fallback_graph", GraphConfig::default());
+
+        let step1 = compiled
+            .step(JsonState::new(), Some(ctx.clone()))
+            .await
+            .unwrap();
+        assert_eq!(step1.node_id, "primary");
+        assert_eq!(step1.next_node.as_deref(), Some("fallback"));
+        assert!(!step1.is_complete);
+        assert_eq!(attempts.load(Ordering::SeqCst), 1);
+        assert_eq!(ctx.current_node().await, "fallback");
+
+        let step2 = compiled
+            .step(step1.state.clone(), Some(ctx.clone()))
+            .await
+            .unwrap();
+        assert_eq!(step2.node_id, "fallback");
+        assert!(step2.is_complete);
+        assert_eq!(step2.state.get_value("used_fallback"), Some(json!(true)));
+    }
+
+    #[tokio::test]
+    async fn test_step_respects_graph_max_steps() {
+        let mut graph = StateGraphImpl::<JsonState>::new("step_limit_graph");
+
+        graph
+            .add_node(
+                "first",
+                Box::new(TestNode {
+                    name: "first".to_string(),
+                    updates: vec![StateUpdate::new("first", json!(true))],
+                }),
+            )
+            .add_node(
+                "second",
+                Box::new(TestNode {
+                    name: "second".to_string(),
+                    updates: vec![StateUpdate::new("second", json!(true))],
+                }),
+            )
+            .add_edge(START, "first")
+            .add_edge("first", "second")
+            .add_edge("second", END);
+
+        let compiled = graph.compile().unwrap();
+        let ctx = RuntimeContext::with_config(
+            "step_limit_graph",
+            GraphConfig::default().with_max_steps(1),
+        );
+
+        let first = compiled
+            .step(JsonState::new(), Some(ctx.clone()))
+            .await
+            .unwrap();
+        assert_eq!(first.node_id, "first");
+
+        let second = compiled.step(first.state.clone(), Some(ctx.clone())).await;
+        match second {
+            Err(AgentError::Internal(message)) => {
+                assert!(message.contains("Recursion limit reached"));
+            }
+            other => panic!("expected recursion-limit error, got {other:?}"),
+        }
     }
 
     #[tokio::test]
