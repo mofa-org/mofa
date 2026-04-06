@@ -54,7 +54,7 @@ pub mod native_dataflow;
 pub use interrupt::*;
 
 // Security governance module
-pub use security::{SecurityService, SecurityConfig, SecurityError, SecurityEvent};
+pub use security::{SecurityConfig, SecurityError, SecurityEvent, SecurityService};
 
 // Core agent trait - runtime executes agents implementing this trait
 pub use mofa_kernel::agent::MoFAAgent;
@@ -606,7 +606,10 @@ impl<A: MoFAAgent> SimpleAgentRuntime<A> {
     }
 
     /// Set the security service for RBAC and other security checks
-    pub fn with_security_service(mut self, security_service: std::sync::Arc<security::SecurityService>) -> Self {
+    pub fn with_security_service(
+        mut self,
+        security_service: std::sync::Arc<security::SecurityService>,
+    ) -> Self {
         self.security_service = Some(security_service);
         self
     }
@@ -620,30 +623,39 @@ impl<A: MoFAAgent> SimpleAgentRuntime<A> {
             && let Some(authorizer) = security.authorizer()
         {
             // Check if agent has permission to execute
-            match authorizer.check_permission(&self.metadata.id, "execute", "agent").await {
-                        Ok(auth_result) if auth_result.is_denied() => {
-                            ::tracing::warn!(
-                                agent_id = %self.metadata.id,
-                                reason = %auth_result.reason().unwrap_or("unknown"),
-                                "Permission denied for agent execution"
-                            );
+            match authorizer
+                .check_permission(&self.metadata.id, "execute", "agent")
+                .await
+            {
+                Ok(auth_result) if auth_result.is_denied() => {
+                    ::tracing::warn!(
+                        agent_id = %self.metadata.id,
+                        reason = %auth_result.reason().unwrap_or("unknown"),
+                        "Permission denied for agent execution"
+                    );
+                    return Err(GlobalError::Other(format!(
+                        "Permission denied: {}",
+                        auth_result.reason().unwrap_or("unknown")
+                    )));
+                }
+                Err(e) => {
+                    // Handle security check failure based on fail mode
+                    match security.config().fail_mode {
+                        security::types::SecurityFailMode::FailClosed => {
                             return Err(GlobalError::Other(format!(
-                                "Permission denied: {}",
-                                auth_result.reason().unwrap_or("unknown")
+                                "Security check failed: {}",
+                                e
                             )));
                         }
-                        Err(e) => {
-                            // Handle security check failure based on fail mode
-                            match security.config().fail_mode {
-                                security::types::SecurityFailMode::FailClosed => {
-                                    return Err(GlobalError::Other(format!("Security check failed: {}", e)));
-                                }
-                                security::types::SecurityFailMode::FailOpen => {
-                                    ::tracing::warn!("Security check failed, allowing due to fail-open mode: {}", e);
-                                }
-                            }
+                        security::types::SecurityFailMode::FailOpen => {
+                            ::tracing::warn!(
+                                "Security check failed, allowing due to fail-open mode: {}",
+                                e
+                            );
                         }
-                        _ => {} // Permission granted, continue
+                    }
+                }
+                _ => {} // Permission granted, continue
             }
         }
 
@@ -815,7 +827,6 @@ impl SimpleMessageBus {
     pub async fn register(&self, agent_id: &str, tx: tokio::sync::mpsc::Sender<AgentEvent>) {
         let mut subs = self.subscribers.write().await;
         subs.insert(agent_id.to_string(), vec![tx]);
-            
     }
 
     /// Unregister an agent and clean up its topic subscriptions
@@ -1417,7 +1428,7 @@ mod tests {
         let _ = slow_rx.recv().await;
         send_task.await.unwrap().unwrap();
     }
-    
+
     #[tokio::test]
     async fn re_registration_replaces_stale_sender() {
         let bus = SimpleMessageBus::new();
@@ -1431,7 +1442,7 @@ mod tests {
 
         let subs = bus.subscribers.read().await;
         assert_eq!(subs["agent-a"].len(), 1);
-}
+    }
 }
 
 /// 智能体节点存储类型
@@ -1769,13 +1780,21 @@ mod test_message_bus {
         // Confirm routing cleaned up
         {
             let topics = bus.topic_subscribers.read().await;
-            assert!(!topics.get("topic-z").map(|v| v.iter().any(|id| id == "agent-x")).unwrap_or(false));
+            assert!(
+                !topics
+                    .get("topic-z")
+                    .map(|v| v.iter().any(|id| id == "agent-x"))
+                    .unwrap_or(false)
+            );
         }
 
         // Confirm subscribers mapping cleaned up as well
         {
             let subs = bus.subscribers.read().await;
-            assert!(!subs.contains_key("agent-x"), "subscriber entry should be removed");
+            assert!(
+                !subs.contains_key("agent-x"),
+                "subscriber entry should be removed"
+            );
         }
 
         // Publish to topic - should not be delivered

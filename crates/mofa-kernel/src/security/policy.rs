@@ -129,7 +129,9 @@ impl PolicyBuilder {
 
         Ok(SecurityPolicy {
             pii_categories,
-            redaction_strategy: self.redaction_strategy.unwrap_or(defaults.redaction_strategy),
+            redaction_strategy: self
+                .redaction_strategy
+                .unwrap_or(defaults.redaction_strategy),
             content_policy: ContentPolicy {
                 enabled_categories: moderation_categories,
                 block_on_detection: self

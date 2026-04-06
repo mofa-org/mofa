@@ -551,9 +551,7 @@ impl ScriptToolRegistry {
             let path = entry.path();
             if let (Some(ext), Some(path_str)) = (path.extension(), path.to_str()) {
                 let id = match ext.to_str() {
-                    Some("yaml") | Some("yml") => {
-                        self.load_from_yaml(path_str).await.ok()
-                    }
+                    Some("yaml") | Some("yml") => self.load_from_yaml(path_str).await.ok(),
                     Some("json") => self.load_from_json(path_str).await.ok(),
                     _ => None,
                 };

@@ -44,7 +44,9 @@ pub struct AgentCoordinator {
 impl AgentCoordinator {
     fn extract_pipeline_task(task_msg: &AgentMessage) -> GlobalResult<(String, String)> {
         match task_msg {
-            AgentMessage::TaskRequest { task_id, content } => Ok((task_id.clone(), content.clone())),
+            AgentMessage::TaskRequest { task_id, content } => {
+                Ok((task_id.clone(), content.clone()))
+            }
             _ => Err(GlobalError::Other(
                 "Pipeline coordination only supports TaskRequest messages".to_string(),
             )),
@@ -184,7 +186,9 @@ impl AgentCoordinator {
                     stage, agent_id
                 ))
             })?
-            .map_err(|e| GlobalError::Other(format!("Pipeline stage {} join failed: {}", stage, e)))?
+            .map_err(|e| {
+                GlobalError::Other(format!("Pipeline stage {} join failed: {}", stage, e))
+            })?
             .map_err(|e| GlobalError::Other(e.to_string()))?;
 
             match stage_response {

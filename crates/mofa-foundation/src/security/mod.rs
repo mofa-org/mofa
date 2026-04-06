@@ -8,19 +8,19 @@
 //! - Content moderation implementations
 //! - Prompt injection guard implementations
 
-pub mod rbac;
-pub mod pii;
-pub mod moderation;
 pub mod guard;
+pub mod moderation;
+pub mod pii;
+pub mod rbac;
 
 #[cfg(test)]
 mod tests;
 
 // Re-export commonly used types
-pub use rbac::{DefaultAuthorizer, RbacPolicy, Role};
-pub use pii::{RegexPiiDetector, RegexPiiRedactor};
-pub use moderation::{ContentCategory, ContentPolicy, KeywordModerator};
 pub use guard::RegexPromptGuard;
+pub use moderation::{ContentCategory, ContentPolicy, KeywordModerator};
+pub use pii::{RegexPiiDetector, RegexPiiRedactor};
+pub use rbac::{DefaultAuthorizer, RbacPolicy, Role};
 // Security Governance Module — Foundation Implementations
 //
 // Concrete implementations of the security traits defined in `mofa-kernel::security`.

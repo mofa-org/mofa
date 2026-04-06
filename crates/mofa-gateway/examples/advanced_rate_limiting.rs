@@ -9,27 +9,27 @@
 //! cargo run --example advanced_rate_limiting --package mofa-gateway
 //! ```
 
-use mofa_gateway::gateway::RateLimiter;
 use mofa_gateway::RateLimitStrategy;
+use mofa_gateway::gateway::RateLimiter;
 use std::time::Duration;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
-    
+
     tracing::info!("Advanced Rate Limiting Configuration Example");
 
     // Example 1: Token Bucket - High Burst Capacity
     tracing::info!("\n=== Example 1: Token Bucket (High Burst) ===");
     let rate_limiter_burst = RateLimiter::new(RateLimitStrategy::TokenBucket {
-        capacity: 100,      // Allow bursts of up to 100 requests
-        refill_rate: 10,    // Refill at 10 tokens/second
+        capacity: 100,   // Allow bursts of up to 100 requests
+        refill_rate: 10, // Refill at 10 tokens/second
     });
-    
+
     tracing::info!("Configuration: capacity=100, refill_rate=10/sec");
     tracing::info!("Best for: APIs that need to handle traffic spikes");
     tracing::info!("Simulating burst traffic:");
-    
+
     let mut allowed = 0;
     let mut denied = 0;
     for i in 0..120 {
@@ -51,13 +51,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Example 2: Token Bucket - Steady Rate
     tracing::info!("\n=== Example 2: Token Bucket (Steady Rate) ===");
     let rate_limiter_steady = RateLimiter::new(RateLimitStrategy::TokenBucket {
-        capacity: 20,       // Smaller burst capacity
-        refill_rate: 5,     // Steady 5 requests/second
+        capacity: 20,   // Smaller burst capacity
+        refill_rate: 5, // Steady 5 requests/second
     });
-    
+
     tracing::info!("Configuration: capacity=20, refill_rate=5/sec");
     tracing::info!("Best for: Consistent rate limiting without bursts");
-    
+
     allowed = 0;
     denied = 0;
     for i in 0..30 {
@@ -79,14 +79,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Example 3: Sliding Window - Strict Limits
     tracing::info!("\n=== Example 3: Sliding Window (Strict) ===");
     let rate_limiter_window = RateLimiter::new(RateLimitStrategy::SlidingWindow {
-        window_size: Duration::from_secs(10),  // 10-second window
-        max_requests: 50,                       // Max 50 requests per window
+        window_size: Duration::from_secs(10), // 10-second window
+        max_requests: 50,                     // Max 50 requests per window
     });
-    
+
     tracing::info!("Configuration: window=10s, max_requests=50");
     tracing::info!("Best for: Strict per-window limits, API quotas");
     tracing::info!("Simulating requests:");
-    
+
     allowed = 0;
     denied = 0;
     for i in 0..60 {
@@ -108,10 +108,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Example 4: Sliding Window - Per-Minute Limit
     tracing::info!("\n=== Example 4: Sliding Window (Per-Minute) ===");
     let rate_limiter_minute = RateLimiter::new(RateLimitStrategy::SlidingWindow {
-        window_size: Duration::from_secs(60),  // 1-minute window
-        max_requests: 1000,                     // 1000 requests per minute
+        window_size: Duration::from_secs(60), // 1-minute window
+        max_requests: 1000,                   // 1000 requests per minute
     });
-    
+
     tracing::info!("Configuration: window=60s, max_requests=1000");
     tracing::info!("Best for: Per-minute API quotas, billing limits");
 

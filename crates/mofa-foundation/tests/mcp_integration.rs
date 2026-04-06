@@ -249,8 +249,8 @@ mod with_mcp_feature {
     async fn registry_unload_mcp_server_removes_tools() {
         use mofa_foundation::agent::tools::ToolRegistry;
         use mofa_foundation::agent::tools::registry::ToolSource;
-        use mofa_kernel::agent::components::tool::{Tool, ToolExt, ToolInput, ToolResult};
         use mofa_kernel::agent::components::tool::ToolRegistry as ToolRegistryTrait;
+        use mofa_kernel::agent::components::tool::{Tool, ToolExt, ToolInput, ToolResult};
         use mofa_kernel::agent::context::AgentContext;
 
         // Manually inject a fake MCP tool into the registry so we can test the
@@ -295,8 +295,8 @@ mod with_mcp_feature {
     #[tokio::test]
     async fn registry_filter_by_mcp_source() {
         use mofa_foundation::agent::tools::registry::ToolSource;
-        use mofa_kernel::agent::components::tool::{Tool, ToolExt, ToolInput, ToolResult};
         use mofa_kernel::agent::components::tool::ToolRegistry as ToolRegistryTrait; // for .contains()
+        use mofa_kernel::agent::components::tool::{Tool, ToolExt, ToolInput, ToolResult};
         use mofa_kernel::agent::context::AgentContext;
 
         struct Dummy(String);

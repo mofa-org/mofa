@@ -21,17 +21,17 @@ use opentelemetry::global;
 #[cfg(feature = "monitoring")]
 use opentelemetry::trace::TracerProvider as _;
 #[cfg(feature = "monitoring")]
-use opentelemetry_sdk::trace::TracerProvider;
-#[cfg(feature = "monitoring")]
 use opentelemetry_sdk::Resource;
+#[cfg(feature = "monitoring")]
+use opentelemetry_sdk::trace::TracerProvider;
 #[cfg(feature = "monitoring")]
 use opentelemetry_semantic_conventions::resource::SERVICE_NAME;
 #[cfg(feature = "monitoring")]
 use tracing_opentelemetry::OpenTelemetryLayer;
 #[cfg(feature = "monitoring")]
-use tracing_subscriber::layer::SubscriberExt;
-#[cfg(feature = "monitoring")]
 use tracing_subscriber::Registry;
+#[cfg(feature = "monitoring")]
+use tracing_subscriber::layer::SubscriberExt;
 
 use crate::error::GatewayResult;
 use tracing::{error, info};
@@ -51,7 +51,10 @@ pub fn init_tracing(service_name: &str, otlp_endpoint: &str) -> GatewayResult<()
     use opentelemetry_otlp::WithExportConfig;
     use opentelemetry_sdk::trace::BatchSpanProcessor;
 
-    info!("Initializing OpenTelemetry tracing for service: {}", service_name);
+    info!(
+        "Initializing OpenTelemetry tracing for service: {}",
+        service_name
+    );
 
     let service_name_owned = service_name.to_string();
 
@@ -60,16 +63,21 @@ pub fn init_tracing(service_name: &str, otlp_endpoint: &str) -> GatewayResult<()
         .with_tonic()
         .with_endpoint(otlp_endpoint)
         .build()
-        .map_err(|e| crate::error::GatewayError::Internal(format!("Failed to create OTLP exporter: {}", e)))?;
+        .map_err(|e| {
+            crate::error::GatewayError::Internal(format!("Failed to create OTLP exporter: {}", e))
+        })?;
 
     // Create batch span processor
-    let span_processor = BatchSpanProcessor::builder(exporter, opentelemetry_sdk::runtime::Tokio)
-        .build();
+    let span_processor =
+        BatchSpanProcessor::builder(exporter, opentelemetry_sdk::runtime::Tokio).build();
 
     // Create tracer provider
     let tracer_provider = TracerProvider::builder()
         .with_span_processor(span_processor)
-        .with_resource(Resource::new(vec![opentelemetry::KeyValue::new(SERVICE_NAME, service_name_owned.clone())]))
+        .with_resource(Resource::new(vec![opentelemetry::KeyValue::new(
+            SERVICE_NAME,
+            service_name_owned.clone(),
+        )]))
         .build();
 
     // Get tracer before setting global provider (to get concrete type)
@@ -84,8 +92,9 @@ pub fn init_tracing(service_name: &str, otlp_endpoint: &str) -> GatewayResult<()
     // Initialize tracing subscriber with OpenTelemetry layer
     let subscriber = Registry::default().with(telemetry_layer);
 
-    tracing::subscriber::set_global_default(subscriber)
-        .map_err(|e| crate::error::GatewayError::Internal(format!("Failed to set tracing subscriber: {}", e)))?;
+    tracing::subscriber::set_global_default(subscriber).map_err(|e| {
+        crate::error::GatewayError::Internal(format!("Failed to set tracing subscriber: {}", e))
+    })?;
 
     info!("OpenTelemetry tracing initialized successfully");
     Ok(())
@@ -97,10 +106,11 @@ pub fn init_tracing(service_name: &str, otlp_endpoint: &str) -> GatewayResult<()
 pub fn init_basic_tracing(service_name: &str) -> GatewayResult<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
-            tracing_subscriber::EnvFilter::from_default_env()
-                .add_directive(format!("{}={}", service_name, tracing::Level::INFO).parse().unwrap_or_else(|_| {
-                    tracing::Level::INFO.into()
-                })),
+            tracing_subscriber::EnvFilter::from_default_env().add_directive(
+                format!("{}={}", service_name, tracing::Level::INFO)
+                    .parse()
+                    .unwrap_or_else(|_| tracing::Level::INFO.into()),
+            ),
         )
         .init();
 

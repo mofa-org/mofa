@@ -153,11 +153,7 @@ pub struct CircuitBreakerRegistry {
 
 impl CircuitBreakerRegistry {
     /// Create a new circuit breaker registry.
-    pub fn new(
-        failure_threshold: u32,
-        success_threshold: u32,
-        timeout: Duration,
-    ) -> Self {
+    pub fn new(failure_threshold: u32, success_threshold: u32, timeout: Duration) -> Self {
         Self {
             breakers: Arc::new(RwLock::new(HashMap::new())),
             default_failure_threshold: failure_threshold,
