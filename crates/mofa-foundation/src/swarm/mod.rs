@@ -1,17 +1,19 @@
 pub mod analyzer;
+pub mod composer;
 pub mod config;
 pub mod dag;
 pub mod patterns;
 pub mod telemetry;
+pub mod scheduler;
 
 pub use analyzer::{RiskAwareAnalysis, RiskSummary, TaskAnalyzer};
+pub use composer::{FallbackPolicy, SwarmComposeResult, SwarmComposer};
 pub use config::{
     AgentSpec, AuditEvent, AuditEventKind, HITLMode, SLAConfig, SwarmConfig, SwarmMetrics,
     SwarmResult, SwarmStatus,
 };
 pub use dag::{DependencyEdge, DependencyKind, RiskLevel, SubtaskDAG, SubtaskStatus, SwarmSubtask};
 pub use patterns::CoordinationPattern;
-pub mod scheduler;
 pub use scheduler::{
     FailurePolicy, ParallelScheduler, SchedulerSummary, SequentialScheduler, SubtaskExecutorFn,
     SwarmScheduler, SwarmSchedulerConfig, TaskExecutionResult, TaskOutcome,

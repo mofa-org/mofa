@@ -70,6 +70,7 @@ impl CapabilityRegistry {
     pub fn query(&self, query: &str) -> Vec<&AgentManifest> {
         let keywords: Vec<String> = query
             .split_whitespace()
+            .filter(|w| !w.is_empty())
             .map(|w| w.to_lowercase())
             .collect();
 
@@ -89,15 +90,12 @@ impl CapabilityRegistry {
                     .iter()
                     .filter(|kw| haystack.contains(kw.as_str()))
                     .count();
-                if score > 0 {
-                    Some((score, m))
-                } else {
-                    None
-                }
+                if score > 0 { Some((score, m)) } else { None }
             })
             .collect();
 
-        scored.sort_by(|a, b| b.0.cmp(&a.0));
+        // Deterministic ordering: primary by score desc, secondary by agent_id asc.
+        scored.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.agent_id.cmp(&b.1.agent_id)));
         scored.into_iter().map(|(_, m)| m).collect()
     }
 
@@ -181,6 +179,28 @@ mod tests {
         let results = registry.query("write rust code");
         assert!(!results.is_empty());
         assert_eq!(results[0].agent_id, "agent-code");
+    }
+
+    #[test]
+    fn test_query_tie_breaks_by_agent_id_for_determinism() {
+        let mut registry = CapabilityRegistry::new();
+        registry.register(
+            AgentManifest::builder("agent-b", "AgentB")
+                .description("writes code")
+                .capabilities(AgentCapabilities::builder().with_tag("code").build())
+                .build(),
+        );
+        registry.register(
+            AgentManifest::builder("agent-a", "AgentA")
+                .description("writes code")
+                .capabilities(AgentCapabilities::builder().with_tag("code").build())
+                .build(),
+        );
+
+        let results = registry.query("write code");
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0].agent_id, "agent-a");
+        assert_eq!(results[1].agent_id, "agent-b");
     }
 
     #[test]
