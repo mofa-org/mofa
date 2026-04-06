@@ -24,7 +24,10 @@ pub use rate_limiter::*;
 pub use router::*;
 
 use crate::error::{GatewayError, GatewayResult};
-use crate::types::{LoadBalancingAlgorithm, NodeId, RequestMetadata, ChatCompletionResponse, Message, Role, Usage, Choice};
+use crate::types::{
+    ChatCompletionResponse, Choice, LoadBalancingAlgorithm, Message, NodeId, RequestMetadata, Role,
+    Usage,
+};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 

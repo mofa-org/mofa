@@ -230,12 +230,13 @@ impl AgentScheduler for CronScheduler {
     async fn register(&self, def: ScheduleDefinition) -> Result<ScheduleHandle, SchedulerError> {
         // Validate cron expression up-front so the error is immediate.
         if let Some(cron_expr) = &def.cron_expression
-            && let Err(e) = cron_expr.parse::<Schedule>() {
-                return Err(SchedulerError::InvalidCron(
-                    cron_expr.clone(),
-                    e.to_string(),
-                ));
-            }
+            && let Err(e) = cron_expr.parse::<Schedule>()
+        {
+            return Err(SchedulerError::InvalidCron(
+                cron_expr.clone(),
+                e.to_string(),
+            ));
+        }
 
         // Reject duplicate schedule IDs.
         {
@@ -727,8 +728,7 @@ mod tests {
     // ── Persistence integration tests ────────────────────────────────────────
 
     fn make_persisted_scheduler(path: &std::path::Path) -> CronScheduler {
-        CronScheduler::new(Arc::new(MockRunner), 10)
-            .with_persistence(path)
+        CronScheduler::new(Arc::new(MockRunner), 10).with_persistence(path)
     }
 
     /// Registering a schedule persists it so a fresh scheduler can reload it via `start()`.
@@ -760,7 +760,11 @@ mod tests {
         let s2 = make_persisted_scheduler(&path);
         s2.start().await.unwrap();
         let schedules = s2.list().await;
-        assert_eq!(schedules.len(), 1, "reloaded schedule list should have 1 entry");
+        assert_eq!(
+            schedules.len(),
+            1,
+            "reloaded schedule list should have 1 entry"
+        );
         assert_eq!(schedules[0].schedule_id, "s1");
     }
 
@@ -830,7 +834,10 @@ mod tests {
 
         let s2 = make_persisted_scheduler(&path);
         s2.start().await.unwrap();
-        assert!(s2.list().await.is_empty(), "empty file must reload as zero schedules");
+        assert!(
+            s2.list().await.is_empty(),
+            "empty file must reload as zero schedules"
+        );
     }
 
     #[test]

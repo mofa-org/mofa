@@ -73,7 +73,6 @@ pub enum RetryCondition {
     OnTransient(Vec<String>),
 }
 
-
 impl RetryCondition {
     /// Returns `true` if the given error message satisfies the retry condition.
     ///
@@ -130,7 +129,6 @@ pub enum CircuitState {
     /// circuit, failure re-opens it.
     HalfOpen,
 }
-
 
 // ============================================================================
 // CircuitBreakerState — shared runtime state per node
@@ -215,10 +213,11 @@ impl CircuitBreakerState {
                 CircuitState::Open => {
                     // Check if we should transition to HalfOpen
                     if let Some(opened_at) = inner.opened_at
-                        && opened_at.elapsed() < inner.reset_after {
-                            return CircuitState::Open;
-                        }
-                        // Fall through to write path
+                        && opened_at.elapsed() < inner.reset_after
+                    {
+                        return CircuitState::Open;
+                    }
+                    // Fall through to write path
                 }
             }
         }
@@ -227,9 +226,10 @@ impl CircuitBreakerState {
         let mut inner = self.inner.write().await;
         if inner.state == CircuitState::Open
             && let Some(opened_at) = inner.opened_at
-                && opened_at.elapsed() >= inner.reset_after {
-                    inner.state = CircuitState::HalfOpen;
-                }
+            && opened_at.elapsed() >= inner.reset_after
+        {
+            inner.state = CircuitState::HalfOpen;
+        }
         inner.state
     }
 

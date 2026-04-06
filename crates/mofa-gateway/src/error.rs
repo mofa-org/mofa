@@ -5,9 +5,9 @@
 //! API stability.
 
 use axum::{
+    Json,
     http::StatusCode,
     response::{IntoResponse, Response},
-    Json,
 };
 use serde::Serialize;
 use thiserror::Error;
@@ -259,10 +259,7 @@ mod tests {
         assert_eq!(err.to_string(), "Not leader - current leader is node-2");
 
         let err = ConsensusError::QuorumNotReached { have: 1, need: 3 };
-        assert_eq!(
-            err.to_string(),
-            "Quorum not reached: have 1, need 3"
-        );
+        assert_eq!(err.to_string(), "Quorum not reached: have 1, need 3");
 
         let err = ConsensusError::TermMismatch {
             expected: 5,

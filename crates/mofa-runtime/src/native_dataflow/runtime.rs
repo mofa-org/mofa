@@ -199,7 +199,13 @@ mod tests {
     use crate::native_dataflow::dataflow::DataflowBuilder;
     use crate::native_dataflow::node::NodeConfig;
 
-    fn simple_dataflow(name: &str) -> impl std::future::Future<Output = crate::native_dataflow::error::DataflowResult<crate::native_dataflow::dataflow::NativeDataflow>> {
+    fn simple_dataflow(
+        name: &str,
+    ) -> impl std::future::Future<
+        Output = crate::native_dataflow::error::DataflowResult<
+            crate::native_dataflow::dataflow::NativeDataflow,
+        >,
+    > {
         let name = name.to_string();
         async move {
             DataflowBuilder::new(&name)

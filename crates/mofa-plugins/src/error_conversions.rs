@@ -53,8 +53,8 @@ impl From<crate::hot_reload::ReloadError> for GlobalError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::wasm_runtime::WasmError;
     use crate::rhai_runtime::RhaiPluginError;
+    use crate::wasm_runtime::WasmError;
     use mofa_kernel::agent::types::error::ErrorCategory;
 
     #[test]

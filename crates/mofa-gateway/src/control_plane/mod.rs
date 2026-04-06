@@ -129,7 +129,11 @@ impl ControlPlane {
     }
 
     /// Add a node to the cluster (leader only).
-    pub async fn add_node(&self, node_id: NodeId, address: crate::types::NodeAddress) -> ControlPlaneResult<()> {
+    pub async fn add_node(
+        &self,
+        node_id: NodeId,
+        address: crate::types::NodeAddress,
+    ) -> ControlPlaneResult<()> {
         // Check if we're the leader
         if !self.consensus.is_leader().await {
             return Err(ControlPlaneError::NotLeader);
@@ -144,7 +148,7 @@ impl ControlPlane {
         // Propose the command and rely on the state machine apply loop to apply
         // committed entries once quorum is reached.
         self.consensus.propose(command).await?;
-        
+
         info!("Added node {} to cluster via consensus", node_id);
 
         Ok(())
@@ -165,7 +169,7 @@ impl ControlPlane {
         // Propose the command; the state machine apply loop will apply it once
         // the corresponding log entry is committed.
         self.consensus.propose(command).await?;
-        
+
         info!("Removed node {} from cluster via consensus", node_id);
 
         Ok(())
@@ -191,7 +195,7 @@ impl ControlPlane {
         // Propose the command; state changes are applied by the state machine
         // apply loop once the entry is committed.
         self.consensus.propose(command).await?;
-        
+
         info!("Registered agent {} via consensus", agent_id);
 
         Ok(())
@@ -212,7 +216,7 @@ impl ControlPlane {
         // Propose the command and rely on the state machine apply loop to apply
         // it once committed, keeping all nodes consistent.
         self.consensus.propose(command).await?;
-        
+
         info!("Unregistered agent {} via consensus", agent_id);
 
         Ok(())
@@ -249,13 +253,19 @@ impl ControlPlane {
     }
 
     /// Get all agents (async wrapper).
-    pub async fn get_agents(&self) -> std::collections::HashMap<String, crate::control_plane::state_machine::AgentRegistryEntry> {
+    pub async fn get_agents(
+        &self,
+    ) -> std::collections::HashMap<String, crate::control_plane::state_machine::AgentRegistryEntry>
+    {
         let sm = self.state_machine.read().await;
         sm.get_agents().await
     }
 
     /// Get a specific agent (async wrapper).
-    pub async fn get_agent(&self, agent_id: &str) -> Option<crate::control_plane::state_machine::AgentRegistryEntry> {
+    pub async fn get_agent(
+        &self,
+        agent_id: &str,
+    ) -> Option<crate::control_plane::state_machine::AgentRegistryEntry> {
         let sm = self.state_machine.read().await;
         sm.get_agent(agent_id).await
     }
@@ -273,10 +283,14 @@ impl ControlPlane {
 
                 // Get committed log entries from consensus engine
                 let (commit_index, entries) = consensus.get_committed_entries(last_applied).await;
-                
+
                 if !entries.is_empty() {
-                    info!("State machine apply loop: found {} entries to apply (commit_index: {}, last_applied: {})", 
-                        entries.len(), commit_index, last_applied);
+                    info!(
+                        "State machine apply loop: found {} entries to apply (commit_index: {}, last_applied: {})",
+                        entries.len(),
+                        commit_index,
+                        last_applied
+                    );
                 }
 
                 // Apply any new committed entries

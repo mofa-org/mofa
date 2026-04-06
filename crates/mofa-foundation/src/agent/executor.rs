@@ -643,7 +643,10 @@ mod tests {
             "mock"
         }
 
-        async fn chat(&self, _request: ChatCompletionRequest) -> AgentResult<ChatCompletionResponse> {
+        async fn chat(
+            &self,
+            _request: ChatCompletionRequest,
+        ) -> AgentResult<ChatCompletionResponse> {
             Ok(ChatCompletionResponse {
                 content: Some("ok".to_string()),
                 tool_calls: Some(Vec::<ToolCall>::new()),

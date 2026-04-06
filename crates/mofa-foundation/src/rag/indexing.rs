@@ -259,11 +259,21 @@ mod tests {
 
     #[async_trait]
     impl crate::llm::provider::LLMProvider for MockProvider {
-        fn name(&self) -> &str { "mock" }
-        fn default_model(&self) -> &str { "mock-embed" }
-        fn supports_streaming(&self) -> bool { false }
-        fn supports_tools(&self) -> bool { false }
-        fn supports_vision(&self) -> bool { false }
+        fn name(&self) -> &str {
+            "mock"
+        }
+        fn default_model(&self) -> &str {
+            "mock-embed"
+        }
+        fn supports_streaming(&self) -> bool {
+            false
+        }
+        fn supports_tools(&self) -> bool {
+            false
+        }
+        fn supports_vision(&self) -> bool {
+            false
+        }
 
         async fn chat(
             &self,
@@ -287,20 +297,34 @@ mod tests {
                 crate::llm::types::EmbeddingInput::Single(s) => vec![s],
                 crate::llm::types::EmbeddingInput::Multiple(v) => v,
             };
-            let data = inputs.iter().map(|text| {
-                let mut vec = vec![0.0f32; self.dimensions];
-                for (i, b) in text.bytes().enumerate() {
-                    vec[i % self.dimensions] += b as f32 / 255.0;
-                }
-                let norm = vec.iter().map(|x| x * x).sum::<f32>().sqrt();
-                if norm > 0.0 { for v in &mut vec { *v /= norm; } }
-                crate::llm::types::EmbeddingData {
-                    object: "embedding".into(), embedding: vec, index: 0,
-                }
-            }).collect();
+            let data = inputs
+                .iter()
+                .map(|text| {
+                    let mut vec = vec![0.0f32; self.dimensions];
+                    for (i, b) in text.bytes().enumerate() {
+                        vec[i % self.dimensions] += b as f32 / 255.0;
+                    }
+                    let norm = vec.iter().map(|x| x * x).sum::<f32>().sqrt();
+                    if norm > 0.0 {
+                        for v in &mut vec {
+                            *v /= norm;
+                        }
+                    }
+                    crate::llm::types::EmbeddingData {
+                        object: "embedding".into(),
+                        embedding: vec,
+                        index: 0,
+                    }
+                })
+                .collect();
             Ok(crate::llm::types::EmbeddingResponse {
-                object: "list".into(), data, model: request.model,
-                usage: crate::llm::types::EmbeddingUsage { prompt_tokens: 0, total_tokens: 0 },
+                object: "list".into(),
+                data,
+                model: request.model,
+                usage: crate::llm::types::EmbeddingUsage {
+                    prompt_tokens: 0,
+                    total_tokens: 0,
+                },
             })
         }
     }
@@ -318,7 +342,14 @@ mod tests {
         chunks: HashMap<String, DocumentChunk>,
         dimensions: Option<usize>,
     }
-    impl TestStore { fn new() -> Self { Self { chunks: HashMap::new(), dimensions: None } } }
+    impl TestStore {
+        fn new() -> Self {
+            Self {
+                chunks: HashMap::new(),
+                dimensions: None,
+            }
+        }
+    }
 
     #[async_trait]
     impl VectorStore for TestStore {
@@ -326,27 +357,48 @@ mod tests {
             if let Some(dim) = self.dimensions {
                 if chunk.embedding.len() != dim {
                     return Err(AgentError::InvalidInput(format!(
-                        "dimension mismatch: expected {}, got {}", dim, chunk.embedding.len()
+                        "dimension mismatch: expected {}, got {}",
+                        dim,
+                        chunk.embedding.len()
                     )));
                 }
-            } else { self.dimensions = Some(chunk.embedding.len()); }
+            } else {
+                self.dimensions = Some(chunk.embedding.len());
+            }
             self.chunks.insert(chunk.id.clone(), chunk);
             Ok(())
         }
-        async fn search(&self, _q: &[f32], _k: usize, _t: Option<f32>) -> AgentResult<Vec<SearchResult>> {
+        async fn search(
+            &self,
+            _q: &[f32],
+            _k: usize,
+            _t: Option<f32>,
+        ) -> AgentResult<Vec<SearchResult>> {
             Ok(Vec::new())
         }
-        async fn delete(&mut self, id: &str) -> AgentResult<bool> { Ok(self.chunks.remove(id).is_some()) }
-        async fn clear(&mut self) -> AgentResult<()> { self.chunks.clear(); self.dimensions = None; Ok(()) }
-        async fn count(&self) -> AgentResult<usize> { Ok(self.chunks.len()) }
-        fn similarity_metric(&self) -> SimilarityMetric { SimilarityMetric::DotProduct }
+        async fn delete(&mut self, id: &str) -> AgentResult<bool> {
+            Ok(self.chunks.remove(id).is_some())
+        }
+        async fn clear(&mut self) -> AgentResult<()> {
+            self.chunks.clear();
+            self.dimensions = None;
+            Ok(())
+        }
+        async fn count(&self) -> AgentResult<usize> {
+            Ok(self.chunks.len())
+        }
+        fn similarity_metric(&self) -> SimilarityMetric {
+            SimilarityMetric::DotProduct
+        }
     }
 
     #[tokio::test]
     async fn index_empty_documents() {
         let mut store = TestStore::new();
         let adapter = make_adapter(32);
-        let result = index_documents(&mut store, &adapter, &[], &RagIndexConfig::default()).await.unwrap();
+        let result = index_documents(&mut store, &adapter, &[], &RagIndexConfig::default())
+            .await
+            .unwrap();
         assert_eq!(result.chunks_total, 0);
     }
 
@@ -354,8 +406,13 @@ mod tests {
     async fn index_single_document() {
         let mut store = TestStore::new();
         let adapter = make_adapter(32);
-        let docs = vec![IndexDocument::new("doc-1", "Rust is a systems programming language.")];
-        let result = index_documents(&mut store, &adapter, &docs, &RagIndexConfig::default()).await.unwrap();
+        let docs = vec![IndexDocument::new(
+            "doc-1",
+            "Rust is a systems programming language.",
+        )];
+        let result = index_documents(&mut store, &adapter, &docs, &RagIndexConfig::default())
+            .await
+            .unwrap();
         assert!(result.chunks_total >= 1);
         assert_eq!(result.chunks_upserted, result.chunks_total);
         assert_eq!(result.document_ids, vec!["doc-1"]);
@@ -366,8 +423,12 @@ mod tests {
         let mut store = TestStore::new();
         let adapter = make_adapter(32);
         let docs = vec![IndexDocument::new("doc-1", "Hello world")];
-        let r1 = index_documents(&mut store, &adapter, &docs, &RagIndexConfig::default()).await.unwrap();
-        let r2 = index_documents(&mut store, &adapter, &docs, &RagIndexConfig::default()).await.unwrap();
+        let r1 = index_documents(&mut store, &adapter, &docs, &RagIndexConfig::default())
+            .await
+            .unwrap();
+        let r2 = index_documents(&mut store, &adapter, &docs, &RagIndexConfig::default())
+            .await
+            .unwrap();
         assert_eq!(r1.chunks_total, r2.chunks_total);
         assert_eq!(store.count().await.unwrap(), r1.chunks_total);
     }
@@ -380,7 +441,9 @@ mod tests {
             IndexDocument::new("a", "Document alpha."),
             IndexDocument::new("b", "Document beta."),
         ];
-        let result = index_documents(&mut store, &adapter, &docs, &RagIndexConfig::default()).await.unwrap();
+        let result = index_documents(&mut store, &adapter, &docs, &RagIndexConfig::default())
+            .await
+            .unwrap();
         assert_eq!(result.document_ids.len(), 2);
     }
 
@@ -389,10 +452,18 @@ mod tests {
         let mut store = TestStore::new();
         let adapter = make_adapter(16);
         let docs = vec![IndexDocument::new("doc-1", "Text").with_metadata("author", "alice")];
-        index_documents(&mut store, &adapter, &docs, &RagIndexConfig::default()).await.unwrap();
+        index_documents(&mut store, &adapter, &docs, &RagIndexConfig::default())
+            .await
+            .unwrap();
         let chunk = store.chunks.values().next().unwrap();
-        assert_eq!(chunk.metadata.get("author").map(String::as_str), Some("alice"));
-        assert_eq!(chunk.metadata.get("source_doc_id").map(String::as_str), Some("doc-1"));
+        assert_eq!(
+            chunk.metadata.get("author").map(String::as_str),
+            Some("alice")
+        );
+        assert_eq!(
+            chunk.metadata.get("source_doc_id").map(String::as_str),
+            Some("doc-1")
+        );
     }
 
     #[test]
