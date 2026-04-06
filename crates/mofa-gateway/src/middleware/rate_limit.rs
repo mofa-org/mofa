@@ -42,10 +42,13 @@ impl RateLimiter {
     pub fn check(&self, client_key: &str) -> bool {
         let now = Instant::now();
 
-        let mut entry = self.clients.entry(client_key.to_string()).or_insert_with(|| ClientState {
-            count: 0,
-            window_start: now,
-        });
+        let mut entry = self
+            .clients
+            .entry(client_key.to_string())
+            .or_insert_with(|| ClientState {
+                count: 0,
+                window_start: now,
+            });
 
         // Reset window if expired
         if now.duration_since(entry.window_start) >= self.window {
@@ -66,9 +69,8 @@ impl RateLimiter {
     /// Call this periodically (e.g. every minute) from a background task.
     pub fn gc(&self) {
         let now = Instant::now();
-        self.clients.retain(|_, state| {
-            now.duration_since(state.window_start) < self.window * 2
-        });
+        self.clients
+            .retain(|_, state| now.duration_since(state.window_start) < self.window * 2);
     }
 }
 
