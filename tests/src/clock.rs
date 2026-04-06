@@ -37,27 +37,32 @@ impl MockClock {
     /// Create a clock starting at the given duration from epoch.
     pub fn starting_at(start: Duration) -> Self {
         Self {
-            current_ms: AtomicU64::new(start.as_millis() as u64),
+            current_ms: AtomicU64::new(u64::try_from(start.as_millis()).unwrap_or(u64::MAX)),
             auto_advance_ms: RwLock::new(None),
         }
     }
 
     /// Advance the clock by the given duration.
     pub fn advance(&self, duration: Duration) {
-        self.current_ms
-            .fetch_add(duration.as_millis() as u64, Ordering::Relaxed);
+        self.current_ms.fetch_add(
+            u64::try_from(duration.as_millis()).unwrap_or(u64::MAX),
+            Ordering::Relaxed,
+        );
     }
 
     /// Set the clock to an exact time.
     pub fn set(&self, duration: Duration) {
-        self.current_ms
-            .store(duration.as_millis() as u64, Ordering::Relaxed);
+        self.current_ms.store(
+            u64::try_from(duration.as_millis()).unwrap_or(u64::MAX),
+            Ordering::Relaxed,
+        );
     }
 
     /// Enable auto-advance: each call to [`now_millis`](Clock::now_millis)
     /// automatically moves time forward by the given step.
     pub fn set_auto_advance(&self, step: Duration) {
-        *self.auto_advance_ms.write().expect("lock poisoned") = Some(step.as_millis() as u64);
+        *self.auto_advance_ms.write().expect("lock poisoned") =
+            Some(u64::try_from(step.as_millis()).unwrap_or(u64::MAX));
     }
 
     /// Disable auto-advance.
@@ -81,10 +86,6 @@ pub struct SystemClock;
 
 impl Clock for SystemClock {
     fn now_millis(&self) -> u64 {
-        use std::time::{SystemTime, UNIX_EPOCH};
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as u64
+        mofa_kernel::utils::now_ms()
     }
 }

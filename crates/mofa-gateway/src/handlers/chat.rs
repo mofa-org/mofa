@@ -111,7 +111,7 @@ pub async fn chat(
             .await
             .map_err(|e| GatewayError::AgentOperationFailed(e.to_string()))?
     };
-    let duration_ms = start.elapsed().as_millis() as u64;
+    let duration_ms = u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX);
 
     tracing::info!(
         agent_id = %id,
@@ -120,8 +120,8 @@ pub async fn chat(
         "chat request completed"
     );
 
-    let output_value = serde_json::to_value(&output.content)
-        .unwrap_or_else(|_| json!(output.content.to_text()));
+    let output_value =
+        serde_json::to_value(&output.content).unwrap_or_else(|_| json!(output.content.to_text()));
 
     let response = ChatResponse {
         agent_id: id,

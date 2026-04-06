@@ -19,7 +19,7 @@ impl ReportFormatter for JsonFormatter {
                 let mut obj = serde_json::json!({
                     "name": r.name,
                     "status": r.status.to_string(),
-                    "duration_ms": r.duration.as_millis() as u64,
+                    "duration_ms": u64::try_from(r.duration.as_millis()).unwrap_or(u64::MAX),
                 });
                 if let Some(err) = &r.error {
                     obj["error"] = serde_json::Value::String(err.clone());
@@ -45,7 +45,7 @@ impl ReportFormatter for JsonFormatter {
         let root = serde_json::json!({
             "suite": report.suite_name,
             "timestamp": report.timestamp,
-            "total_duration_ms": report.total_duration.as_millis() as u64,
+            "total_duration_ms": u64::try_from(report.total_duration.as_millis()).unwrap_or(u64::MAX),
             "summary": {
                 "total": total,
                 "passed": passed,

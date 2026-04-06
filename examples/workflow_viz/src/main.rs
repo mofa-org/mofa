@@ -564,7 +564,10 @@ async fn simulate_execution(
 // ---------------------------------------------------------------------------
 
 fn now_ms() -> u64 {
-    chrono::Utc::now().timestamp_millis() as u64
+    chrono::Utc::now()
+        .timestamp_millis()
+        .try_into()
+        .unwrap_or(0)
 }
 
 /// Deterministic pseudo-random from a string (for consistent simulation behaviour)

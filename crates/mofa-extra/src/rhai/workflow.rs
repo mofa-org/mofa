@@ -258,7 +258,8 @@ impl ScriptWorkflowNode {
                         success: true,
                         output: script_result.value,
                         error: None,
-                        execution_time_ms: start_time.elapsed().as_millis() as u64,
+                        execution_time_ms: u64::try_from(start_time.elapsed().as_millis())
+                            .unwrap_or(u64::MAX),
                         retry_count,
                         logs: script_result.logs,
                     });
@@ -285,7 +286,7 @@ impl ScriptWorkflowNode {
             success: false,
             output: serde_json::Value::Null,
             error: last_error,
-            execution_time_ms: start_time.elapsed().as_millis() as u64,
+            execution_time_ms: u64::try_from(start_time.elapsed().as_millis()).unwrap_or(u64::MAX),
             retry_count: retry_count.saturating_sub(1),
             logs: Vec::new(),
         })

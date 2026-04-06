@@ -549,7 +549,7 @@ impl RhaiScriptEngine {
         // Execute the script
         let result = self.engine.eval_with_scope::<Dynamic>(&mut scope, source);
 
-        let execution_time_ms = start_time.elapsed().as_millis() as u64;
+        let execution_time_ms = u64::try_from(start_time.elapsed().as_millis()).unwrap_or(u64::MAX);
         let logs = self.logs.read().await.clone();
 
         match result {
@@ -607,7 +607,7 @@ impl RhaiScriptEngine {
             .engine
             .eval_ast_with_scope::<Dynamic>(&mut scope, &compiled.ast);
 
-        let execution_time_ms = start_time.elapsed().as_millis() as u64;
+        let execution_time_ms = u64::try_from(start_time.elapsed().as_millis()).unwrap_or(u64::MAX);
         let logs = self.logs.read().await.clone();
 
         match result {

@@ -361,7 +361,7 @@ impl WasmRuntime {
         let start = Instant::now();
         let module = Module::new(&self.engine, bytes)
             .map_err(|e| WasmError::CompilationError(e.to_string()))?;
-        let compile_time = start.elapsed().as_millis() as u64;
+        let compile_time = u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX);
 
         let compiled = CompiledModule::new(name, module, bytes, compile_time);
 

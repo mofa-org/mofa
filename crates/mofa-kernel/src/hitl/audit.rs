@@ -72,7 +72,7 @@ impl ReviewAuditEvent {
             node_id: None,
             tenant_id: None,
             actor,
-            timestamp_ms: chrono::Utc::now().timestamp_millis() as u64,
+            timestamp_ms: crate::utils::chrono_now_ms(),
             data: HashMap::new(),
             ip_address: None,
             user_agent: None,

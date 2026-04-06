@@ -436,7 +436,8 @@ impl RuleEngine {
                             success: false,
                             result: serde_json::Value::Null,
                             error: result.error,
-                            execution_time_ms: start_time.elapsed().as_millis() as u64,
+                            execution_time_ms: u64::try_from(start_time.elapsed().as_millis())
+                                .unwrap_or(u64::MAX),
                             variable_updates,
                             triggered_events,
                         });
@@ -455,7 +456,8 @@ impl RuleEngine {
                                 "Invalid function name: '{}'. Must be a valid identifier.",
                                 function
                             )),
-                            execution_time_ms: start_time.elapsed().as_millis() as u64,
+                            execution_time_ms: u64::try_from(start_time.elapsed().as_millis())
+                                .unwrap_or(u64::MAX),
                             variable_updates,
                             triggered_events,
                         });
@@ -473,7 +475,8 @@ impl RuleEngine {
                             success: false,
                             result: serde_json::Value::Null,
                             error: result.error,
-                            execution_time_ms: start_time.elapsed().as_millis() as u64,
+                            execution_time_ms: u64::try_from(start_time.elapsed().as_millis())
+                                .unwrap_or(u64::MAX),
                             variable_updates,
                             triggered_events,
                         });
@@ -530,7 +533,8 @@ impl RuleEngine {
                 success: true,
                 result,
                 error: None,
-                execution_time_ms: start_time.elapsed().as_millis() as u64,
+                execution_time_ms: u64::try_from(start_time.elapsed().as_millis())
+                    .unwrap_or(u64::MAX),
                 variable_updates,
                 triggered_events,
             })
@@ -558,7 +562,8 @@ impl RuleEngine {
                         success: false,
                         result: serde_json::Value::Null,
                         error: result.error,
-                        execution_time_ms: start_time.elapsed().as_millis() as u64,
+                        execution_time_ms: u64::try_from(start_time.elapsed().as_millis())
+                            .unwrap_or(u64::MAX),
                         variable_updates,
                         triggered_events,
                     });
@@ -577,7 +582,8 @@ impl RuleEngine {
                             "Invalid function name: '{}'. Must be a valid identifier.",
                             function
                         )),
-                        execution_time_ms: start_time.elapsed().as_millis() as u64,
+                        execution_time_ms: u64::try_from(start_time.elapsed().as_millis())
+                            .unwrap_or(u64::MAX),
                         variable_updates,
                         triggered_events,
                     });
@@ -595,7 +601,8 @@ impl RuleEngine {
                         success: false,
                         result: serde_json::Value::Null,
                         error: result.error,
-                        execution_time_ms: start_time.elapsed().as_millis() as u64,
+                        execution_time_ms: u64::try_from(start_time.elapsed().as_millis())
+                            .unwrap_or(u64::MAX),
                         variable_updates,
                         triggered_events,
                     });
@@ -641,7 +648,7 @@ impl RuleEngine {
             success: true,
             result,
             error: None,
-            execution_time_ms: start_time.elapsed().as_millis() as u64,
+            execution_time_ms: u64::try_from(start_time.elapsed().as_millis()).unwrap_or(u64::MAX),
             variable_updates,
             triggered_events,
         })
@@ -694,7 +701,7 @@ impl RuleEngine {
                 final_result: None,
                 any_matched: false,
                 used_default: false,
-                total_time_ms: start_time.elapsed().as_millis() as u64,
+                total_time_ms: u64::try_from(start_time.elapsed().as_millis()).unwrap_or(u64::MAX),
             });
         }
 
@@ -722,7 +729,8 @@ impl RuleEngine {
             match_results.push(RuleMatchResult {
                 rule_id: rule.id.clone(),
                 matched,
-                evaluation_time_ms: eval_start.elapsed().as_millis() as u64,
+                evaluation_time_ms: u64::try_from(eval_start.elapsed().as_millis())
+                    .unwrap_or(u64::MAX),
             });
 
             if !matched {
@@ -792,7 +800,7 @@ impl RuleEngine {
             final_result,
             any_matched,
             used_default,
-            total_time_ms: start_time.elapsed().as_millis() as u64,
+            total_time_ms: u64::try_from(start_time.elapsed().as_millis()).unwrap_or(u64::MAX),
         })
     }
 

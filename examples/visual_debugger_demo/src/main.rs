@@ -27,10 +27,7 @@ use tracing::info;
 /// 4. process - Processes the data
 /// 5. output - Produces final output
 fn create_demo_workflow_events(execution_id: &str) -> Vec<DebugEvent> {
-    let base_time = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis() as u64;
+    let base_time = mofa_kernel::utils::now_ms();
     
     vec![
         DebugEvent::WorkflowStart {
