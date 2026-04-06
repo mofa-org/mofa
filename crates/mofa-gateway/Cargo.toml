@@ -26,6 +26,7 @@ publish = true
 async-trait.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+reqwest.workspace = true
 bincode.workspace = true
 tokio.workspace = true
 tracing.workspace = true
@@ -85,6 +86,9 @@ subtle = { version = "2", optional = true }
 
 [build-dependencies]
 tonic-build = "0.12"
+
+[dev-dependencies]
+mockito = "1.2.0"
 
 [lints]
 workspace = true
