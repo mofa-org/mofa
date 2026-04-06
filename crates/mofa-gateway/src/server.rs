@@ -145,8 +145,9 @@ impl GatewayServer {
             .with_state(state);
 
         // Add OpenAI router if inference bridge is configured
-        if let Some(ref orch_config) = self.orchestrator_config {
-            let bridge = Arc::new(InferenceBridge::new(orch_config.clone()));
+        if let Some(ref _orch_config) = self.orchestrator_config {
+            // Use a simple provider name - routing policy can be configured separately
+            let bridge = Arc::new(InferenceBridge::new("local"));
             router = router
                 .merge(openai_router())
                 .layer(axum::Extension(bridge));
