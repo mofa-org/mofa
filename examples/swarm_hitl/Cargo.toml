@@ -1,0 +1,20 @@
+[package]
+name = "swarm_hitl"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+
+[dependencies]
+mofa-foundation = { path = "../../crates/mofa-foundation" }
+mofa-kernel = { path = "../../crates/mofa-kernel" }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "io-std", "time"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-opentelemetry = "0.28"
+opentelemetry = { version = "0.27", features = ["trace"] }
+opentelemetry_sdk = { version = "0.27", features = ["rt-tokio"] }
+opentelemetry-otlp = { version = "0.27", features = ["http-proto", "reqwest-client"] }
+

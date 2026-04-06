@@ -112,7 +112,7 @@ impl SwarmSubtask {
             status: SubtaskStatus::Pending,
             assigned_agent: None,
             output: None,
-            complexity: 0.5,
+            complexity: 0.5, // Default
             started_at: None,
             completed_at: None,
             risk_level: RiskLevel::Low,
@@ -127,7 +127,7 @@ impl SwarmSubtask {
         self
     }
 
-    /// Set the estimated complexity
+    /// Override the estimated complexity (0.0 = trivial, 1.0 = very risky).
     pub fn with_complexity(mut self, complexity: f64) -> Self {
         self.complexity = complexity.clamp(0.0, 1.0);
         self
@@ -155,6 +155,7 @@ impl SwarmSubtask {
         self
     }
 }
+
 
 /// Edge metadata representing a dependency between subtasks
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -251,12 +252,7 @@ impl SubtaskDAG {
                         let dep_edge = edge.weight();
                         match dep_edge.kind {
                             DependencyKind::Sequential | DependencyKind::DataFlow => {
-                                matches!(
-                                    dep.status,
-                                    SubtaskStatus::Completed
-                                        | SubtaskStatus::Skipped
-                                        | SubtaskStatus::Failed(_)
-                                )
+                                matches!(dep.status, SubtaskStatus::Completed | SubtaskStatus::Skipped)
                             }
                             DependencyKind::Soft => true,
                         }
@@ -414,7 +410,6 @@ impl SubtaskDAG {
             .filter(|t| matches!(t.status, SubtaskStatus::Failed(_)))
             .count()
     }
-
 
     // ── Risk & HITL helpers ───────────────────────────────────────────────
 
@@ -778,7 +773,7 @@ mod tests {
     }
 
     #[test]
-    fn test_failed_dependency_unblocks_downstream() {
+    fn test_failed_dependency_blocks_downstream() {
         let mut dag = SubtaskDAG::new("fail-chain");
         let a = dag.add_task(SwarmSubtask::new("a", "Fetch data"));
         let b = dag.add_task(SwarmSubtask::new("b", "Process data"));
@@ -790,22 +785,19 @@ mod tests {
         // Only a is ready initially
         assert_eq!(dag.ready_tasks(), vec![a]);
 
-        // a fails — b should become ready (not stuck forever)
+        // a fails — b should NOT become ready
         dag.mark_failed(a, "connection timeout");
         let ready = dag.ready_tasks();
-        assert_eq!(ready, vec![b], "b must become ready when its dependency fails");
+        assert!(ready.is_empty(), "b must not be ready when its dependency fails");
 
-        // b also fails — c should become ready
-        dag.mark_failed(b, "no input data");
+        // If b is explicitly skipped, c can become ready
+        dag.mark_skipped(b);
         let ready = dag.ready_tasks();
-        assert_eq!(ready, vec![c], "c must become ready when its dependency fails");
-
-        dag.mark_skipped(c);
-        assert!(dag.is_complete());
+        assert_eq!(ready, vec![c], "c must be ready when b is skipped");
     }
 
     #[test]
-    fn test_failed_dependency_diamond_dag() {
+    fn test_failed_dependency_blocks_merge_node() {
         let mut dag = SubtaskDAG::new("fail-diamond");
         let a = dag.add_task(SwarmSubtask::new("a", "Start"));
         let b = dag.add_task(SwarmSubtask::new("b", "Path 1"));
@@ -821,9 +813,9 @@ mod tests {
         dag.mark_complete(b);
         dag.mark_failed(c, "path 2 error");
 
-        // d depends on both b (Completed) and c (Failed) — should be ready
+        // d depends on both b (Completed) and c (Failed) — should NOT be ready
         let ready = dag.ready_tasks();
-        assert_eq!(ready, vec![d], "d must become ready when all deps are terminal");
+        assert!(ready.is_empty(), "d must not be ready when a dependency fails");
     }
 
     #[test]
