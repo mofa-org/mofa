@@ -839,3 +839,55 @@ Run examples:
 cd examples
 cargo run --bin hitl_workflow -- integration all
 ```
+
+## HITLGate: Scheduler-Level Suspension
+
+PR #1488 wires human approval directly into the scheduler loop via the `HITLGate` trait. This is different from the ReviewManager API (which operates at the application layer) -- HITLGate intercepts tasks at the scheduler level, before they are dispatched to an agent.
+
+### When does a task pause?
+
+| RiskLevel | Default behavior |
+|-----------|-----------------|
+| `Low` | Pass through, no gate check |
+| `Medium` | Pass through, no gate check |
+| `High` | Gate checked; pauses if `should_pause()` returns true |
+| `Critical` | Always pauses, gate is not consulted |
+
+### Using GatedSequentialScheduler
+
+```rust
+use mofa_foundation::swarm::{
+    GatedSequentialScheduler, ReviewingHITLGate, ReviewManager,
+};
+
+let manager = ReviewManager::new(store.clone());
+let gate = ReviewingHITLGate::new(manager);
+let scheduler = GatedSequentialScheduler::new(dag, Arc::new(gate));
+let summary = scheduler.run().await?;
+```
+
+### Using NoopHITLGate in tests
+
+```rust
+use mofa_foundation::swarm::{GatedSequentialScheduler, NoopHITLGate};
+
+let scheduler = GatedSequentialScheduler::new(dag, Arc::new(NoopHITLGate));
+// All tasks run immediately regardless of risk level
+```
+
+### Writing a custom gate
+
+```rust
+use mofa_foundation::swarm::{HITLGate, SwarmSubtask, RiskLevel};
+
+struct SlackApprovalGate { webhook_url: String }
+
+#[async_trait::async_trait]
+impl HITLGate for SlackApprovalGate {
+    async fn should_pause(&self, task: &SwarmSubtask, risk: RiskLevel) -> bool {
+        // post to Slack and wait for approval callback
+        // return true to pause, false to continue
+        risk >= RiskLevel::High
+    }
+}
+```
