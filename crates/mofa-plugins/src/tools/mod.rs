@@ -3,6 +3,8 @@
 //! Provides a collection of commonly used tools that can be registered
 //! with the ToolPlugin.
 
+use std::collections::HashMap;
+
 pub use crate::{
     AgentPlugin, PluginResult, ToolCall, ToolDefinition, ToolExecutor, ToolPlugin, ToolResult,
 };
@@ -34,12 +36,26 @@ pub use shell::ShellCommandTool;
 
 /// Convenience function to create a ToolPlugin with all built-in tools
 pub fn create_builtin_tool_plugin(plugin_id: &str) -> PluginResult<ToolPlugin> {
+    create_builtin_tool_plugin_with_config(plugin_id, &HashMap::new())
+}
+
+/// Create a ToolPlugin with built-in tools and per-tool JSON config.
+///
+/// `tool_configs` is keyed by tool name, e.g. `"shell"`.
+pub fn create_builtin_tool_plugin_with_config(
+    plugin_id: &str,
+    tool_configs: &HashMap<String, serde_json::Value>,
+) -> PluginResult<ToolPlugin> {
     let mut tool_plugin = ToolPlugin::new(plugin_id);
 
     // Register all built-in tools
     tool_plugin.register_tool(HttpRequestTool::new());
     tool_plugin.register_tool(FileSystemTool::new_with_defaults()?);
-    tool_plugin.register_tool(ShellCommandTool::new_with_defaults());
+    let shell_tool = tool_configs
+        .get("shell")
+        .map(ShellCommandTool::new_with_defaults_from_config)
+        .unwrap_or_else(ShellCommandTool::new_with_defaults);
+    tool_plugin.register_tool(shell_tool);
     tool_plugin.register_tool(DateTimeTool::new());
     tool_plugin.register_tool(CalculatorTool::new());
     tool_plugin.register_tool(RhaiScriptTool::new()?);

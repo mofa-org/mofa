@@ -1,7 +1,11 @@
 //! LLM tool executor adapters for the SDK.
 
+use mofa_foundation::config::AgentYamlConfig;
 use mofa_foundation::llm::{LLMError, LLMResult, Tool, ToolExecutor};
+use mofa_foundation::llm::LLMAgentBuilder;
+use mofa_plugins::tools::create_builtin_tool_plugin_with_config;
 use mofa_plugins::{ToolCall, ToolDefinition, ToolPlugin};
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -59,6 +63,61 @@ impl ToolPluginExecutor {
     fn definition_to_tool(def: &ToolDefinition) -> Tool {
         Tool::function(&def.name, &def.description, def.parameters.clone())
     }
+}
+
+/// Build a built-in ToolPlugin from `agent.yml` tools configuration.
+///
+/// Only `enabled: true` tools are included in the generated config map.
+pub fn builtin_tool_plugin_from_agent_yaml(
+    plugin_id: &str,
+    config: &AgentYamlConfig,
+) -> LLMResult<ToolPlugin> {
+    let mut tool_configs: HashMap<String, serde_json::Value> = HashMap::new();
+
+    if let Some(tools) = &config.tools {
+        for tool in tools.iter().filter(|t| t.enabled) {
+            tool_configs.insert(
+                tool.name.clone(),
+                serde_json::to_value(&tool.config).map_err(|e| {
+                    LLMError::Other(format!(
+                        "Failed to serialize tool config for '{}': {}",
+                        tool.name, e
+                    ))
+                })?,
+            );
+        }
+    }
+
+    create_builtin_tool_plugin_with_config(plugin_id, &tool_configs)
+        .map_err(|e| LLMError::Other(format!("Failed to create builtin ToolPlugin: {}", e)))
+}
+
+/// Create an LLM ToolExecutor from `agent.yml` tools configuration.
+pub fn tool_executor_from_agent_yaml(
+    plugin_id: &str,
+    config: &AgentYamlConfig,
+) -> LLMResult<Arc<dyn ToolExecutor>> {
+    let plugin = builtin_tool_plugin_from_agent_yaml(plugin_id, config)?;
+    Ok(Arc::new(ToolPluginExecutor::new(plugin)))
+}
+
+/// Build an `LLMAgentBuilder` from yaml config and attach configured built-in tools.
+pub fn llm_builder_from_yaml_with_builtin_tools(config: AgentYamlConfig) -> LLMResult<LLMAgentBuilder> {
+    let mut builder = LLMAgentBuilder::from_yaml_config(config.clone())?;
+    if config.tools.as_ref().is_some_and(|tools| tools.iter().any(|t| t.enabled)) {
+        let executor = tool_executor_from_agent_yaml("builtin-tools", &config)?;
+        builder = builder.with_tool_executor(executor);
+    }
+    Ok(builder)
+}
+
+/// Build an `LLMAgentBuilder` from config file and attach configured built-in tools.
+pub fn llm_builder_from_config_file_with_builtin_tools(
+    path: impl AsRef<std::path::Path>,
+) -> LLMResult<LLMAgentBuilder> {
+    let config = AgentYamlConfig::from_file(path)
+        .map_err(|e| LLMError::ConfigError(format!("Failed to load config file: {}", e)))?;
+    llm_builder_from_yaml_with_builtin_tools(config)
 }
 
 #[async_trait::async_trait]
