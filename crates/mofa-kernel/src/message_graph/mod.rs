@@ -25,6 +25,7 @@ pub const MESSAGES_KEY: &str = "messages";
 
 /// Error type for MessageGraph construction/validation.
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum MessageGraphError {
     #[error("graph id cannot be empty")]
     EmptyGraphId,
@@ -248,6 +249,7 @@ impl GraphState for MessageState {
 
 /// Node kind in MessageGraph.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum MessageNodeKind {
     Agent { agent_id: String },
     Topic { topic: String },
@@ -278,6 +280,7 @@ impl MessageNode {
 
 /// Route-matching rule for an edge.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum RouteRule {
     Always,
     MessageType(String),
@@ -309,6 +312,7 @@ impl RouteRule {
 
 /// Delivery mode for an edge.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum DeliveryMode {
     Direct,
     Broadcast,
