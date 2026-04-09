@@ -5883,6 +5883,8 @@ dependencies = [
  "mofa-plugins",
  "num_enum_derive",
  "once_cell",
+ "opentelemetry",
+ "opentelemetry-semantic-conventions",
  "parking_lot",
  "petgraph 0.7.1",
  "qdrant-client",
