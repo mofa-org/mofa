@@ -9,6 +9,7 @@ pub mod backend;
 pub mod bus;
 pub mod clock;
 pub mod dsl;
+pub mod parameterized;
 pub mod report;
 pub mod tools;
 
@@ -19,6 +20,10 @@ pub use dsl::{
     AgentTest, AgentTestScenario, MockScenarioAgent, ScenarioAgent, ScenarioBuildError,
     ScenarioLoadError, ScenarioTurn, ScenarioTurnOutput, ToolCallRecord, ToolInvocationRule,
     TurnExpectation,
+};
+pub use parameterized::{
+    ParameterExpansionError, ParameterMatrix, ParameterSet, ParameterizedScenario,
+    ParameterizedScenarioFile,
 };
 pub use report::{
     JsonFormatter, ReportFormatter, TestCaseResult, TestReport, TestReportBuilder, TestStatus,
