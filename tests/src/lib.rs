@@ -12,6 +12,7 @@ pub mod dsl;
 pub mod golden;
 pub mod parameterized;
 pub mod report;
+pub mod semantic;
 pub mod tools;
 
 pub use backend::MockLLMBackend;
@@ -34,5 +35,10 @@ pub use golden::{
 pub use report::{
     JsonFormatter, ReportFormatter, TestCaseResult, TestReport, TestReportBuilder, TestStatus,
     TextFormatter,
+};
+pub use semantic::{
+    ContainsAllFactsMatcher, ExcludesContentMatcher, IntentMatcher, RegexIntentMatcher,
+    SemanticAssertionError, SemanticAssertionSet, SemanticExpectation, SemanticMatchResult,
+    SemanticMatcher, SemanticReport, SimilarityMatcher,
 };
 pub use tools::MockTool;
