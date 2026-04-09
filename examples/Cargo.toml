@@ -65,6 +65,7 @@ members = [
     "resume_from_checkpoint",
     "claw_demo",
     "swarm_orchestrator",
+    "swarm_hitl_gate",
 ]
 
 [workspace.package]
