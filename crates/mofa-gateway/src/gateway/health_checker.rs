@@ -200,7 +200,13 @@ impl HealthChecker {
         };
         
         // Send HTTP GET request
-        let request = format!("GET /health HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n", address);
+        // Host header should include port when non-default
+        let host_header = if address.port() == 80 || address.port() == 443 {
+            address.ip().to_string()
+        } else {
+            format!("{}:{}", address.ip(), address.port())
+        };
+        let request = format!("GET /health HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n", host_header);
         
         // Write request with timeout
         match timeout(timeout_duration, stream.write_all(request.as_bytes())).await {
