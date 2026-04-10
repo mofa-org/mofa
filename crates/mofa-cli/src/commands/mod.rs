@@ -12,4 +12,5 @@ pub mod plugin;
 pub mod rag;
 pub mod run;
 pub mod session;
+pub mod swarm;
 pub mod tool;

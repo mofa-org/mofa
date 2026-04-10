@@ -387,6 +387,18 @@ async fn run_command(cli: Cli) -> CliResult<()> {
             }
         },
 
+        Some(Commands::Swarm { action }) => match action {
+            cli::SwarmCommands::Run {
+                file,
+                dry_run,
+                metrics,
+                pattern,
+                timeout,
+            } => {
+                commands::swarm::run(&file, dry_run, metrics, pattern, timeout).await?;
+            }
+        },
+
         None => {
             // Should have been handled by TUI check above
             // If we get here, show help

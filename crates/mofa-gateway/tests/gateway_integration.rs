@@ -14,6 +14,8 @@ async fn test_gateway_startup() {
         load_balancing: LoadBalancingAlgorithm::RoundRobin,
         enable_rate_limiting: true,
         enable_circuit_breakers: true,
+        enable_local_llm_proxy: false,
+        local_llm_backend_url: None,
     };
 
     let mut gateway = Gateway::new(config).await.unwrap();
@@ -33,6 +35,8 @@ async fn test_gateway_metrics_endpoint() {
         load_balancing: LoadBalancingAlgorithm::RoundRobin,
         enable_rate_limiting: true,
         enable_circuit_breakers: true,
+        enable_local_llm_proxy: false,
+        local_llm_backend_url: None,
     };
 
     let mut gateway = Gateway::new(config).await.unwrap();
@@ -64,6 +68,8 @@ async fn test_gateway_with_control_plane() {
         load_balancing: LoadBalancingAlgorithm::RoundRobin,
         enable_rate_limiting: true,
         enable_circuit_breakers: true,
+        enable_local_llm_proxy: false,
+        local_llm_backend_url: None,
     };
 
     let mut gateway = Gateway::with_control_plane(config, None).await.unwrap();
