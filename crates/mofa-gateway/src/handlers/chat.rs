@@ -41,6 +41,10 @@ pub struct ChatResponse {
     pub output: Value,
     /// Request processing time in milliseconds.
     pub duration_ms: u64,
+    /// Whether this response was returned from semantic cache.
+    pub cache_hit: bool,
+    /// Similarity score for semantic cache hits.
+    pub cache_similarity: Option<f32>,
 }
 
 /// Extract client key from request headers for rate-limiting purposes
@@ -87,6 +91,8 @@ pub async fn chat(
         }
     }
 
+    let raw_message = req.message.clone();
+
     // Build input
     let input = match req.data {
         Some(json_data) => AgentInput::json(json_data),
@@ -101,6 +107,32 @@ pub async fn chat(
     let session_id = req.session_id.unwrap_or_else(|| Uuid::new_v4().to_string());
     let mut ctx = AgentContext::new(execution_id);
     ctx.session_id = Some(session_id.clone());
+
+    if let Some(prompt) = raw_message.as_deref()
+        && let Some(hit) = state
+            .semantic_cache
+            .lookup(&id, prompt)
+            .await
+            .map_err(|e| GatewayError::Internal(format!("semantic cache lookup failed: {e}")))?
+    {
+        tracing::debug!(
+            agent_id = %id,
+            session_id = %session_id,
+            score = hit.score,
+            "semantic cache hit"
+        );
+
+        let response = ChatResponse {
+            agent_id: id,
+            session_id,
+            output: hit.output,
+            duration_ms: 0,
+            cache_hit: true,
+            cache_similarity: Some(hit.score),
+        };
+
+        return Ok((StatusCode::OK, Json(response)));
+    }
 
     // Execute
     let start = std::time::Instant::now();
@@ -124,11 +156,21 @@ pub async fn chat(
         .unwrap_or_else(|_| json!(output.content.to_text()));
 
     let response = ChatResponse {
-        agent_id: id,
+        agent_id: id.clone(),
         session_id,
-        output: output_value,
+        output: output_value.clone(),
         duration_ms,
+        cache_hit: false,
+        cache_similarity: None,
     };
+
+    if let Some(prompt) = raw_message.as_deref() {
+        state
+            .semantic_cache
+            .insert(&id, prompt, &output_value)
+            .await
+            .map_err(|e| GatewayError::Internal(format!("semantic cache write failed: {e}")))?;
+    }
 
     Ok((StatusCode::OK, Json(response)))
 }
