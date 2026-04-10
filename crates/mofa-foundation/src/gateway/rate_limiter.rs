@@ -17,9 +17,10 @@
 //! The caller is responsible for passing the correct key to
 //! [`TokenBucketRateLimiter::check_and_consume`].
 
-use std::time::Instant;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
-use dashmap::DashMap;
+use moka::sync::Cache;
 pub use mofa_kernel::{GatewayRateLimiter, KeyStrategy, RateLimitDecision, RateLimiterConfig};
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -68,12 +69,12 @@ impl TokenBucket {
 // TokenBucketRateLimiter
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Lock-free token-bucket rate limiter backed by [`DashMap`].
+/// Lock-free token-bucket rate limiter backed by [`moka::sync::Cache`].
 ///
 /// Each unique key gets its own bucket lazily created on first access.
 /// Implements [`GatewayRateLimiter`] from `mofa-kernel`.
 pub struct TokenBucketRateLimiter {
-    buckets: DashMap<String, TokenBucket>,
+    buckets: Cache<String, Arc<Mutex<TokenBucket>>>,
     capacity: u32,
     refill_rate: u32,
 }
@@ -82,7 +83,10 @@ impl TokenBucketRateLimiter {
     /// Create a new limiter with the given configuration.
     pub fn new(config: &RateLimiterConfig) -> Self {
         Self {
-            buckets: DashMap::new(),
+            buckets: Cache::builder()
+                .max_capacity(100_000)
+                .time_to_idle(Duration::from_secs(600))
+                .build(),
             capacity: config.capacity,
             refill_rate: config.refill_rate,
         }
@@ -91,10 +95,16 @@ impl TokenBucketRateLimiter {
 
 impl GatewayRateLimiter for TokenBucketRateLimiter {
     fn check_and_consume(&self, key: &str) -> RateLimitDecision {
-        self.buckets
-            .entry(key.to_string())
-            .or_insert_with(|| TokenBucket::new(self.capacity, self.refill_rate))
-            .try_consume()
+        let bucket = if let Some(b) = self.buckets.get(key) {
+            b
+        } else {
+            self.buckets.get_with(key.to_string(), || {
+                Arc::new(Mutex::new(TokenBucket::new(self.capacity, self.refill_rate)))
+            })
+        };
+        
+        let mut guard = bucket.lock().unwrap();
+        guard.try_consume()
     }
 }
 

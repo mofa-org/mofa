@@ -130,6 +130,7 @@ opentelemetry-semantic-conventions = { workspace = true, optional = true }
 # Graph data structures for task DAGs (Swarm Orchestrator)
 petgraph = { version = "0.7", features = ["serde-1"] }
 dashmap = { workspace = true }
+moka = { version = "0.12", features = ["sync"] }
 rhai = { version = "1", features = ["sync", "serde"] }
 lazy_static = "1.4"
 
