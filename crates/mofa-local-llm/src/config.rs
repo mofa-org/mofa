@@ -128,8 +128,8 @@ mod tests {
 
     #[test]
     fn test_builder_backend_override() {
-        let cfg = LinuxInferenceConfig::new("model", "/path/to/model")
-            .with_backend(ComputeBackend::Cpu);
+        let cfg =
+            LinuxInferenceConfig::new("model", "/path/to/model").with_backend(ComputeBackend::Cpu);
         assert_eq!(cfg.backend_override, Some(ComputeBackend::Cpu));
     }
 

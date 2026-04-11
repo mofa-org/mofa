@@ -65,7 +65,11 @@ impl ScheduleEntry {
     /// Convert to a monitoring snapshot.
     fn to_info(&self, clock: &dyn Clock) -> ScheduleInfo {
         let last_run_raw = self.last_run_ms.load(Ordering::Relaxed);
-        let last_run = if last_run_raw == 0 { None } else { Some(last_run_raw) };
+        let last_run = if last_run_raw == 0 {
+            None
+        } else {
+            Some(last_run_raw)
+        };
         ScheduleInfo::new(
             self.definition.schedule_id.clone(),
             self.definition.agent_id.clone(),
@@ -394,7 +398,18 @@ impl CronScheduler {
 
         tokio::spawn(async move {
             let mut timing = if let Some(cron_expr) = &cron_expression {
-                ScheduleTiming::Cron(Box::new(cron_expr.parse().unwrap()))
+                match cron_expr.parse::<Schedule>() {
+                    Ok(schedule) => ScheduleTiming::Cron(Box::new(schedule)),
+                    Err(e) => {
+                        tracing::error!(
+                            "Failed to parse cron expression '{}' for schedule {}: {}",
+                            cron_expr,
+                            schedule_id,
+                            e
+                        );
+                        return;
+                    }
+                }
             } else if let Some(ms) = interval_ms {
                 ScheduleTiming::Interval(interval(Duration::from_millis(ms)))
             } else {
@@ -561,6 +576,7 @@ impl ScheduleTiming {
 
 #[cfg(test)]
 mod tests {
+    use std::mem::size_of;
     use std::sync::Arc;
     use std::sync::atomic::Ordering;
     use tokio::sync::Semaphore;
@@ -815,5 +831,20 @@ mod tests {
         let s2 = make_persisted_scheduler(&path);
         s2.start().await.unwrap();
         assert!(s2.list().await.is_empty(), "empty file must reload as zero schedules");
+    }
+
+    #[test]
+    fn test_schedule_timing_uses_boxed_cron_variant() {
+        enum UnboxedScheduleTiming {
+            Interval(tokio::time::Interval),
+            Cron(Schedule),
+        }
+
+        // Regression guard: boxed Cron variant should keep enum size smaller
+        // than an equivalent unboxed representation.
+        assert!(
+            size_of::<ScheduleTiming>() < size_of::<UnboxedScheduleTiming>(),
+            "ScheduleTiming should be smaller with boxed Cron variant"
+        );
     }
 }

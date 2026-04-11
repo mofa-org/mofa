@@ -323,10 +323,14 @@ fn print_results(query: &str, results: &[SearchResult]) {
 }
 
 fn truncate_text(input: &str, max_chars: usize) -> String {
-    if input.chars().count() <= max_chars {
-        return input.to_string();
+    // Single pass: take up to max_chars characters. If we consumed the
+    // entire input the string is short enough — return it directly.
+    let truncated: String = input.chars().take(max_chars).collect();
+    if truncated.len() == input.len() {
+        return truncated;
     }
-    let mut output = input.chars().take(max_chars).collect::<String>();
+    // Input was longer; append ellipsis.
+    let mut output = truncated;
     output.push_str("...");
     output
 }

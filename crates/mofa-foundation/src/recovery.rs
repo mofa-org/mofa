@@ -381,7 +381,7 @@ impl CircuitBreaker {
 
     /// Get the current circuit state
     pub fn state(&self) -> CircuitState {
-        let guard = self.state.lock().unwrap();
+        let guard = self.state.lock().unwrap_or_else(|e| e.into_inner());
         guard.state
     }
 
@@ -393,7 +393,7 @@ impl CircuitBreaker {
     {
         // Check if we should allow the call
         {
-            let mut guard = self.state.lock().unwrap();
+            let mut guard = self.state.lock().unwrap_or_else(|e| e.into_inner());
             match guard.state {
                 CircuitState::Open => {
                     // Check if recovery timeout has elapsed
@@ -437,7 +437,7 @@ impl CircuitBreaker {
     }
 
     fn record_success(&self) {
-        let mut guard = self.state.lock().unwrap();
+        let mut guard = self.state.lock().unwrap_or_else(|e| e.into_inner());
         guard.active_probes = guard.active_probes.saturating_sub(1);
         guard.consecutive_failures = 0;
         guard.consecutive_successes += 1;
@@ -451,7 +451,7 @@ impl CircuitBreaker {
     }
 
     fn record_failure(&self) {
-        let mut guard = self.state.lock().unwrap();
+        let mut guard = self.state.lock().unwrap_or_else(|e| e.into_inner());
         guard.active_probes = guard.active_probes.saturating_sub(1);
         guard.consecutive_failures += 1;
         guard.consecutive_successes = 0;
@@ -469,7 +469,7 @@ impl CircuitBreaker {
 
     /// Reset the circuit breaker to closed state
     pub fn reset(&self) {
-        let mut guard = self.state.lock().unwrap();
+        let mut guard = self.state.lock().unwrap_or_else(|e| e.into_inner());
         guard.state = CircuitState::Closed;
         guard.consecutive_failures = 0;
         guard.consecutive_successes = 0;
