@@ -3,8 +3,12 @@ name = "rag_pipeline"
 version.workspace = true
 edition.workspace = true
 
+[features]
+default = []
+pdf = ["mofa-foundation/pdf"]
+
 [dependencies]
-mofa-foundation = { path = "../../crates/mofa-foundation", features = ["qdrant"] }
+mofa-foundation = { path = "../../crates/mofa-foundation", features = ["qdrant", "pdf"] }
 mofa-kernel = { path = "../../crates/mofa-kernel" }
 
 tokio.workspace = true
