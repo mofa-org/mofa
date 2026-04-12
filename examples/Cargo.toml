@@ -60,10 +60,12 @@ members = [
     "rag_retrieval_demo",
     "rag_indexing_demo",
     "adversarial_testing_demo",
+    "production_observability",
     "llm_fallback_chain",
     "resume_from_checkpoint",
     "claw_demo",
     "swarm_orchestrator",
+
 ]
 
 [workspace.package]

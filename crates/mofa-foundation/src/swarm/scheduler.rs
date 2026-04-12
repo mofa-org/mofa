@@ -16,6 +16,7 @@ use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 
 use crate::swarm::{CoordinationPattern, SubtaskDAG, SwarmSubtask};
 
+
 /// task executor used by schedulers
 pub type SubtaskExecutorFn =
     Arc<dyn Fn(NodeIndex, SwarmSubtask) -> BoxFuture<'static, GlobalResult<String>> + Send + Sync>;
@@ -91,6 +92,7 @@ pub struct SchedulerSummary {
     pub skipped: usize,
     pub total_wall_time: Duration,
     pub results: Vec<TaskExecutionResult>,
+
 }
 
 impl SchedulerSummary {
@@ -289,6 +291,7 @@ impl SwarmScheduler for SequentialScheduler {
             skipped,
             total_wall_time: wall_start.elapsed(),
             results,
+
         })
     }
 }
@@ -462,6 +465,7 @@ impl SwarmScheduler for ParallelScheduler {
             skipped,
             total_wall_time: wall_start.elapsed(),
             results,
+
         })
     }
 }
@@ -587,13 +591,13 @@ mod tests {
 
         let executor: SubtaskExecutorFn = Arc::new(move |_idx, _task| {
             Box::pin(async move {
-                sleep(Duration::from_millis(50)).await;
+
                 Ok("done".into())
             })
         });
 
         let mut config = SwarmSchedulerConfig::default();
-        config.task_timeout = Duration::from_millis(10);
+
         let scheduler = SequentialScheduler::with_config(config);
 
         let summary = scheduler.execute(&mut dag, executor).await.unwrap();

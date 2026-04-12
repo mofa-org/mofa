@@ -1,15 +1,16 @@
 pub mod analyzer;
 pub mod config;
 pub mod dag;
+pub mod hitl_gate;
 pub mod patterns;
 pub mod telemetry;
 
-pub use analyzer::TaskAnalyzer;
+
 pub use config::{
     AgentSpec, AuditEvent, AuditEventKind, HITLMode, SLAConfig, SwarmConfig, SwarmMetrics,
     SwarmResult, SwarmStatus,
 };
-pub use dag::{DependencyEdge, DependencyKind, SubtaskDAG, SubtaskStatus, SwarmSubtask};
+main
 pub use patterns::CoordinationPattern;
 pub mod scheduler;
 pub use scheduler::{

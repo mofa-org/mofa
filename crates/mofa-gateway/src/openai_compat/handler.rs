@@ -24,7 +24,7 @@ use axum::response::{IntoResponse, Response};
 use crate::streaming::SseBuilder;
 
 use mofa_foundation::inference::orchestrator::InferenceOrchestrator;
-use mofa_foundation::inference::types::InferenceRequest;
+use mofa_foundation::inference::types::{InferenceRequest, RoutedBackend};
 
 use super::rate_limiter::TokenBucketLimiter;
 use super::types::{
@@ -212,6 +212,10 @@ pub async fn chat_completions(
         let model_used = req.model.clone();
         let headers = mofa_headers(&backend_label, latency_ms);
 
+        if let RoutedBackend::Rejected { reason } = result.routed_to {
+            return build_rejected_response(reason, headers);
+        }
+
         build_streaming_response(token_stream, model_used, headers)
     } else {
         let result = {
@@ -224,6 +228,10 @@ pub async fn chat_completions(
         let output_text = result.output.clone();
         let model_used = req.model.clone();
         let headers = mofa_headers(&backend_label, latency_ms);
+
+        if let RoutedBackend::Rejected { reason } = result.routed_to {
+            return build_rejected_response(reason, headers);
+        }
 
         build_nstream_response(output_text, model_used, prompt, headers)
     }
@@ -267,6 +275,13 @@ fn build_nstream_response(
     response
 }
 
+fn build_rejected_response(reason: String, headers: HeaderMap) -> Response {
+    let err = GatewayErrorBody::server_error(reason);
+    let mut response = (StatusCode::SERVICE_UNAVAILABLE, Json(err)).into_response();
+    response.headers_mut().extend(headers);
+    response
+}
+
 // ──────────────────────────────────────────────────────────────────────────────
 // SSE streaming response builder
 // ──────────────────────────────────────────────────────────────────────────────
@@ -293,6 +308,7 @@ fn build_streaming_response(
 mod tests {
     use super::*;
     use crate::openai_compat::rate_limiter::TokenBucketLimiter;
+    use mofa_foundation::inference::RoutingPolicy;
     use mofa_foundation::inference::orchestrator::{InferenceOrchestrator, OrchestratorConfig};
     use std::net::{IpAddr, Ipv4Addr};
 
@@ -312,6 +328,22 @@ mod tests {
         let mut state = make_state(rpm);
         state.api_key = Some(key.to_string());
         state
+    }
+
+    fn make_rejecting_state(rpm: u32) -> AppState {
+        let config = OrchestratorConfig {
+            memory_capacity_mb: 100,
+            routing_policy: RoutingPolicy::LocalOnly,
+            ..OrchestratorConfig::default()
+        };
+        let orchestrator = Arc::new(RwLock::new(InferenceOrchestrator::new(config)));
+        let limiter = Arc::new(Mutex::new(TokenBucketLimiter::new(rpm)));
+        AppState {
+            orchestrator,
+            limiter,
+            available_models: vec!["mofa-local".to_string()],
+            api_key: None,
+        }
     }
 
     #[tokio::test]
@@ -455,5 +487,57 @@ mod tests {
 
         // It should reach orchestrator error if we don't mock it, but NOT auth error
         assert_ne!(resp.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn test_non_streaming_rejected_request_returns_503() {
+        let state = make_rejecting_state(10);
+        let headers = HeaderMap::new();
+
+        let req = ChatCompletionRequest {
+            model: "mofa-local".to_string(),
+            messages: vec![ChatMessage {
+                role: "user".to_string(),
+                content: "trigger local reject".to_string(),
+            }],
+            stream: false,
+            priority: crate::openai_compat::types::RequestPriorityParam::Normal,
+            max_tokens: None,
+            temperature: None,
+        };
+
+        let addr = std::net::SocketAddr::from(([127, 0, 0, 1], 8080));
+        let resp = chat_completions(State(state), headers, ConnectInfo(addr), Json(req)).await;
+
+        assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
+        let headers = resp.headers();
+        assert!(headers.contains_key("x-mofa-backend"));
+        assert!(headers.contains_key("x-mofa-latency-ms"));
+    }
+
+    #[tokio::test]
+    async fn test_streaming_rejected_request_returns_503() {
+        let state = make_rejecting_state(10);
+        let headers = HeaderMap::new();
+
+        let req = ChatCompletionRequest {
+            model: "mofa-local".to_string(),
+            messages: vec![ChatMessage {
+                role: "user".to_string(),
+                content: "trigger local reject".to_string(),
+            }],
+            stream: true,
+            priority: crate::openai_compat::types::RequestPriorityParam::Normal,
+            max_tokens: None,
+            temperature: None,
+        };
+
+        let addr = std::net::SocketAddr::from(([127, 0, 0, 1], 8080));
+        let resp = chat_completions(State(state), headers, ConnectInfo(addr), Json(req)).await;
+
+        assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
+        let headers = resp.headers();
+        assert!(headers.contains_key("x-mofa-backend"));
+        assert!(headers.contains_key("x-mofa-latency-ms"));
     }
 }
