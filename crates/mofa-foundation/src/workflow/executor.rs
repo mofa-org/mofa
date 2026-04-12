@@ -27,6 +27,16 @@ use tracing::{error, info, warn};
 // Optional HITL integration
 use crate::hitl::handlers::WorkflowReviewHandler;
 
+/// Prefixes node failure messages with node id and type for operators and API callers.
+fn node_execution_error_context(node_id: &str, node_type: Option<&NodeType>, cause: &str) -> String {
+    let kind = node_type
+        .map(|t| format!("{t:?}"))
+        .unwrap_or_else(|| "unknown".to_string());
+    format!(
+        "[MoFA Error] Node '{node_id}' (type {kind}) failed during execution: {cause}"
+    )
+}
+
 /// 执行器配置
 /// Executor Configuration
 #[derive(Debug, Clone)]
@@ -891,6 +901,13 @@ impl WorkflowExecutor {
                     }
                 }
             };
+            let result = result.map_err(|e| {
+                node_execution_error_context(
+                    &current_node_id,
+                    Some(&node.config.node_type),
+                    &e,
+                )
+            });
 
             let end_time = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -1479,8 +1496,13 @@ impl WorkflowExecutor {
 
                 if !result.status.is_success() && self.config.stop_on_failure {
                     join_set.abort_all();
+                    let cause = result
+                        .error
+                        .clone()
+                        .unwrap_or_else(|| "Unknown error".to_string());
+                    let node_type = graph.get_node(&result.node_id).map(|n| &n.config.node_type);
                     execution_record.status = WorkflowStatus::Failed(
-                        result.error.unwrap_or_else(|| "Unknown error".to_string()),
+                        node_execution_error_context(&result.node_id, node_type, &cause),
                     );
                     execution_record.ended_at = Some(
                         std::time::SystemTime::now()
@@ -2205,5 +2227,39 @@ mod tests {
              got events: {:?}",
             *events
         );
+    }
+
+    #[tokio::test]
+    async fn test_failed_node_error_includes_id_and_type() {
+        let executor = WorkflowExecutor::new(ExecutorConfig::default());
+        let mut graph = WorkflowGraph::new("ctx_err_wf", "Context error workflow");
+        graph.add_node(WorkflowNode::start("start"));
+        graph.add_node(WorkflowNode::task(
+            "summarizer_node",
+            "Summarizer",
+            |_ctx, _input| async move { Err("missing key in payload".to_string()) },
+        ));
+        graph.add_node(WorkflowNode::end("end"));
+        graph.connect("start", "summarizer_node");
+        graph.connect("summarizer_node", "end");
+
+        let record = executor
+            .execute(&graph, WorkflowValue::Null)
+            .await
+            .expect("execute returns Ok(ExecutionRecord)");
+
+        match &record.status {
+            WorkflowStatus::Failed(msg) => {
+                assert!(
+                    msg.contains("[MoFA Error] Node 'summarizer_node'"),
+                    "message should identify the node: {msg}"
+                );
+                assert!(
+                    msg.contains("type Task") && msg.contains("missing key in payload"),
+                    "message should include node kind and cause: {msg}"
+                );
+            }
+            other => panic!("expected Failed status, got {:?}", other),
+        }
     }
 }
