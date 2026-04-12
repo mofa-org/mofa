@@ -16,6 +16,7 @@ use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 
 use crate::swarm::hitl_gate::{HITLDecision, HITLGate};
 use crate::swarm::{CoordinationPattern, SubtaskDAG, SwarmSubtask};
+use crate::swarm::hitl_gate::HITLGateMetrics;
 
 /// task executor used by schedulers
 pub type SubtaskExecutorFn =
@@ -92,6 +93,12 @@ pub struct SchedulerSummary {
     pub skipped: usize,
     pub total_wall_time: Duration,
     pub results: Vec<TaskExecutionResult>,
+    /// HITL gate metrics for this execution.
+    ///
+    /// `None` when no gate was used.  Populated by calling
+    /// [`SwarmHITLGate::enrich_summary`] after the scheduler returns.
+    #[serde(default)]
+    pub hitl_stats: Option<HITLGateMetrics>,
 }
 
 impl SchedulerSummary {
@@ -262,9 +269,9 @@ impl SwarmScheduler for SequentialScheduler {
                         HITLDecision::Approved => {
                             info!(task_id = %task_id, "hitl gate: approved");
                         }
-                        HITLDecision::Rejected(reason) => {
-                            warn!(task_id = %task_id, %reason, "hitl gate: rejected");
-                            let msg = format!("hitl rejected: {reason}");
+                        HITLDecision::Rejected => {
+                            warn!(task_id = %task_id, "hitl gate: rejected");
+                            let msg = "hitl rejected".to_string();
                             dag.mark_failed(idx, msg.clone());
                             results.push(TaskExecutionResult::failure(
                                 &task_snapshot,
@@ -279,22 +286,11 @@ impl SwarmScheduler for SequentialScheduler {
                             }
                             continue;
                         }
-                        HITLDecision::TimedOut => {
-                            warn!(task_id = %task_id, "hitl gate: timed out");
-                            let msg = "hitl approval timed out".to_string();
-                            dag.mark_failed(idx, msg.clone());
-                            results.push(TaskExecutionResult::failure(
-                                &task_snapshot,
-                                idx,
-                                msg,
-                                self.config.task_timeout,
-                            ));
-                            failed += 1;
-                            if self.config.failure_policy == FailurePolicy::FailFastCascade {
-                                let n = dag.cascade_skip(idx);
-                                skipped += n;
-                            }
-                            continue;
+                        HITLDecision::AutoApprovedTimeout => {
+                            warn!(task_id = %task_id, "hitl gate: auto-approved after timeout");
+                        }
+                        HITLDecision::Modified => {
+                            info!(task_id = %task_id, "hitl gate: approved with modifications");
                         }
                     }
                 }
@@ -366,6 +362,7 @@ impl SwarmScheduler for SequentialScheduler {
             skipped,
             total_wall_time: wall_start.elapsed(),
             results,
+            hitl_stats: None,
         })
     }
 }
@@ -459,9 +456,9 @@ impl SwarmScheduler for ParallelScheduler {
                             HITLDecision::Approved => {
                                 info!(task_id = %task_id, "hitl gate: approved");
                             }
-                            HITLDecision::Rejected(reason) => {
-                                warn!(task_id = %task_id, %reason, "hitl gate: rejected");
-                                let msg = format!("hitl rejected: {reason}");
+                            HITLDecision::Rejected => {
+                                warn!(task_id = %task_id, "hitl gate: rejected");
+                                let msg = "hitl rejected".to_string();
                                 dag.mark_failed(idx, msg.clone());
                                 results.push(TaskExecutionResult::failure(
                                     &task_snapshot,
@@ -476,22 +473,11 @@ impl SwarmScheduler for ParallelScheduler {
                                 }
                                 continue;
                             }
-                            HITLDecision::TimedOut => {
-                                warn!(task_id = %task_id, "hitl gate: timed out");
-                                let msg = "hitl approval timed out".to_string();
-                                dag.mark_failed(idx, msg.clone());
-                                results.push(TaskExecutionResult::failure(
-                                    &task_snapshot,
-                                    idx,
-                                    msg,
-                                    self.config.task_timeout,
-                                ));
-                                failed += 1;
-                                if self.config.failure_policy == FailurePolicy::FailFastCascade {
-                                    let n = dag.cascade_skip(idx);
-                                    skipped += n;
-                                }
-                                continue;
+                            HITLDecision::AutoApprovedTimeout => {
+                                warn!(task_id = %task_id, "hitl gate: auto-approved after timeout");
+                            }
+                            HITLDecision::Modified => {
+                                info!(task_id = %task_id, "hitl gate: approved with modifications");
                             }
                         }
                     }
@@ -593,6 +579,7 @@ impl SwarmScheduler for ParallelScheduler {
             skipped,
             total_wall_time: wall_start.elapsed(),
             results,
+            hitl_stats: None,
         })
     }
 }

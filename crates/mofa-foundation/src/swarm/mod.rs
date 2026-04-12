@@ -6,6 +6,7 @@ pub mod patterns;
 pub mod telemetry;
 
 pub use analyzer::{RiskAwareAnalysis, RiskSummary, TaskAnalyzer};
+pub use hitl_gate::{HITLDecision, HITLGateMetrics, HITLNotifier, SwarmHITLGate};
 pub use config::{
     AgentSpec, AuditEvent, AuditEventKind, HITLMode, SLAConfig, SwarmConfig, SwarmMetrics,
     SwarmResult, SwarmStatus,

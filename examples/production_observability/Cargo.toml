@@ -1,0 +1,31 @@
+[package]
+name = "production_observability"
+version.workspace = true
+edition.workspace = true
+description = "Practical demonstration of MoFA production observability: Prometheus metrics and OpenTelemetry distributed tracing"
+
+[[bin]]
+name = "production_observability"
+path = "src/main.rs"
+
+[dependencies]
+# MoFA crates
+mofa-foundation = { path = "../../crates/mofa-foundation", features = ["otel-tracing"] }
+mofa-sdk = { path = "../../crates/mofa-sdk", features = ["monitoring"] }
+
+# Async runtime
+tokio.workspace = true
+
+# Tracing / logging
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+# OpenTelemetry — console exporter (no infra needed)
+opentelemetry.workspace = true
+opentelemetry_sdk.workspace = true
+# opentelemetry-stdout is not in workspace deps; pinned to match opentelemetry 0.21
+# The "trace" feature enables SpanExporter.
+opentelemetry-stdout = { version = "0.2", features = ["trace"] }
+
+[lints]
+workspace = true
