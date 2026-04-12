@@ -1,0 +1,37 @@
+name: document review pipeline
+pattern: sequential
+agents:
+  - id: reader-a
+    capabilities: [extract]
+    max_concurrency: 2
+  - id: reader-b
+    capabilities: [extract]
+    max_concurrency: 2
+  - id: translator
+    capabilities: [translate]
+    max_concurrency: 1
+  - id: analyst
+    capabilities: [review, extract]
+    max_concurrency: 1
+sla:
+  max_duration_secs: 300
+  max_cost_tokens: 10000
+tasks:
+  - id: extract-1
+    description: extract key facts from document section 1
+    capabilities: [extract]
+    complexity: 0.3
+  - id: extract-2
+    description: extract key facts from document section 2
+    capabilities: [extract]
+    complexity: 0.3
+  - id: translate
+    description: translate extracted content to English
+    capabilities: [translate]
+    complexity: 0.5
+    depends_on: [extract-1, extract-2]
+  - id: review
+    description: review translated content for accuracy
+    capabilities: [review]
+    complexity: 0.4
+    depends_on: [translate]

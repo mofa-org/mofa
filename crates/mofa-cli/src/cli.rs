@@ -162,6 +162,45 @@ pub enum Commands {
         #[command(subcommand)]
         action: RagCommands,
     },
+
+    /// Swarm DAG orchestration
+    Swarm {
+        #[command(subcommand)]
+        action: SwarmCommands,
+    },
+}
+
+/// Swarm subcommands
+#[derive(Subcommand)]
+pub enum SwarmCommands {
+    /// Execute a swarm DAG defined in a YAML config file
+    Run {
+        /// Path to the swarm YAML config file
+        file: std::path::PathBuf,
+
+        /// Check coverage and admission without executing
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Print Prometheus text metrics after execution
+        #[arg(long)]
+        metrics: bool,
+
+        /// Override the coordination pattern from the config
+        #[arg(long, value_enum)]
+        pattern: Option<PatternArg>,
+
+        /// Per-task timeout in seconds
+        #[arg(long, default_value = "120")]
+        timeout: u64,
+    },
+}
+
+/// Coordination pattern override for the CLI
+#[derive(Clone, clap::ValueEnum)]
+pub enum PatternArg {
+    Sequential,
+    Parallel,
 }
 
 /// Generate subcommands

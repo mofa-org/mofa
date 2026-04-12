@@ -15,6 +15,7 @@ use tracing::{error, info, instrument, warn};
 use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 
 use crate::swarm::{CoordinationPattern, SubtaskDAG, SwarmSubtask};
+use crate::swarm::hitl_gate::HITLGateMetrics;
 
 /// task executor used by schedulers
 pub type SubtaskExecutorFn =
@@ -91,6 +92,12 @@ pub struct SchedulerSummary {
     pub skipped: usize,
     pub total_wall_time: Duration,
     pub results: Vec<TaskExecutionResult>,
+    /// HITL gate metrics for this execution.
+    ///
+    /// `None` when no gate was used.  Populated by calling
+    /// [`SwarmHITLGate::enrich_summary`] after the scheduler returns.
+    #[serde(default)]
+    pub hitl_stats: Option<HITLGateMetrics>,
 }
 
 impl SchedulerSummary {
@@ -289,6 +296,7 @@ impl SwarmScheduler for SequentialScheduler {
             skipped,
             total_wall_time: wall_start.elapsed(),
             results,
+            hitl_stats: None,
         })
     }
 }
@@ -462,6 +470,7 @@ impl SwarmScheduler for ParallelScheduler {
             skipped,
             total_wall_time: wall_start.elapsed(),
             results,
+            hitl_stats: None,
         })
     }
 }
@@ -587,13 +596,13 @@ mod tests {
 
         let executor: SubtaskExecutorFn = Arc::new(move |_idx, _task| {
             Box::pin(async move {
-                sleep(Duration::from_millis(50)).await;
+                sleep(Duration::from_millis(100)).await;
                 Ok("done".into())
             })
         });
 
         let mut config = SwarmSchedulerConfig::default();
-        config.task_timeout = Duration::from_millis(10);
+        config.task_timeout = Duration::from_millis(1);
         let scheduler = SequentialScheduler::with_config(config);
 
         let summary = scheduler.execute(&mut dag, executor).await.unwrap();

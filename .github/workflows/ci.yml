@@ -1,4 +1,5 @@
 name: CI
+# Note: pushing updates triggers fresh CI runs (useful when prior checks were cancelled mid-run).
 
 on:
   push:

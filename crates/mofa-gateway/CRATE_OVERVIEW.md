@@ -7,6 +7,7 @@ Production-grade distributed control plane and gateway for MoFA framework.
 - **Distributed Consensus**: Raft-based consensus for cluster coordination
 - **State Replication**: Replicated state machine for consistency
 - **Gateway Layer**: Intelligent request routing, load balancing, rate limiting
+- **HTTP Proxy**: Server-side proxy for mofa-local-llm with OpenAI-compatible API
 - **High Availability**: Leader election, automatic failover, health checking
 - **Observability**: Prometheus metrics, OpenTelemetry tracing, structured logging
 - **Socket.IO Bridge** *(feature: `socketio`)*: Real-time `AgentBus` → Socket.IO event forwarding; emits `file_upload_started/completed/failed` events on file uploads
@@ -24,18 +25,20 @@ use mofa_gateway::types::LoadBalancingAlgorithm;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Simple gateway mode (no distributed control plane)
+    // Simple gateway mode with local LLM proxy
     let config = GatewayConfig {
         listen_addr: "0.0.0.0:8080".parse().unwrap(),
         load_balancing: LoadBalancingAlgorithm::RoundRobin,
         enable_rate_limiting: true,
         enable_circuit_breakers: true,
+        enable_local_llm_proxy: true,  // Enable proxy
+        local_llm_backend_url: Some("http://localhost:8000".to_string()),
     };
     
     let mut gateway = Gateway::new(config).await?;
     gateway.start().await?;
     
-    // Gateway is now accepting requests
+    // Gateway is now accepting requests and proxying to mofa-local-llm
     Ok(())
 }
 ```
@@ -67,7 +70,10 @@ For **production-ready, working code**, see the test files:
 
 ### Example Skeletons (examples/ directory)
 
-The `examples/` directory contains 9 conceptual examples:
+The `examples/` directory contains practical examples:
+- `gateway_local_llm_proxy.rs` – **Working proxy example** for mofa-local-llm
+- `proxy_with_custom_config.rs` – Custom proxy configuration
+- `proxy_client_examples.rs` – Client usage examples
 - `basic_gateway.rs` – Basic gateway concepts
 - `basic_control_plane.rs` – Control plane concepts
 - `control_plane_cluster.rs` – Multi-node cluster concepts
@@ -93,6 +99,7 @@ The `examples/` directory contains 9 conceptual examples:
 - **Rate Limiting**: Token Bucket, Sliding Window strategies
 - **Circuit Breakers**: Automatic failure detection and recovery
 - **Health Checking**: Node health monitoring and automatic removal
+- **HTTP Proxy**: Server-side proxy for mofa-local-llm with OpenAI-compatible endpoints
 - **Observability**: Prometheus metrics, OpenTelemetry tracing, structured logging
 - **Socket.IO Bridge** (`socketio`): Forwards `AgentBus` broadcasts to clients; upload lifecycle events
 - **File Storage** (`s3`): 7 endpoints — upload, download, delete, list, metadata, presigned GET/PUT; MIME auto-detection; configurable size limits
