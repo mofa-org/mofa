@@ -2,11 +2,13 @@ pub mod analyzer;
 pub mod composer;
 pub mod config;
 pub mod dag;
+pub mod hitl_gate;
 pub mod patterns;
 pub mod telemetry;
 
 pub use analyzer::{RiskAwareAnalysis, RiskSummary, TaskAnalyzer};
 pub use composer::{AgentAssignment, BudgetWarning, ComposerResult, SwarmComposer};
+pub use hitl_gate::{HITLDecision, HITLGateMetrics, HITLNotifier, SwarmHITLGate};
 pub use config::{
     AgentSpec, AuditEvent, AuditEventKind, HITLMode, SLAConfig, SwarmConfig, SwarmMetrics,
     SwarmResult, SwarmStatus,
