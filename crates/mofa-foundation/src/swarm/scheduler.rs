@@ -15,6 +15,7 @@ use tracing::{error, info, instrument, warn};
 use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 
 use crate::swarm::{CoordinationPattern, SubtaskDAG, SwarmSubtask};
+use crate::swarm::hitl_gate::HITLGateMetrics;
 
 /// task executor used by schedulers
 pub type SubtaskExecutorFn =
@@ -91,6 +92,12 @@ pub struct SchedulerSummary {
     pub skipped: usize,
     pub total_wall_time: Duration,
     pub results: Vec<TaskExecutionResult>,
+    /// HITL gate metrics for this execution.
+    ///
+    /// `None` when no gate was used.  Populated by calling
+    /// [`SwarmHITLGate::enrich_summary`] after the scheduler returns.
+    #[serde(default)]
+    pub hitl_stats: Option<HITLGateMetrics>,
 }
 
 impl SchedulerSummary {
@@ -289,6 +296,7 @@ impl SwarmScheduler for SequentialScheduler {
             skipped,
             total_wall_time: wall_start.elapsed(),
             results,
+            hitl_stats: None,
         })
     }
 }
@@ -462,6 +470,7 @@ impl SwarmScheduler for ParallelScheduler {
             skipped,
             total_wall_time: wall_start.elapsed(),
             results,
+            hitl_stats: None,
         })
     }
 }

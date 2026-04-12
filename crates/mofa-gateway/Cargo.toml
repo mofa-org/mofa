@@ -109,6 +109,17 @@ monitoring = [
 ]
 
 # Full feature set (all optional features)
+
+[dev-dependencies]
+tokio = { version = "1.42", features = ["full", "test-util"] }
+tower = { version = "0.5", features = ["util"] }
+serde_json = "1.0"
+reqwest = { version = "0.12", features = ["json"] }
+criterion = { version = "0.5", features = ["async_tokio"] }
+
+[[bench]]
+name = "proxy_bench"
+harness = false
 full = ["rocksdb", "monitoring", "openai-compat"]
 
 # OpenAI-compatible HTTP gateway components

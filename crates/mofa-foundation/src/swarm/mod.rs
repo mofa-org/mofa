@@ -1,12 +1,14 @@
 pub mod analyzer;
 pub mod config;
 pub mod dag;
+pub mod hitl_gate;
 pub mod patterns;
 pub mod selector;
 pub mod telemetry;
 
 pub use analyzer::{RiskAwareAnalysis, RiskSummary, TaskAnalyzer};
 pub use selector::{PatternSelection, PatternSelector, ValidationResult};
+pub use hitl_gate::{HITLDecision, HITLGateMetrics, HITLNotifier, SwarmHITLGate};
 pub use config::{
     AgentSpec, AuditEvent, AuditEventKind, HITLMode, SLAConfig, SwarmConfig, SwarmMetrics,
     SwarmResult, SwarmStatus,
