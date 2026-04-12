@@ -278,6 +278,7 @@ impl SwarmScheduler for SequentialScheduler {
                 skipped: total,
                 total_wall_time: Duration::ZERO,
                 results,
+                hitl_stats: None,
             });
         }
 
@@ -441,6 +442,7 @@ impl SwarmScheduler for ParallelScheduler {
                 skipped: total,
                 total_wall_time: Duration::ZERO,
                 results,
+                hitl_stats: None,
             });
         }
 
@@ -695,6 +697,7 @@ impl SwarmScheduler for MapReduceScheduler {
                 skipped: total,
                 total_wall_time: Duration::ZERO,
                 results,
+                hitl_stats: None,
             });
         }
 
@@ -793,6 +796,7 @@ impl SwarmScheduler for MapReduceScheduler {
             skipped: 0,
             total_wall_time: wall_start.elapsed(),
             results,
+            hitl_stats: None,
         })
     }
 }
@@ -852,6 +856,7 @@ impl SwarmScheduler for DebateScheduler {
                 skipped: total,
                 total_wall_time: Duration::ZERO,
                 results,
+                hitl_stats: None,
             });
         }
 
@@ -950,6 +955,7 @@ impl SwarmScheduler for DebateScheduler {
             skipped: 0,
             total_wall_time: wall_start.elapsed(),
             results,
+            hitl_stats: None,
         })
     }
 }
@@ -1009,6 +1015,7 @@ impl SwarmScheduler for ConsensusScheduler {
                 skipped: total,
                 total_wall_time: Duration::ZERO,
                 results,
+                hitl_stats: None,
             });
         }
 
@@ -1135,6 +1142,7 @@ impl SwarmScheduler for ConsensusScheduler {
             skipped: 0,
             total_wall_time: wall_start.elapsed(),
             results,
+            hitl_stats: None,
         })
     }
 }
@@ -1194,6 +1202,7 @@ impl SwarmScheduler for RoutingScheduler {
                 skipped: total,
                 total_wall_time: Duration::ZERO,
                 results,
+                hitl_stats: None,
             });
         }
 
@@ -1280,6 +1289,7 @@ impl SwarmScheduler for RoutingScheduler {
                     skipped,
                     total_wall_time: wall_start.elapsed(),
                     results,
+                    hitl_stats: None,
                 });
             }
             Err(_) => {
@@ -1312,6 +1322,7 @@ impl SwarmScheduler for RoutingScheduler {
                     skipped,
                     total_wall_time: wall_start.elapsed(),
                     results,
+                    hitl_stats: None,
                 });
             }
         };
@@ -1404,6 +1415,7 @@ impl SwarmScheduler for RoutingScheduler {
             skipped,
             total_wall_time: wall_start.elapsed(),
             results,
+            hitl_stats: None,
         })
     }
 }
@@ -1463,6 +1475,7 @@ impl SwarmScheduler for SupervisionScheduler {
                 skipped: total,
                 total_wall_time: Duration::ZERO,
                 results,
+                hitl_stats: None,
             });
         }
 
@@ -1562,6 +1575,7 @@ impl SwarmScheduler for SupervisionScheduler {
             skipped: 0,
             total_wall_time: wall_start.elapsed(),
             results,
+            hitl_stats: None,
         })
     }
 }
