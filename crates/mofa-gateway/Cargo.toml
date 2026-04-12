@@ -122,6 +122,10 @@ socketio = ["dep:mofa-integrations", "mofa-integrations/socketio", "dep:socketio
 s3 = ["dep:mofa-integrations", "mofa-integrations/s3", "dep:mime_guess"]
 
 # Full feature set (all optional features)
+# OpenAI-compatible HTTP gateway components
+openai-compat = ["dep:async-openai", "dep:subtle"]
+
+# Full feature set (all optional features)
 full = ["rocksdb", "monitoring", "socketio", "s3", "openai-compat"]
 
 [dev-dependencies]
@@ -134,9 +138,6 @@ criterion = { version = "0.5", features = ["async_tokio"] }
 [[bench]]
 name = "proxy_bench"
 harness = false
-
-# OpenAI-compatible HTTP gateway components
-openai-compat = ["dep:async-openai", "dep:subtle"]
 
 [[example]]
 name = "gateway_inference_server"
