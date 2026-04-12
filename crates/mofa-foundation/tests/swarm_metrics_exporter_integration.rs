@@ -21,6 +21,7 @@ fn make_summary(
         skipped,
         total_wall_time: Duration::from_millis(wall_ms),
         results: vec![],
+        hitl_stats: None,
     }
 }
 
