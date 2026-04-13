@@ -632,42 +632,6 @@ pub struct NodeExecutionRecord {
     /// Retry count
     pub retry_count: u32,
 }
-/// Snapshot of the workflow context for persistence
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WorkflowContextSnapshot {
-    pub workflow_id: String,
-    pub node_outputs: HashMap<String, WorkflowValue>,
-    pub node_statuses: HashMap<String, NodeStatus>,
-    pub variables: HashMap<String, WorkflowValue>,
-    pub checkpoints: Vec<CheckpointData>,
-    pub last_waiting_node: Option<String>,
-}
-
-impl WorkflowContext {
-    /// Create a serializable snapshot of the current context state
-    pub async fn snapshot(&self) -> WorkflowContextSnapshot {
-        WorkflowContextSnapshot {
-            workflow_id: self.workflow_id.clone(),
-            node_outputs: self.node_outputs.read().await.clone(),
-            node_statuses: self.node_statuses.read().await.clone(),
-            variables: self.variables.read().await.clone(),
-            checkpoints: self.checkpoints.read().await.clone(),
-            last_waiting_node: self.last_waiting_node.read().await.clone(),
-        }
-    }
-
-    /// Reconstruct a runtime context from a persistent snapshot
-    pub fn from_snapshot(snapshot: WorkflowContextSnapshot) -> Self {
-        Self {
-            workflow_id: snapshot.workflow_id,
-            node_outputs: Arc::new(RwLock::new(snapshot.node_outputs)),
-            node_statuses: Arc::new(RwLock::new(snapshot.node_statuses)),
-            variables: Arc::new(RwLock::new(snapshot.variables)),
-            checkpoints: Arc::new(RwLock::new(snapshot.checkpoints)),
-            last_waiting_node: Arc::new(RwLock::new(snapshot.last_waiting_node)),
-        }
-    }
-}
 
 #[cfg(test)]
 mod tests {

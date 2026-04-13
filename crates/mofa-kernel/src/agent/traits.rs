@@ -43,7 +43,7 @@ pub enum HealthStatus {
 
 /// Agent 统计信息
 /// Agent statistical information
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct AgentStats {
     /// 总执行次数
     /// Total execution count

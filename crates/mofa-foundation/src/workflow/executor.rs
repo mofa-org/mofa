@@ -180,16 +180,17 @@ impl WorkflowExecutor {
         // Create steps from completed nodes
         for (nid, output) in node_outputs {
             if let Some(status) = node_statuses.get(&nid)
-                && matches!(status, super::state::NodeStatus::Completed) {
-                    steps.push(ExecutionStep {
-                        step_id: nid.clone(),
-                        step_type: "workflow_node".to_string(),
-                        timestamp_ms: chrono::Utc::now().timestamp_millis() as u64,
-                        input: None,
-                        output: serde_json::to_value(&output).ok(),
-                        metadata: HashMap::new(),
-                    });
-                }
+                && matches!(status, super::state::NodeStatus::Completed)
+            {
+                steps.push(ExecutionStep {
+                    step_id: nid.clone(),
+                    step_type: "workflow_node".to_string(),
+                    timestamp_ms: chrono::Utc::now().timestamp_millis() as u64,
+                    input: None,
+                    output: serde_json::to_value(&output).ok(),
+                    metadata: HashMap::new(),
+                });
+            }
         }
 
         // Add current node step
@@ -317,6 +318,7 @@ impl WorkflowExecutor {
             node_records: Vec::new(),
             outputs: HashMap::new(),
             total_wait_time_ms: 0,
+            context_snapshot: None,
             context: None,
         };
 
@@ -421,14 +423,16 @@ impl WorkflowExecutor {
                     let review_id = ReviewRequestId::new(review_id_str.clone());
 
                     // Check if rejected, retry, or approved
-                    if let Ok(Some(response)) = review_handler.get_review_response(&review_id).await {
+                    if let Ok(Some(response)) = review_handler.get_review_response(&review_id).await
+                    {
                         match response {
                             mofa_kernel::hitl::ReviewResponse::Rejected { reason, .. } => {
                                 return Err(format!("Review rejected: {}", reason));
                             }
                             mofa_kernel::hitl::ReviewResponse::Retry { .. } => {
                                 info!("Review retry requested for node {}", waiting_node_id);
-                                ctx.set_node_status(waiting_node_id, NodeStatus::Pending).await;
+                                ctx.set_node_status(waiting_node_id, NodeStatus::Pending)
+                                    .await;
                                 // Clear approval flag
                                 let approved_var = format!("approved_{}", waiting_node_id);
                                 ctx.delete_variable(&approved_var).await;
@@ -436,7 +440,8 @@ impl WorkflowExecutor {
                             mofa_kernel::hitl::ReviewResponse::Approved { .. } => {
                                 info!("Review approved for node {}", waiting_node_id);
                                 let approved_var = format!("approved_{}", waiting_node_id);
-                                ctx.set_variable(&approved_var, WorkflowValue::Bool(true)).await;
+                                ctx.set_variable(&approved_var, WorkflowValue::Bool(true))
+                                    .await;
                             }
                             _ => {
                                 return Err(format!("Review {} not yet resolved", review_id_str));
@@ -483,6 +488,7 @@ impl WorkflowExecutor {
             outputs: HashMap::new(),
             // total_wait_time_ms: wait_duration_ms,
             total_wait_time_ms: *ctx.total_wait_time_ms.read().await,
+            context_snapshot: None,
             context: None,
         };
 
@@ -612,6 +618,7 @@ impl WorkflowExecutor {
             node_records: Vec::new(),
             outputs: HashMap::new(),
             total_wait_time_ms: 0,
+            context_snapshot: None,
             context: None,
         };
 
@@ -749,13 +756,18 @@ impl WorkflowExecutor {
                             .await;
 
                         match review_handler
-                            .request_node_review(&record.execution_id, &current_node_id, review_context)
+                            .request_node_review(
+                                &record.execution_id,
+                                &current_node_id,
+                                review_context,
+                            )
                             .await
                         {
                             Ok(review_id) => {
                                 info!("Review requested: {} - workflow paused", review_id.as_str());
                                 *ctx.paused_at.write().await = Some(chrono::Utc::now());
-                                *ctx.last_waiting_node.write().await = Some(current_node_id.clone());
+                                *ctx.last_waiting_node.write().await =
+                                    Some(current_node_id.clone());
                                 ctx.set_node_status(&current_node_id, NodeStatus::Waiting)
                                     .await;
                                 record.context_snapshot = Some(ctx.snapshot().await);
@@ -874,9 +886,8 @@ impl WorkflowExecutor {
                 }
                 NodeType::Wait => self.execute_wait(ctx, node, current_input.clone()).await,
                 _ => {
-                    let node_timeout = std::time::Duration::from_millis(
-                        self.config.node_timeout_ms,
-                    );
+                    let node_timeout =
+                        std::time::Duration::from_millis(self.config.node_timeout_ms);
                     let result = match tokio::time::timeout(
                         node_timeout,
                         node.execute(ctx, current_input.clone()),
@@ -891,10 +902,7 @@ impl WorkflowExecutor {
                             );
                             NodeResult::failed(
                                 &current_node_id,
-                                &format!(
-                                    "Node timed out after {:?}",
-                                    node_timeout
-                                ),
+                                &format!("Node timed out after {:?}", node_timeout),
                                 node_timeout.as_millis() as u64,
                             )
                         }
@@ -1380,6 +1388,7 @@ impl WorkflowExecutor {
             node_records: Vec::new(),
             outputs: HashMap::new(),
             total_wait_time_ms: 0,
+            context_snapshot: None,
             context: None,
         };
 
@@ -1981,9 +1990,7 @@ mod tests {
         graph.add_node(WorkflowNode::task(
             "fast_task",
             "Fast Task",
-            |_ctx, _input| async move {
-                Ok(WorkflowValue::String("fast".to_string()))
-            },
+            |_ctx, _input| async move { Ok(WorkflowValue::String("fast".to_string())) },
         ));
         graph.add_node(WorkflowNode::end("end"));
         graph.connect("start", "fast_task");

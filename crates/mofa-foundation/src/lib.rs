@@ -170,3 +170,6 @@ pub use secretary::{
 
 // Re-export scheduler types for convenience
 pub use scheduler::CronScheduler;
+
+// Re-export cost types for utility
+pub use cost::{BudgetEnforcer, InMemoryPricingRegistry};
