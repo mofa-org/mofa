@@ -5,8 +5,8 @@
 mod support;
 
 use support::persisted_memory::{
-    PersistedMemoryFixture, assert_no_cross_session_leakage, assert_persisted_session_exists,
-    assert_reloaded_history_contains, assert_reloaded_history_len,
+    PersistedMemoryFixture, assert_missing_persisted_session, assert_no_cross_session_leakage,
+    assert_persisted_session_exists, assert_reloaded_history_contains, assert_reloaded_history_len,
 };
 
 #[tokio::test]
@@ -47,4 +47,44 @@ async fn persisted_memory_reload_keeps_expected_history_and_excludes_other_sessi
     assert_reloaded_history_contains(&reloaded_alpha, 0, "alpha: persisted question");
     assert_reloaded_history_contains(&reloaded_alpha, 1, "alpha: persisted answer");
     assert_no_cross_session_leakage(&reloaded_alpha, "beta:");
+}
+
+#[tokio::test]
+async fn persisted_memory_reload_missing_session_returns_not_found() {
+    let fixture = PersistedMemoryFixture::new("persisted-memory-missing-session.db");
+    let missing_session_id = fixture.new_session_id();
+
+    let result = fixture
+        .reload_session_result(fixture.open_store().await, missing_session_id)
+        .await;
+
+    assert_missing_persisted_session(result);
+}
+
+#[tokio::test]
+async fn persisted_memory_reopen_boundary_preserves_history() {
+    let fixture = PersistedMemoryFixture::new("persisted-memory-reopen-boundary.db");
+    let session_id = fixture.new_session_id();
+
+    let writer_store = fixture.open_store().await;
+    fixture
+        .write_session(
+            writer_store,
+            session_id,
+            &[
+                ("user", "boundary: first user message"),
+                ("assistant", "boundary: first assistant reply"),
+            ],
+        )
+        .await;
+
+    // Reopen through a fresh store handle to model a restart boundary.
+    let reloaded = fixture
+        .reload_session(fixture.open_store().await, session_id)
+        .await;
+
+    assert_persisted_session_exists(&reloaded);
+    assert_reloaded_history_len(&reloaded, 2);
+    assert_reloaded_history_contains(&reloaded, 0, "boundary: first user message");
+    assert_reloaded_history_contains(&reloaded, 1, "boundary: first assistant reply");
 }
