@@ -365,7 +365,13 @@ fn swarm_run_reports_missing_file() {
         .arg(&path)
         .assert()
         .failure()
-        .stderr(predicate::str::contains("No such file or directory"));
+        .stdout(predicate::str::contains("[1/5] loading config"))
+        .stderr(predicate::str::contains("I/O error:"))
+        .stderr(
+            predicate::str::contains("No such file or directory").or(predicate::str::contains(
+                "The system cannot find the path specified.",
+            )),
+        );
 }
 
 #[test]
