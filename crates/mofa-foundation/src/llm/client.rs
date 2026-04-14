@@ -1688,6 +1688,10 @@ mod tests {
     use crate::llm::types::{Choice, EmbeddingData, EmbeddingInput, EmbeddingUsage, Role};
     use async_trait::async_trait;
     use std::sync::Mutex;
+    #[cfg(feature = "persistence-sqlite")]
+    use tempfile::tempdir;
+    #[cfg(feature = "persistence-sqlite")]
+    use crate::persistence::{PersistenceError, SqliteStore};
 
     struct MockProvider {
         default_model_name: String,
@@ -1912,6 +1916,22 @@ mod tests {
         // History contains the prior 5 + new user msg + assistant reply = 7
         assert!(session.messages().len() >= 6, "no messages should be dropped when trigger=0");
     }
+
+    #[cfg(feature = "persistence-sqlite")]
+    #[tokio::test]
+    async fn sqlite_invalid_persistence_setup_fails_clearly() {
+        let dir = tempdir().expect("tempdir");
+        let invalid_url = format!("sqlite:{}", dir.path().to_string_lossy());
+
+        let result = SqliteStore::connect(&invalid_url).await;
+
+        match result {
+            Err(PersistenceError::Connection(_)) => {}
+            Err(other) => panic!("expected connection error, got {other:?}"),
+            Ok(_) => panic!("connecting to a directory path should fail"),
+        }
+    }
+
 }
 
 // ============================================================================
