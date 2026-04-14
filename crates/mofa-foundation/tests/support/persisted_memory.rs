@@ -20,6 +20,12 @@ pub struct PersistedMemoryFixture {
     agent_id: uuid::Uuid,
 }
 
+#[derive(Debug, Clone)]
+pub struct PersistedMemoryArtifact {
+    pub session_id: uuid::Uuid,
+    pub history: Vec<String>,
+}
+
 impl PersistedMemoryFixture {
     pub fn new(name: &str) -> Self {
         let dir = tempdir().expect("tempdir");
@@ -151,6 +157,48 @@ pub fn assert_missing_persisted_session(result: PersistenceResult<ChatSession>) 
         Err(other) => panic!("expected not found error, got {other:?}"),
         Ok(_) => panic!("expected persisted session lookup to fail"),
     }
+}
+
+pub fn build_persisted_memory_artifact(
+    session_id: uuid::Uuid,
+    session: &ChatSession,
+) -> PersistedMemoryArtifact {
+    let history = session
+        .messages()
+        .iter()
+        .filter_map(message_text)
+        .map(|s| s.to_string())
+        .collect::<Vec<_>>();
+
+    PersistedMemoryArtifact {
+        session_id,
+        history,
+    }
+}
+
+pub fn assert_artifact_history_len(artifact: &PersistedMemoryArtifact, expected: usize) {
+    assert_eq!(artifact.history.len(), expected);
+}
+
+pub fn assert_artifact_history_contains(
+    artifact: &PersistedMemoryArtifact,
+    index: usize,
+    expected: &str,
+) {
+    assert_eq!(artifact.history.get(index).map(String::as_str), Some(expected));
+}
+
+pub fn assert_artifact_no_cross_session_leakage(
+    artifact: &PersistedMemoryArtifact,
+    forbidden_marker: &str,
+) {
+    assert!(
+        artifact
+            .history
+            .iter()
+            .all(|text| !text.contains(forbidden_marker)),
+        "artifact history should not contain content marked with {forbidden_marker}"
+    );
 }
 
 fn message_text(message: &ChatMessage) -> Option<&str> {

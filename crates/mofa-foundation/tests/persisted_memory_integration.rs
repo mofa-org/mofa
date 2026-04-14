@@ -5,8 +5,9 @@
 mod support;
 
 use support::persisted_memory::{
-    PersistedMemoryFixture, assert_missing_persisted_session, assert_no_cross_session_leakage,
-    assert_persisted_session_exists, assert_reloaded_history_contains, assert_reloaded_history_len,
+    PersistedMemoryFixture, assert_artifact_history_contains, assert_artifact_history_len,
+    assert_artifact_no_cross_session_leakage, assert_missing_persisted_session,
+    assert_persisted_session_exists, build_persisted_memory_artifact,
 };
 
 #[tokio::test]
@@ -43,10 +44,12 @@ async fn persisted_memory_reload_keeps_expected_history_and_excludes_other_sessi
         .await;
 
     assert_persisted_session_exists(&reloaded_alpha);
-    assert_reloaded_history_len(&reloaded_alpha, 2);
-    assert_reloaded_history_contains(&reloaded_alpha, 0, "alpha: persisted question");
-    assert_reloaded_history_contains(&reloaded_alpha, 1, "alpha: persisted answer");
-    assert_no_cross_session_leakage(&reloaded_alpha, "beta:");
+    let artifact = build_persisted_memory_artifact(alpha_session_id, &reloaded_alpha);
+    assert_eq!(artifact.session_id, alpha_session_id);
+    assert_artifact_history_len(&artifact, 2);
+    assert_artifact_history_contains(&artifact, 0, "alpha: persisted question");
+    assert_artifact_history_contains(&artifact, 1, "alpha: persisted answer");
+    assert_artifact_no_cross_session_leakage(&artifact, "beta:");
 }
 
 #[tokio::test]
@@ -84,7 +87,9 @@ async fn persisted_memory_reopen_boundary_preserves_history() {
         .await;
 
     assert_persisted_session_exists(&reloaded);
-    assert_reloaded_history_len(&reloaded, 2);
-    assert_reloaded_history_contains(&reloaded, 0, "boundary: first user message");
-    assert_reloaded_history_contains(&reloaded, 1, "boundary: first assistant reply");
+    let artifact = build_persisted_memory_artifact(session_id, &reloaded);
+    assert_eq!(artifact.session_id, session_id);
+    assert_artifact_history_len(&artifact, 2);
+    assert_artifact_history_contains(&artifact, 0, "boundary: first user message");
+    assert_artifact_history_contains(&artifact, 1, "boundary: first assistant reply");
 }
