@@ -6,8 +6,9 @@ mod support;
 
 use support::persisted_memory::{
     PersistedMemoryFixture, assert_artifact_history_contains, assert_artifact_history_len,
-    assert_artifact_no_cross_session_leakage, assert_missing_persisted_session,
-    assert_persisted_session_exists, build_persisted_memory_artifact,
+    assert_artifact_json_output_has_core_fields, assert_artifact_no_cross_session_leakage,
+    assert_missing_persisted_session, assert_persisted_session_exists,
+    build_persisted_memory_artifact, render_artifact_json,
 };
 
 #[tokio::test]
@@ -45,11 +46,13 @@ async fn persisted_memory_reload_keeps_expected_history_and_excludes_other_sessi
 
     assert_persisted_session_exists(&reloaded_alpha);
     let artifact = build_persisted_memory_artifact(alpha_session_id, &reloaded_alpha);
-    assert_eq!(artifact.session_id, alpha_session_id);
+    assert_eq!(artifact.session_id, alpha_session_id.to_string());
     assert_artifact_history_len(&artifact, 2);
     assert_artifact_history_contains(&artifact, 0, "alpha: persisted question");
     assert_artifact_history_contains(&artifact, 1, "alpha: persisted answer");
     assert_artifact_no_cross_session_leakage(&artifact, "beta:");
+    let artifact_json = render_artifact_json(&artifact);
+    assert_artifact_json_output_has_core_fields(&artifact_json);
 }
 
 #[tokio::test]
@@ -88,8 +91,10 @@ async fn persisted_memory_reopen_boundary_preserves_history() {
 
     assert_persisted_session_exists(&reloaded);
     let artifact = build_persisted_memory_artifact(session_id, &reloaded);
-    assert_eq!(artifact.session_id, session_id);
+    assert_eq!(artifact.session_id, session_id.to_string());
     assert_artifact_history_len(&artifact, 2);
     assert_artifact_history_contains(&artifact, 0, "boundary: first user message");
     assert_artifact_history_contains(&artifact, 1, "boundary: first assistant reply");
+    let artifact_json = render_artifact_json(&artifact);
+    assert_artifact_json_output_has_core_fields(&artifact_json);
 }

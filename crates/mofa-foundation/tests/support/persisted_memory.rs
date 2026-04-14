@@ -9,6 +9,7 @@ use mofa_foundation::llm::{
     LLMClient, LLMProvider, LLMResult, MessageContent, Role,
 };
 use mofa_foundation::persistence::{PersistenceError, PersistenceResult, SqliteStore};
+use serde::{Deserialize, Serialize};
 use tempfile::tempdir;
 
 pub struct PersistedMemoryFixture {
@@ -20,9 +21,9 @@ pub struct PersistedMemoryFixture {
     agent_id: uuid::Uuid,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PersistedMemoryArtifact {
-    pub session_id: uuid::Uuid,
+    pub session_id: String,
     pub history: Vec<String>,
 }
 
@@ -171,9 +172,25 @@ pub fn build_persisted_memory_artifact(
         .collect::<Vec<_>>();
 
     PersistedMemoryArtifact {
-        session_id,
+        session_id: session_id.to_string(),
         history,
     }
+}
+
+pub fn render_artifact_json(artifact: &PersistedMemoryArtifact) -> String {
+    serde_json::to_string_pretty(artifact).expect("artifact should serialize to json")
+}
+
+pub fn assert_artifact_json_output_has_core_fields(json: &str) {
+    let parsed: serde_json::Value = serde_json::from_str(json).expect("artifact json should parse");
+    assert!(
+        parsed.get("session_id").and_then(|v| v.as_str()).is_some(),
+        "artifact json should contain string session_id"
+    );
+    assert!(
+        parsed.get("history").and_then(|v| v.as_array()).is_some(),
+        "artifact json should contain history array"
+    );
 }
 
 pub fn assert_artifact_history_len(artifact: &PersistedMemoryArtifact, expected: usize) {
