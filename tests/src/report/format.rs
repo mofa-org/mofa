@@ -102,3 +102,33 @@ impl ReportFormatter for TextFormatter {
         buf
     }
 }
+
+/// Renders a report as Markdown format.
+pub struct MarkdownFormatter;
+
+impl ReportFormatter for MarkdownFormatter {
+    fn format(&self, report: &TestReport) -> String {
+        let mut buf = String::new();
+        buf.push_str(&format!("# Test Report: {}\n\n", report.suite_name));
+        buf.push_str(&format!("**Timestamp**: {}\n", report.timestamp));
+        buf.push_str(&format!("**Total Duration**: {}ms\n\n", report.total_duration.as_millis()));
+        buf.push_str("## Summary\n\n");
+        buf.push_str(&format!("- Total: {}\n", report.total()));
+        buf.push_str(&format!("- Passed: {}\n", report.passed()));
+        buf.push_str(&format!("- Failed: {}\n", report.failed()));
+        buf.push_str(&format!("- Skipped: {}\n", report.skipped()));
+        buf.push_str(&format!("- Pass Rate: {:.1}%\n\n", report.pass_rate() * 100.0));
+        buf.push_str("## Results\n\n");
+        buf.push_str("| Status | Name | Duration (ms) |\n");
+        buf.push_str("|---|---|---|\n");
+        for r in &report.results {
+            let status = match r.status {
+                TestStatus::Passed => "✅ Pass",
+                TestStatus::Failed => "❌ Fail",
+                TestStatus::Skipped => "⏭️ Skip",
+            };
+            buf.push_str(&format!("| {} | {} | {} |\n", status, r.name, r.duration.as_millis()));
+        }
+        buf
+    }
+}
