@@ -102,3 +102,52 @@ impl ReportFormatter for TextFormatter {
         buf
     }
 }
+
+/// Renders a report as JUnit XML format.
+pub struct JunitFormatter;
+
+impl ReportFormatter for JunitFormatter {
+    fn format(&self, report: &TestReport) -> String {
+        let mut buf = String::new();
+        buf.push_str("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
+        buf.push_str(&format!(
+            "<testsuite name=\"{}\" tests=\"{}\" failures=\"{}\" skipped=\"{}\" time=\"{:.3}\" timestamp=\"{}\">\n",
+            report.suite_name,
+            report.total(), report.failed(), report.skipped(),
+            report.total_duration.as_secs_f64(),
+            report.timestamp
+        ));
+
+        for r in &report.results {
+            buf.push_str(&format!(
+                "  <testcase classname=\"{}\" name=\"{}\" time=\"{:.3}\">\n",
+                report.suite_name, r.name, r.duration.as_secs_f64()
+            ));
+
+            match r.status {
+                TestStatus::Passed => {}
+                TestStatus::Failed => {
+                    let err_msg = r.error.as_deref().unwrap_or("Test failed");
+                    let safe_msg = err_msg.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;").replace("'", "&apos;");
+                    buf.push_str(&format!("    <failure message=\"{}\">{}</failure>\n", safe_msg, safe_msg));
+                }
+                TestStatus::Skipped => {
+                    buf.push_str("    <skipped/>\n");
+                }
+            }
+
+            if !r.metadata.is_empty() {
+                buf.push_str("    <system-out><![CDATA[\n");
+                for (k, v) in &r.metadata {
+                    buf.push_str(&format!("{}: {}\n", k, v));
+                }
+                buf.push_str("    ]]></system-out>\n");
+            }
+            buf.push_str("  </testcase>\n");
+        }
+
+        buf.push_str("</testsuite>\n");
+        buf
+    }
+}
+
