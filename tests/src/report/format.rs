@@ -151,3 +151,45 @@ impl ReportFormatter for JunitFormatter {
     }
 }
 
+/// Renders a report as Allure JSON format.
+pub struct AllureFormatter;
+
+impl ReportFormatter for AllureFormatter {
+    fn format(&self, report: &TestReport) -> String {
+        let results: Vec<serde_json::Value> = report
+            .results
+            .iter()
+            .map(|r| {
+                let status = match r.status {
+                    TestStatus::Passed => "passed",
+                    TestStatus::Failed => "failed",
+                    TestStatus::Skipped => "skipped",
+                };
+                
+                let mut obj = serde_json::json!({
+                    "name": r.name,
+                    "status": status,
+                    "statusDetails": {"message": r.error.clone().unwrap_or_default()},
+                    "start": report.timestamp, // Rough approx
+                    "stop": report.timestamp + r.duration.as_millis() as u64,
+                    "labels": [
+                        {"name": "suite", "value": report.suite_name}
+                    ]
+                });
+
+                if !r.metadata.is_empty() {
+                    let params: Vec<serde_json::Value> = r.metadata.iter().map(|(k, v)| {
+                        serde_json::json!({"name": k, "value": v})
+                    }).collect();
+                    obj["parameters"] = params;
+                }
+                
+                obj
+            })
+            .collect();
+            
+        // Usually allure writes multiple files, but for the formatter trait we can return a JSON array or list of objects
+        serde_json::to_string_pretty(&results).expect("allure serialization failed")
+    }
+}
+
