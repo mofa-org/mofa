@@ -2,8 +2,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use mofa_testing::{
-    JsonFormatter, MockClock, ReportFormatter, TestCaseResult, TestReport, TestReportBuilder,
-    TestStatus, TextFormatter,
+    JUnitFormatter, JsonFormatter, MockClock, ReportFormatter, TestCaseResult, TestReport,
+    TestReportBuilder, TestStatus, TextFormatter,
 };
 
 // ---------------------------------------------------------------------------
@@ -256,6 +256,32 @@ fn json_formatter_empty_report() {
     let parsed: serde_json::Value = serde_json::from_str(&output).expect("valid JSON");
     assert_eq!(parsed["summary"]["total"], 0);
     assert_eq!(parsed["results"].as_array().unwrap().len(), 0);
+}
+
+// ===========================================================================
+// JUnitFormatter
+// ===========================================================================
+
+#[test]
+fn junit_formatter_emits_expected_xml() {
+    let report = TestReport {
+        suite_name: "suite & special".into(),
+        results: vec![
+            make_result("pass<one>", TestStatus::Passed, 10, None),
+            make_result("fail\"two\"", TestStatus::Failed, 20, Some("boom & bust")),
+            make_result("skip'three'", TestStatus::Skipped, 0, None),
+        ],
+        total_duration: Duration::from_millis(30),
+        timestamp: 123,
+    };
+
+    let output = JUnitFormatter.format(&report);
+
+    assert!(output.contains(r#"<testsuite name="suite &amp; special" tests="3" failures="1" skipped="1" time="0.030" timestamp="123">"#));
+    assert!(output.contains(r#"<testcase classname="suite &amp; special" name="pass&lt;one&gt;" time="0.010">"#));
+    assert!(output.contains(r#"<failure message="boom &amp; bust">boom &amp; bust</failure>"#));
+    assert!(output.contains(r#"<testcase classname="suite &amp; special" name="skip&apos;three&apos;" time="0.000">"#));
+    assert!(output.contains("<skipped />"));
 }
 
 #[test]
