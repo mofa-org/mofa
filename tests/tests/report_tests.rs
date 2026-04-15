@@ -2,8 +2,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use mofa_testing::{
-    JsonFormatter, MockClock, ReportFormatter, TestCaseResult, TestReport, TestReportBuilder,
-    TestStatus, TextFormatter,
+    AllureExporter, JsonFormatter, MockClock, ReportFormatter, TestCaseResult, TestReport,
+    TestReportBuilder, TestStatus, TextFormatter,
 };
 
 // ---------------------------------------------------------------------------
@@ -318,4 +318,103 @@ fn text_formatter_empty_report() {
     let output = TextFormatter.format(&r);
     assert!(output.contains("Total: 0"));
     assert!(output.contains("Pass rate: 100.0%"));
+}
+
+// ===========================================================================
+// AllureExporter
+// ===========================================================================
+
+#[test]
+fn allure_exporter_simple_pass_case() {
+    let report = TestReport {
+        suite_name: "suite".into(),
+        results: vec![make_result("pass_case", TestStatus::Passed, 15, None)],
+        total_duration: Duration::from_millis(15),
+        timestamp: 200,
+    };
+
+    let results = AllureExporter.export(&report);
+    assert_eq!(results.len(), 1);
+    let result = &results[0];
+    assert_eq!(result.status, "passed");
+    assert_eq!(result.uuid, "suite::pass_case");
+    assert_eq!(result.history_id, "suite::pass_case");
+    assert_eq!(result.start, 200);
+    assert_eq!(result.stop, 215);
+    assert!(result.status_details.is_none());
+}
+
+#[test]
+fn allure_exporter_failure_with_message() {
+    let report = TestReport {
+        suite_name: "suite".into(),
+        results: vec![make_result(
+            "fail_case",
+            TestStatus::Failed,
+            10,
+            Some("kaboom"),
+        )],
+        total_duration: Duration::from_millis(10),
+        timestamp: 500,
+    };
+
+    let results = AllureExporter.export(&report);
+    assert_eq!(results[0].status, "failed");
+    assert_eq!(
+        results[0]
+            .status_details
+            .as_ref()
+            .and_then(|d| d.message.as_deref()),
+        Some("kaboom")
+    );
+}
+
+#[test]
+fn allure_exporter_skipped_case() {
+    let report = TestReport {
+        suite_name: "suite".into(),
+        results: vec![make_result("skip_case", TestStatus::Skipped, 0, None)],
+        total_duration: Duration::ZERO,
+        timestamp: 42,
+    };
+
+    let results = AllureExporter.export(&report);
+    assert_eq!(results[0].status, "skipped");
+    assert_eq!(results[0].start, 42);
+    assert_eq!(results[0].stop, 42);
+}
+
+#[test]
+fn allure_exporter_metadata_as_parameters() {
+    let mut tc = make_result("meta_case", TestStatus::Passed, 5, None);
+    tc.metadata.push(("browser".into(), "webkit".into()));
+    tc.metadata.push(("env".into(), "ci".into()));
+    let report = TestReport {
+        suite_name: "meta_suite".into(),
+        results: vec![tc],
+        total_duration: Duration::from_millis(5),
+        timestamp: 9,
+    };
+
+    let results = AllureExporter.export(&report);
+    assert_eq!(results[0].parameters.len(), 2);
+    assert_eq!(results[0].parameters[0].name, "browser");
+    assert_eq!(results[0].parameters[0].value, "webkit");
+    assert_eq!(results[0].parameters[1].name, "env");
+    assert_eq!(results[0].parameters[1].value, "ci");
+    assert_eq!(results[0].labels[0].name, "suite");
+    assert_eq!(results[0].labels[0].value, "meta_suite");
+}
+
+#[test]
+fn allure_exporter_json_output_is_deterministic() {
+    let report = mixed_report();
+    let first = AllureExporter.export_json(&report).expect("json export");
+    let second = AllureExporter.export_json(&report).expect("json export");
+    assert_eq!(first, second);
+
+    let parsed: serde_json::Value = serde_json::from_str(&first[1]).expect("valid JSON");
+    assert_eq!(parsed["status"], "failed");
+    assert_eq!(parsed["fullName"], "mixed::b");
+    assert_eq!(parsed["statusDetails"]["message"], "boom");
 }

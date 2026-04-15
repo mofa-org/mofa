@@ -15,6 +15,7 @@ pub use backend::MockLLMBackend;
 pub use bus::MockAgentBus;
 pub use clock::{Clock, MockClock, SystemClock};
 pub use report::{
+    AllureExporter, AllureLabel, AllureParameter, AllureStatusDetails, AllureTestResult,
     JsonFormatter, ReportFormatter, TestCaseResult, TestReport, TestReportBuilder, TestStatus,
     TextFormatter,
 };
