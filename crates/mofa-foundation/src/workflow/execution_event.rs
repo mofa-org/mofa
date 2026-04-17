@@ -90,10 +90,23 @@ pub enum ExecutionEvent {
         total_duration_ms: u64,
     },
 
-    /// Checkpoint created during workflow execution
-    CheckpointCreated {
-        label: String,
+    /// Workflow execution paused (e.g., waiting for human input)
+    WorkflowPaused {
+        workflow_id: String,
+        node_id: String,
+        reason: String,
+        paused_at: u64,
     },
+
+    /// Workflow execution resumed after pause/checkpoint
+    WorkflowResumed {
+        workflow_id: String,
+        resumed_from: String,
+        resumed_at: u64,
+    },
+
+    /// Checkpoint created during workflow execution
+    CheckpointCreated { label: String },
 
     /// Retry attempt for a node
     NodeRetrying {
@@ -245,7 +258,7 @@ mod tests {
 
         let envelope = ExecutionEventEnvelope::new(event);
         let serialized = serde_json::to_string_pretty(&envelope).unwrap();
-        
+
         assert!(serialized.contains("WorkflowCompleted"));
         assert!(serialized.contains("schema_version"));
     }
