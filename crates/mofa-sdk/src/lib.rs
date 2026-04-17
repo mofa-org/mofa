@@ -501,7 +501,13 @@ pub mod llm {
     //! let answer = client.ask("What is Rust?").await?;
     //! ```
 
-    pub use crate::llm_tools::ToolPluginExecutor;
+    pub use crate::llm_tools::{
+        ToolPluginExecutor,
+        builtin_tool_plugin_from_agent_yaml,
+        llm_builder_from_config_file_with_builtin_tools,
+        llm_builder_from_yaml_with_builtin_tools,
+        tool_executor_from_agent_yaml,
+    };
     pub use mofa_foundation::llm::anthropic::{AnthropicConfig, AnthropicProvider};
     pub use mofa_foundation::llm::google::{GeminiConfig, GeminiProvider};
     pub use mofa_foundation::llm::ollama::{OllamaConfig, OllamaProvider};

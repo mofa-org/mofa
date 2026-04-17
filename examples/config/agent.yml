@@ -20,6 +20,16 @@ llm:
   system_prompt: "You are a helpful assistant with access to various tools."
 
 tools:
+  - name: shell
+    enabled: true
+    config:
+      sandbox: true
+      memory_limit_mb: 128
+      cpu_time_limit_secs: 3
+      # Optional: restrict working directories for sandboxed shell calls
+      # allowed_working_dirs:
+      #   - "/workspaces/mofa/examples"
+      timeout_ms: 5000
   - name: web_search
     enabled: true
     config:
