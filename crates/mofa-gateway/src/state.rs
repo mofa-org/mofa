@@ -2,6 +2,7 @@
 
 use crate::inference_bridge::InferenceBridge;
 use crate::middleware::RateLimiter;
+use crate::observability::SharedMetrics;
 use mofa_foundation::inference::OrchestratorConfig;
 use mofa_runtime::agent::registry::AgentRegistry;
 use std::sync::Arc;
@@ -15,15 +16,22 @@ pub struct AppState {
     pub rate_limiter: Arc<RateLimiter>,
     /// Inference bridge - connects to InferenceOrchestrator (optional)
     pub inference_bridge: Option<Arc<InferenceBridge>>,
+    /// Prometheus metrics collector shared across middleware and handlers
+    pub metrics: SharedMetrics,
 }
 
 impl AppState {
     /// Create a new `AppState` wrapping the given `AgentRegistry`.
-    pub fn new(registry: Arc<AgentRegistry>, rate_limiter: Arc<RateLimiter>) -> Self {
+    pub fn new(
+        registry: Arc<AgentRegistry>,
+        rate_limiter: Arc<RateLimiter>,
+        metrics: SharedMetrics,
+    ) -> Self {
         Self {
             registry,
             rate_limiter,
             inference_bridge: None,
+            metrics,
         }
     }
 
@@ -31,6 +39,7 @@ impl AppState {
     pub fn with_inference_bridge(
         registry: Arc<AgentRegistry>,
         rate_limiter: Arc<RateLimiter>,
+        metrics: SharedMetrics,
         orchestrator_config: OrchestratorConfig,
     ) -> Self {
         let bridge = InferenceBridge::new(orchestrator_config);
@@ -38,6 +47,8 @@ impl AppState {
             registry,
             rate_limiter,
             inference_bridge: Some(Arc::new(bridge)),
+            metrics,
         }
     }
 }
+
