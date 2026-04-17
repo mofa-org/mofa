@@ -13,6 +13,7 @@ pub mod recursive_chunker;
 pub mod default_reranker;
 pub mod score_reranker;
 pub mod similarity;
+pub mod sparse;
 pub mod streaming_generator;
 pub mod vector_store;
 
@@ -35,6 +36,7 @@ pub use pipeline_adapters::{InMemoryRetriever, SimpleGenerator};
 pub use recursive_chunker::{RecursiveChunker, RecursiveChunkConfig};
 pub use default_reranker::IdentityReranker;
 pub use score_reranker::ScoreReranker;
+pub use sparse::bm25::Bm25Retriever;
 pub use similarity::compute_similarity;
 pub use streaming_generator::PassthroughStreamingGenerator;
 pub use vector_store::InMemoryVectorStore;
