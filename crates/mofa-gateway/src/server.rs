@@ -9,9 +9,10 @@ use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 use tracing::info;
 
-use crate::handlers::{agents_router, chat_router, health_router, openai_router};
+use crate::handlers::{agents_router, chat_router, health_router, metrics_router, openai_router};
 use crate::inference_bridge::InferenceBridge;
 use crate::middleware::RateLimiter;
+use crate::observability::GatewayMetrics;
 use crate::state::AppState;
 use mofa_runtime::agent::registry::AgentRegistry;
 
@@ -125,8 +126,15 @@ impl GatewayServer {
             self.config.rate_window,
         ));
 
-        // Create state
-        let state = Arc::new(AppState::new(self.registry.clone(), rate_limiter.clone()));
+        // Create shared Prometheus metrics collector.
+        let metrics = Arc::new(GatewayMetrics::new());
+
+        // Create state (now includes metrics).
+        let state = Arc::new(AppState::new(
+            self.registry.clone(),
+            rate_limiter.clone(),
+            metrics.clone(),
+        ));
 
         // Spawn background GC task for rate-limiter entries
         let gc_limiter = rate_limiter.clone();
@@ -142,6 +150,7 @@ impl GatewayServer {
             .merge(health_router())
             .merge(agents_router())
             .merge(chat_router())
+            .merge(metrics_router())
             .with_state(state);
 
         // Add OpenAI router if inference bridge is configured
@@ -151,6 +160,22 @@ impl GatewayServer {
                 .merge(openai_router())
                 .layer(axum::Extension(bridge));
         }
+
+        // --- Middleware layers (outermost layer executes first) ---
+
+        // Per-request metrics: increment counters and record latency.
+        // NOTE: In axum, the last `.layer()` wraps outermost. The `Extension`
+        // must be outer so the `from_fn` middleware can extract it.
+        router = router
+            .layer(axum::middleware::from_fn(
+                crate::middleware::metrics_middleware::metrics_middleware,
+            ))
+            .layer(axum::Extension(metrics));
+
+        // Request-ID propagation: generate or echo X-Request-Id.
+        router = router.layer(axum::middleware::from_fn(
+            crate::middleware::request_id::request_id_middleware,
+        ));
 
         if self.config.enable_tracing {
             router = router.layer(TraceLayer::new_for_http());
