@@ -67,6 +67,8 @@ parking_lot = "0.12"
 bytes = "1.7"
 futures = "0.3"
 rand = "0.8"
+dyn-clone = "1.0"
+lazy_static = "1.4"
 
 # Storage (optional - can use in-memory for testing)
 rocksdb = { version = "0.22", optional = true }
