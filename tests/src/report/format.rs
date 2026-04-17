@@ -102,3 +102,91 @@ impl ReportFormatter for TextFormatter {
         buf
     }
 }
+
+#[derive(serde::Serialize)]
+struct AllureParameter {
+    name: String,
+    value: String,
+}
+
+#[derive(serde::Serialize)]
+struct AllureLabel {
+    name: String,
+    value: String,
+}
+
+#[derive(serde::Serialize)]
+struct AllureStatusDetails {
+    message: String,
+}
+
+#[derive(serde::Serialize)]
+struct AllureTime {
+    start: u64,
+    stop: u64,
+}
+
+#[derive(serde::Serialize)]
+struct AllureTestResult {
+    uuid: String,
+    name: String,
+    full_name: String,
+    status: String,
+    stage: String,
+    time: AllureTime,
+    labels: Vec<AllureLabel>,
+    parameters: Vec<AllureParameter>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    status_details: Option<AllureStatusDetails>,
+}
+
+/// Renders a report as deterministic Allure-compatible JSON objects.
+pub struct AllureFormatter;
+
+impl ReportFormatter for AllureFormatter {
+    fn format(&self, report: &TestReport) -> String {
+        let results: Vec<AllureTestResult> = report
+            .results
+            .iter()
+            .enumerate()
+            .map(|(index, case)| {
+                let status_details = case.error.as_ref().map(|message| AllureStatusDetails {
+                    message: message.clone(),
+                });
+
+                let parameters = case
+                    .metadata
+                    .iter()
+                    .map(|(name, value)| AllureParameter {
+                        name: name.clone(),
+                        value: value.clone(),
+                    })
+                    .collect();
+
+                AllureTestResult {
+                    uuid: format!("{}-{}", report.suite_name, index),
+                    name: case.name.clone(),
+                    full_name: format!("{}::{}", report.suite_name, case.name),
+                    status: match case.status {
+                        TestStatus::Passed => "passed".to_string(),
+                        TestStatus::Failed => "failed".to_string(),
+                        TestStatus::Skipped => "skipped".to_string(),
+                    },
+                    stage: "finished".to_string(),
+                    time: AllureTime {
+                        start: report.timestamp,
+                        stop: report.timestamp.saturating_add(case.duration.as_millis() as u64),
+                    },
+                    labels: vec![AllureLabel {
+                        name: "suite".to_string(),
+                        value: report.suite_name.clone(),
+                    }],
+                    parameters,
+                    status_details,
+                }
+            })
+            .collect();
+
+        serde_json::to_string_pretty(&results).expect("Allure export should serialize")
+    }
+}
