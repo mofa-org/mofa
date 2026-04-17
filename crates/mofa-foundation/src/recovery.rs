@@ -87,7 +87,7 @@ impl Backoff {
                 initial_ms,
                 increment_ms,
             } => {
-                let ms = initial_ms + (increment_ms * attempt as u64);
+                let ms = initial_ms.saturating_add(increment_ms.saturating_mul(attempt as u64));
                 Duration::from_millis(ms)
             }
             Self::Exponential { initial_ms, max_ms } => {
