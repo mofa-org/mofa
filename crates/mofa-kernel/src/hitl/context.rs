@@ -58,20 +58,19 @@ pub struct Change {
     pub new_value: Option<serde_json::Value>,
 }
 
-
 /// Structured auditing data for high-integrity workflows
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuditingData {
     /// The core intent of the action
-    pub intent: String, 
+    pub intent: String,
     /// The final result or proposal
-    pub result: String, 
+    pub result: String,
     /// Steps taken during the reasoning process
-    pub relevant_trace_steps: Vec<String>, 
+    pub relevant_trace_steps: Vec<String>,
     /// Domain-specific financial/technical metadata
-    pub metadata: HashMap<String, serde_json::Value>, 
+    pub metadata: HashMap<String, serde_json::Value>,
     /// The status of the internal policy check
-    pub policy_status: String, 
+    pub policy_status: String,
 }
 
 /// Review context
@@ -129,10 +128,6 @@ impl ReviewContext {
         }
         self
     }
-
-
-
-
 }
 #[cfg(test)]
 mod tests {
@@ -154,21 +149,23 @@ mod tests {
             relevant_trace_steps: vec!["step_1".to_string()],
             metadata: HashMap::from([
                 ("asset".to_string(), json!("SOL")),
-                ("amount".to_string(), json!(10.5))
+                ("amount".to_string(), json!(10.5)),
             ]),
             policy_status: "Pass".to_string(),
         };
 
         // 3. Use the Builder Pattern to inject it
-        let context = ReviewContext::new(trace, json!({}))
-            .with_auditing_data(audit);
+        let context = ReviewContext::new(trace, json!({})).with_auditing_data(audit);
 
         // 4. Verify it was stored correctly in the 'additional' HashMap
-        let stored_audit = context.additional.get("audit_trail").expect("Audit trail should exist");
-        
+        let stored_audit = context
+            .additional
+            .get("audit_trail")
+            .expect("Audit trail should exist");
+
         assert_eq!(stored_audit["intent"], "High-Value Trade");
         assert_eq!(stored_audit["policy_status"], "Pass");
-        
+
         println!("✅ Audit Trail successfully serialized into ReviewContext!");
     }
 }

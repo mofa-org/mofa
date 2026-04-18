@@ -26,12 +26,8 @@ impl ReviewPolicy for AlwaysReviewPolicy {
         &self,
         context: &ReviewContext,
     ) -> HitlResult<Option<ReviewRequest>> {
-        let request = ReviewRequest::new(
-            "unknown",
-            ReviewType::Approval,
-            context.clone(),
-        );
-        Ok(Some(request))   
+        let request = ReviewRequest::new("unknown", ReviewType::Approval, context.clone());
+        Ok(Some(request))
     }
 
     async fn can_auto_approve(&self, _request: &ReviewRequest) -> HitlResult<bool> {
@@ -73,7 +69,6 @@ impl ReviewPolicy for AuditValidationPolicy {
         &self,
         context: &ReviewContext,
     ) -> HitlResult<Option<ReviewRequest>> {
-        
         // Match the key name used in context.rs ("audit_trail")
         if let Some(_audit_val) = context.additional.get("audit_trail") {
             let request = ReviewRequest::new(
@@ -100,15 +95,18 @@ impl ReviewPolicy for AuditValidationPolicy {
 mod policy_tests {
     use super::*;
     use crate::hitl::ReviewContext;
-    use crate::hitl::context::{ExecutionTrace, AuditingData};
+    use crate::hitl::context::{AuditingData, ExecutionTrace};
     use serde_json::json;
     use std::collections::HashMap;
 
     #[tokio::test]
     async fn test_audit_validation_policy_triggers() {
         let policy = AuditValidationPolicy;
-        
-        let trace = ExecutionTrace { steps: vec![], duration_ms: 0 };
+
+        let trace = ExecutionTrace {
+            steps: vec![],
+            duration_ms: 0,
+        };
         let audit = AuditingData {
             intent: "Luxury Purchase".to_string(),
             result: "Approved".to_string(),
@@ -116,16 +114,15 @@ mod policy_tests {
             metadata: HashMap::new(),
             policy_status: "Pass".to_string(),
         };
-        
-        let context = ReviewContext::new(trace, json!({}))
-            .with_auditing_data(audit);
+
+        let context = ReviewContext::new(trace, json!({})).with_auditing_data(audit);
 
         let result = policy.should_request_review(&context).await.unwrap();
 
         assert!(result.is_some());
         let request = result.unwrap();
         assert_eq!(request.execution_id, "audit_check");
-        
+
         println!("✅ Audit Guard successfully caught the transaction!");
     }
 }

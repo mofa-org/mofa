@@ -88,9 +88,8 @@ pub enum AuditError {
     InvalidTimestamp,
 
     // 4. The "VIP Only" Rule
-    #[error("Audit failed: This person does not have the right security key (Level {required} needed, but has Level {actual}).")]
-    InsufficientSecurityLevel {
-        required: u8,
-        actual: u8,
-    },
+    #[error(
+        "Audit failed: This person does not have the right security key (Level {required} needed, but has Level {actual})."
+    )]
+    InsufficientSecurityLevel { required: u8, actual: u8 },
 }
