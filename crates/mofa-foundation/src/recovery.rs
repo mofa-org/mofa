@@ -26,6 +26,7 @@ use std::time::Duration;
 /// (e.g. `BackoffStrategy` in mofa-foundation) can interoperate by
 /// converting to/from this type.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub enum Backoff {
     /// No delay between retries
     None,
@@ -296,6 +297,7 @@ type FallbackOperation<T> = Box<dyn FnOnce() -> BoxedFallbackFuture<T> + Send>;
 
 /// Circuit breaker states
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum CircuitState {
     /// Normal operation — requests are allowed
     Closed,
