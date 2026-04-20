@@ -485,6 +485,12 @@ impl PrometheusExporter {
             "Rolling distribution of LLM request duration in seconds",
             &latency.llm_request,
         );
+        render_labeled_histogram_store(
+            &mut out,
+            "gen_ai_client_operation_duration_seconds",
+            "OTel-aligned rolling distribution of GenAI operation duration in seconds",
+            &latency.llm_request,
+        );
 
         out
     }
@@ -1132,12 +1138,13 @@ fn render_llm_metrics(
         "Cumulative prompt tokens sent to the LLM provider",
         "counter",
     );
-    for series in limit_series(
+    let limited_input_tokens = limit_series(
         input_tokens,
         limits.provider_model,
         &mut dropped.provider_model,
         OverflowAggregation::Sum,
-    ) {
+    );
+    for series in &limited_input_tokens {
         append_gauge_line(
             out,
             "mofa_llm_input_tokens_total",
@@ -1152,18 +1159,37 @@ fn render_llm_metrics(
         "Cumulative completion tokens received from the LLM provider",
         "counter",
     );
-    for series in limit_series(
+    let limited_output_tokens = limit_series(
         output_tokens,
         limits.provider_model,
         &mut dropped.provider_model,
         OverflowAggregation::Sum,
-    ) {
+    );
+    for series in &limited_output_tokens {
         append_gauge_line(
             out,
             "mofa_llm_output_tokens_total",
             &series.labels,
             series.sample_value,
         );
+    }
+
+    // OTel-aligned alias: unify token usage with a token_type label dimension.
+    write_metric_header(
+        out,
+        "gen_ai_client_token_usage_total",
+        "Cumulative GenAI token usage grouped by token_type",
+        "counter",
+    );
+    for series in &limited_input_tokens {
+        let mut labels = series.labels.clone();
+        labels.push(("token_type".to_string(), "input".to_string()));
+        append_gauge_line(out, "gen_ai_client_token_usage_total", &labels, series.sample_value);
+    }
+    for series in &limited_output_tokens {
+        let mut labels = series.labels.clone();
+        labels.push(("token_type".to_string(), "output".to_string()));
+        append_gauge_line(out, "gen_ai_client_token_usage_total", &labels, series.sample_value);
     }
 
     write_metric_header(
@@ -1586,6 +1612,7 @@ mod tests {
             output.contains("mofa_metrics_contract_info{version=\"v1alpha1\"} 1"),
             "expected contract version marker in exported payload"
         );
+        assert!(output.contains("# HELP gen_ai_client_operation_duration_seconds"));
         assert!(output.contains("# HELP mofa_system_cpu_percent"));
     }
 
@@ -1962,6 +1989,43 @@ mod tests {
         assert!(
             output.contains("mofa_llm_time_to_first_token_seconds{provider=\"openai\",model=\"gpt-4\"} 0.042"),
             "wrong value for time_to_first_token; output was:\n{output}"
+        );
+    }
+
+    #[test]
+    fn test_render_llm_otel_token_usage_alias_exported() {
+        let mut snapshot = sample_snapshot();
+        snapshot.llm_metrics = vec![super::super::metrics::LLMMetrics {
+            provider_name: "openai".to_string(),
+            model_name: "gpt-4".to_string(),
+            prompt_tokens: 100,
+            completion_tokens: 25,
+            ..Default::default()
+        }];
+        let mut output = String::new();
+        let limits = CardinalityLimits::default();
+        let mut dropped = DroppedSeriesCounters::default();
+        render_llm_metrics(&mut output, &snapshot, &limits, &mut dropped);
+
+        assert!(
+            output.contains("# HELP gen_ai_client_token_usage_total"),
+            "missing HELP line for OTel token usage alias; output was:\n{output}"
+        );
+        assert!(
+            output.contains("# TYPE gen_ai_client_token_usage_total counter"),
+            "missing TYPE line for OTel token usage alias; output was:\n{output}"
+        );
+        assert!(
+            output.contains(
+                "gen_ai_client_token_usage_total{provider=\"openai\",model=\"gpt-4\",token_type=\"input\"} 100"
+            ),
+            "missing input token alias line; output was:\n{output}"
+        );
+        assert!(
+            output.contains(
+                "gen_ai_client_token_usage_total{provider=\"openai\",model=\"gpt-4\",token_type=\"output\"} 25"
+            ),
+            "missing output token alias line; output was:\n{output}"
         );
     }
 }
