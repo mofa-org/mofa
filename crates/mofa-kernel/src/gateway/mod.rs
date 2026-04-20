@@ -22,6 +22,7 @@
 //! | [`RateLimitDecision`] | Outcome of a rate-limit check |
 //! | [`KeyStrategy`] | Keying dimension (per-agent or per-client) |
 //! | [`RateLimiterConfig`] | Shared rate limiter configuration |
+//! | [`InvocationTarget`] | Where a request dispatches: Agent, LocalInference, or Proxy |
 
 pub mod auth;
 pub mod rate_limiter;
@@ -40,4 +41,5 @@ pub use rate_limiter::{GatewayRateLimiter, KeyStrategy, RateLimitDecision, RateL
 pub use error::RegistryError;
 pub use route::{GatewayRoute, HttpMethod, RouteRegistry, RoutingContext};
 pub use config_error::GatewayConfigError;
-pub use types::{GatewayContext, GatewayRequest, GatewayResponse, RouteMatch};
+pub use types::{GatewayContext, GatewayRequest, GatewayResponse, InvocationTarget, RouteMatch};
+
