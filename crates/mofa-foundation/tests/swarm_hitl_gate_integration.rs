@@ -203,10 +203,8 @@ async fn test_gate_rejects_task_on_reviewer_rejection() {
         },
     );
 
-    let cfg = SwarmSchedulerConfig {
-        failure_policy: FailurePolicy::Continue,
-        ..Default::default()
-    };
+    let mut cfg = SwarmSchedulerConfig::default();
+    cfg.failure_policy = FailurePolicy::Continue;
     let summary = SequentialScheduler::with_config(cfg)
         .execute(&mut dag, executor)
         .await
@@ -402,10 +400,8 @@ async fn test_gate_metrics_track_decisions_correctly() {
         }
     });
 
-    let cfg = SwarmSchedulerConfig {
-        failure_policy: FailurePolicy::Continue,
-        ..Default::default()
-    };
+    let mut cfg = SwarmSchedulerConfig::default();
+    cfg.failure_policy = FailurePolicy::Continue;
     let summary = SequentialScheduler::with_config(cfg)
         .execute(&mut dag, executor)
         .await

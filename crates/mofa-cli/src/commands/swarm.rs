@@ -444,11 +444,10 @@ pub async fn run(
     }
     println!("      pattern: {pattern}");
 
-    let sched_cfg = SwarmSchedulerConfig {
-        task_timeout: Duration::from_secs(timeout_secs),
-        failure_policy: FailurePolicy::Continue,
-        concurrency_limit: None,
-    };
+    let mut sched_cfg = SwarmSchedulerConfig::default();
+    sched_cfg.task_timeout = Duration::from_secs(timeout_secs);
+    sched_cfg.failure_policy = FailurePolicy::Continue;
+    sched_cfg.concurrency_limit = None;
     let executor = make_executor();
 
     let summary: SchedulerSummary = match pattern {
