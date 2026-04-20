@@ -42,6 +42,7 @@ use tracing::{debug, warn};
 
 const OTHER_LABEL_VALUE: &str = "__other__";
 const MOFA_METRICS_CONTRACT_VERSION: &str = "v1alpha1";
+const MAX_CARDINALITY_LIMIT_PER_DIMENSION: usize = 1_000;
 
 /// Cardinality limits for exported label dimensions.
 #[derive(Debug, Clone)]
@@ -125,6 +126,12 @@ fn sanitize_limit(limit: usize, name: &str) -> usize {
     if limit == 0 {
         warn!("{name} cardinality limit was 0; clamping to 1");
         1
+    } else if limit > MAX_CARDINALITY_LIMIT_PER_DIMENSION {
+        warn!(
+            "{name} cardinality limit {} exceeds max {}; clamping",
+            limit, MAX_CARDINALITY_LIMIT_PER_DIMENSION
+        );
+        MAX_CARDINALITY_LIMIT_PER_DIMENSION
     } else {
         limit
     }
@@ -1828,6 +1835,33 @@ mod tests {
     fn zero_refresh_interval_is_clamped() {
         let config = PrometheusExportConfig::default().with_refresh_interval(Duration::ZERO);
         assert_eq!(config.refresh_interval, Duration::from_millis(1));
+    }
+
+    #[test]
+    fn cardinality_limits_are_clamped_to_safety_maximum() {
+        let config = PrometheusExportConfig::default().with_cardinality(CardinalityLimits {
+            agent_id: usize::MAX,
+            workflow_id: usize::MAX,
+            plugin_or_tool: usize::MAX,
+            provider_model: usize::MAX,
+        });
+
+        assert_eq!(
+            config.cardinality.agent_id,
+            MAX_CARDINALITY_LIMIT_PER_DIMENSION
+        );
+        assert_eq!(
+            config.cardinality.workflow_id,
+            MAX_CARDINALITY_LIMIT_PER_DIMENSION
+        );
+        assert_eq!(
+            config.cardinality.plugin_or_tool,
+            MAX_CARDINALITY_LIMIT_PER_DIMENSION
+        );
+        assert_eq!(
+            config.cardinality.provider_model,
+            MAX_CARDINALITY_LIMIT_PER_DIMENSION
+        );
     }
 
     #[test]
