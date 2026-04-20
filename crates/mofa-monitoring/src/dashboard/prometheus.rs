@@ -41,6 +41,7 @@ use tokio::sync::RwLock;
 use tracing::{debug, warn};
 
 const OTHER_LABEL_VALUE: &str = "__other__";
+const MOFA_METRICS_CONTRACT_VERSION: &str = "v1alpha1";
 
 /// Cardinality limits for exported label dimensions.
 #[derive(Debug, Clone)]
@@ -450,6 +451,7 @@ impl PrometheusExporter {
     ) -> String {
         let mut out = String::with_capacity(16 * 1024);
 
+        render_contract_info(&mut out);
         render_agent_metrics(&mut out, snapshot, &self.config.cardinality, dropped);
         render_workflow_metrics(&mut out, snapshot, &self.config.cardinality, dropped);
         render_plugin_metrics(&mut out, snapshot, &self.config.cardinality, dropped);
@@ -554,6 +556,22 @@ impl PrometheusExporter {
             last_refresh_unix_seconds,
         );
     }
+}
+
+// Emit the contract version marker so dashboards/alerts can pin schema expectations.
+fn render_contract_info(out: &mut String) {
+    write_metric_header(
+        out,
+        "mofa_metrics_contract_info",
+        "MoFA Prometheus metrics contract version",
+        "gauge",
+    );
+    append_gauge_line(
+        out,
+        "mofa_metrics_contract_info",
+        &[("version".to_string(), MOFA_METRICS_CONTRACT_VERSION.to_string())],
+        1.0,
+    );
 }
 
 #[derive(Clone)]
@@ -1556,6 +1574,11 @@ mod tests {
         assert!(output.contains("# HELP mofa_agent_tasks_total"));
         assert!(output.contains("# TYPE mofa_agent_tasks_total counter"));
         assert!(output.contains("mofa_agent_tasks_total{agent_id=\"agent-1\"} 42"));
+        assert!(output.contains("# HELP mofa_metrics_contract_info"));
+        assert!(
+            output.contains("mofa_metrics_contract_info{version=\"v1alpha1\"} 1"),
+            "expected contract version marker in exported payload"
+        );
         assert!(output.contains("# HELP mofa_system_cpu_percent"));
     }
 
