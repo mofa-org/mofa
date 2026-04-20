@@ -36,6 +36,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
+use async_trait::async_trait;
 use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 use mofa_kernel::hitl::{
     ExecutionStep, ExecutionTrace, ReviewContext, ReviewRequest, ReviewResponse, ReviewType,
@@ -539,5 +540,64 @@ impl SwarmHITLGate {
                 )))
             }
         }
+    }
+}
+
+// ── HITLGate trait ───────────────────────────────────────────────────────────
+
+/// Trait abstraction for HITL gates, enabling dependency injection in schedulers.
+#[async_trait]
+pub trait HITLGate: Send + Sync {
+    /// Returns true if this task must be reviewed before execution.
+    fn requires_review(&self, task: &SwarmSubtask) -> bool;
+
+    /// Submit a review and block until a decision is received or timeout expires.
+    async fn await_decision(
+        &self,
+        task: &SwarmSubtask,
+        execution_id: &str,
+        timeout: Duration,
+    ) -> HITLDecision;
+}
+
+/// Minimal gate that auto-approves every task — for tests.
+#[cfg(test)]
+pub struct AlwaysApproveGate;
+
+#[cfg(test)]
+#[async_trait]
+impl HITLGate for AlwaysApproveGate {
+    fn requires_review(&self, task: &SwarmSubtask) -> bool {
+        task.hitl_required
+    }
+
+    async fn await_decision(
+        &self,
+        _task: &SwarmSubtask,
+        _execution_id: &str,
+        _timeout: Duration,
+    ) -> HITLDecision {
+        HITLDecision::Approved
+    }
+}
+
+/// Gate that rejects every task — for tests.
+#[cfg(test)]
+pub struct AlwaysRejectGate;
+
+#[cfg(test)]
+#[async_trait]
+impl HITLGate for AlwaysRejectGate {
+    fn requires_review(&self, task: &SwarmSubtask) -> bool {
+        task.hitl_required
+    }
+
+    async fn await_decision(
+        &self,
+        _task: &SwarmSubtask,
+        _execution_id: &str,
+        _timeout: Duration,
+    ) -> HITLDecision {
+        HITLDecision::Rejected
     }
 }
