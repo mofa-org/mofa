@@ -62,19 +62,25 @@ def _save_vibe_config(model=None, max_rounds=None, agents_output=None, flows_out
         "MOFA_VIBE_FLOWS_OUTPUT": False,
     }
 
-    # Update existing lines
+    # Update existing lines.
+    # Use a regex so we correctly match lines with optional whitespace
+    # around the '=' operator (e.g. "KEY = value" or "KEY=value").
+    # Fixes #1369 – previously, "KEY = value" was not detected and a
+    # duplicate entry was appended instead of updating in-place.
+    import re
+    _key_re = {k: re.compile(r'^\s*' + re.escape(k) + r'\s*=') for k in updated}
+
     for i, line in enumerate(lines):
-        stripped = line.strip()
-        if model and stripped.startswith("MOFA_VIBE_MODEL="):
+        if model and _key_re["MOFA_VIBE_MODEL"].match(line):
             lines[i] = f"MOFA_VIBE_MODEL={model}\n"
             updated["MOFA_VIBE_MODEL"] = True
-        elif max_rounds is not None and stripped.startswith("MOFA_VIBE_MAX_ROUNDS="):
+        elif max_rounds is not None and _key_re["MOFA_VIBE_MAX_ROUNDS"].match(line):
             lines[i] = f"MOFA_VIBE_MAX_ROUNDS={max_rounds}\n"
             updated["MOFA_VIBE_MAX_ROUNDS"] = True
-        elif agents_output and stripped.startswith("MOFA_VIBE_AGENTS_OUTPUT="):
+        elif agents_output and _key_re["MOFA_VIBE_AGENTS_OUTPUT"].match(line):
             lines[i] = f"MOFA_VIBE_AGENTS_OUTPUT={agents_output}\n"
             updated["MOFA_VIBE_AGENTS_OUTPUT"] = True
-        elif flows_output and stripped.startswith("MOFA_VIBE_FLOWS_OUTPUT="):
+        elif flows_output and _key_re["MOFA_VIBE_FLOWS_OUTPUT"].match(line):
             lines[i] = f"MOFA_VIBE_FLOWS_OUTPUT={flows_output}\n"
             updated["MOFA_VIBE_FLOWS_OUTPUT"] = True
 
@@ -100,6 +106,7 @@ def _save_vibe_config(model=None, max_rounds=None, agents_output=None, flows_out
     # Write back to file
     with open(env_file, 'w') as f:
         f.writelines(lines)
+
 
 
 def _check_and_setup_api_key():
