@@ -20,6 +20,7 @@ use mofa_kernel::scheduler::{
 };
 
 use super::clock::SystemClock;
+use super::persistence::SchedulePersistence;
 
 // ============================================================================
 // ScheduleEntry - Internal state for each registered schedule
@@ -64,7 +65,11 @@ impl ScheduleEntry {
     /// Convert to a monitoring snapshot.
     fn to_info(&self, clock: &dyn Clock) -> ScheduleInfo {
         let last_run_raw = self.last_run_ms.load(Ordering::Relaxed);
-        let last_run = if last_run_raw == 0 { None } else { Some(last_run_raw) };
+        let last_run = if last_run_raw == 0 {
+            None
+        } else {
+            Some(last_run_raw)
+        };
         ScheduleInfo::new(
             self.definition.schedule_id.clone(),
             self.definition.agent_id.clone(),
@@ -157,6 +162,15 @@ pub struct CronScheduler {
     schedules: Arc<RwLock<HashMap<String, ScheduleEntry>>>,
     /// Clock for time operations (injectable for testing).
     clock: Arc<dyn Clock>,
+    /// Optional persistence backend. When set, definitions are saved after every
+    /// successful `register()` / `unregister()` call and reloaded by
+    /// [`CronScheduler::start`]. Bundles both `file_path` and `tmp_path` so
+    /// `save_to_disk` never has to reconstruct it.
+    persistence: Option<SchedulePersistence>,
+    /// Handles returned by `register()` during [`CronScheduler::start`].
+    /// Kept alive here so the cancel-on-drop `ScheduleHandle` design does not
+    /// immediately abort the just-started tasks.
+    startup_handles: Arc<RwLock<Vec<ScheduleHandle>>>,
 }
 
 impl CronScheduler {
@@ -181,6 +195,8 @@ impl CronScheduler {
             global_semaphore: Arc::new(Semaphore::new(global_max_concurrent)),
             schedules: Arc::new(RwLock::new(HashMap::new())),
             clock: Arc::new(SystemClock),
+            persistence: None,
+            startup_handles: Arc::new(RwLock::new(Vec::new())),
         }
     }
 
@@ -200,6 +216,8 @@ impl CronScheduler {
             global_semaphore: Arc::new(Semaphore::new(global_max_concurrent)),
             schedules: Arc::new(RwLock::new(HashMap::new())),
             clock,
+            persistence: None,
+            startup_handles: Arc::new(RwLock::new(Vec::new())),
         }
     }
 }
@@ -211,14 +229,13 @@ impl CronScheduler {
 impl AgentScheduler for CronScheduler {
     async fn register(&self, def: ScheduleDefinition) -> Result<ScheduleHandle, SchedulerError> {
         // Validate cron expression up-front so the error is immediate.
-        if let Some(cron_expr) = &def.cron_expression {
-            if let Err(e) = cron_expr.parse::<Schedule>() {
+        if let Some(cron_expr) = &def.cron_expression
+            && let Err(e) = cron_expr.parse::<Schedule>() {
                 return Err(SchedulerError::InvalidCron(
                     cron_expr.clone(),
                     e.to_string(),
                 ));
             }
-        }
 
         // Reject duplicate schedule IDs.
         {
@@ -248,15 +265,19 @@ impl AgentScheduler for CronScheduler {
             schedules.insert(entry.definition.schedule_id.clone(), entry);
         }
 
+        self.save_to_disk().await;
         Ok(ScheduleHandle::new(schedule_id, cancel_tx))
     }
 
     async fn unregister(&self, schedule_id: &str) -> Result<(), SchedulerError> {
-        let mut schedules = self.schedules.write().await;
-        let entry = schedules
-            .remove(schedule_id)
-            .ok_or_else(|| SchedulerError::NotFound(schedule_id.to_string()))?;
-        drop(entry); // Drop aborts the background task via the Drop impl.
+        {
+            let mut schedules = self.schedules.write().await;
+            let entry = schedules
+                .remove(schedule_id)
+                .ok_or_else(|| SchedulerError::NotFound(schedule_id.to_string()))?;
+            drop(entry); // Drop aborts the background task via the Drop impl.
+        }
+        self.save_to_disk().await;
         Ok(())
     }
 
@@ -288,6 +309,74 @@ impl AgentScheduler for CronScheduler {
 }
 
 // ============================================================================
+// Persistence and lifecycle
+// ============================================================================
+
+impl CronScheduler {
+    /// Set a JSON persistence file path (builder method).
+    ///
+    /// When set, schedule definitions are written to this file after every
+    /// successful [`AgentScheduler::register`] call and reloaded by
+    /// [`CronScheduler::start`].
+    pub fn with_persistence(mut self, path: impl Into<std::path::PathBuf>) -> Self {
+        self.persistence = Some(SchedulePersistence::new(path.into()));
+        self
+    }
+
+    /// Load persisted schedule definitions from disk and register them.
+    ///
+    /// If the persistence file does not exist this is a no-op (first run).
+    /// Call this once after constructing the scheduler, before registering
+    /// any new schedules.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SchedulerError::PersistenceError`] if the file exists but
+    /// cannot be read or parsed.
+    pub async fn start(&self) -> Result<(), SchedulerError> {
+        let Some(ref backend) = self.persistence else {
+            return Ok(());
+        };
+
+        let defs = backend.load().await?;
+
+        let mut handles = self.startup_handles.write().await;
+        for def in defs {
+            match self.register(def).await {
+                Ok(handle) => handles.push(handle),
+                Err(SchedulerError::AlreadyExists(_)) => {}
+                Err(e) => return Err(e),
+            }
+        }
+        Ok(())
+    }
+
+    /// Persist all current schedule definitions to the configured file using atomic writes.
+    ///
+    /// No-op when no persistence path is set. On I/O or serialisation failure
+    /// a warning is logged but the error is not propagated — in-memory state
+    /// is always the authoritative source of truth for the running scheduler.
+    async fn save_to_disk(&self) {
+        let Some(ref backend) = self.persistence else {
+            return;
+        };
+
+        let defs: Vec<ScheduleDefinition> = {
+            let schedules = self.schedules.read().await;
+            schedules.values().map(|e| e.definition.clone()).collect()
+        };
+
+        if let Err(e) = backend.save(&defs).await {
+            tracing::warn!(
+                "CronScheduler: failed to persist schedules to {:?}: {}",
+                backend.file_path(),
+                e
+            );
+        }
+    }
+}
+
+// ============================================================================
 // Internal implementation
 // ============================================================================
 
@@ -309,7 +398,18 @@ impl CronScheduler {
 
         tokio::spawn(async move {
             let mut timing = if let Some(cron_expr) = &cron_expression {
-                ScheduleTiming::Cron(cron_expr.parse().unwrap())
+                match cron_expr.parse::<Schedule>() {
+                    Ok(schedule) => ScheduleTiming::Cron(Box::new(schedule)),
+                    Err(e) => {
+                        tracing::error!(
+                            "Failed to parse cron expression '{}' for schedule {}: {}",
+                            cron_expr,
+                            schedule_id,
+                            e
+                        );
+                        return;
+                    }
+                }
             } else if let Some(ms) = interval_ms {
                 ScheduleTiming::Interval(interval(Duration::from_millis(ms)))
             } else {
@@ -334,6 +434,12 @@ impl CronScheduler {
                                                 "Global concurrency limit reached for schedule {}",
                                                 schedule_id
                                             );
+                                            #[cfg(feature = "scheduler-telemetry")]
+                                            metrics::counter!(
+                                                "mofa_scheduler_missed_ticks_total",
+                                                "schedule_id" => schedule_id.clone(),
+                                                "reason" => "global_limit",
+                                            ).increment(1);
                                             continue;
                                         }
                                     };
@@ -346,6 +452,12 @@ impl CronScheduler {
                                                 "Per-schedule concurrency limit reached for schedule {}",
                                                 schedule_id
                                             );
+                                            #[cfg(feature = "scheduler-telemetry")]
+                                            metrics::counter!(
+                                                "mofa_scheduler_missed_ticks_total",
+                                                "schedule_id" => schedule_id.clone(),
+                                                "reason" => "per_schedule_limit",
+                                            ).increment(1);
                                             drop(global_permit);
                                             continue;
                                         }
@@ -358,6 +470,12 @@ impl CronScheduler {
                                 let last_run_ms_clone = Arc::clone(&last_run_ms);
 
                                 tokio::spawn(async move {
+                                    #[cfg(feature = "scheduler-telemetry")]
+                                    metrics::gauge!(
+                                        "mofa_scheduler_active_runs",
+                                        "schedule_id" => schedule_id_clone.clone(),
+                                    ).increment(1.0);
+
                                     match runner_clone
                                         .run_scheduled(&agent_id_clone, input_clone)
                                         .await
@@ -368,6 +486,17 @@ impl CronScheduler {
                                             )
                                             .unwrap_or(u64::MAX);
                                             last_run_ms_clone.store(now, Ordering::Relaxed);
+                                            #[cfg(feature = "scheduler-telemetry")]
+                                            {
+                                                metrics::counter!(
+                                                    "mofa_scheduler_executions_total",
+                                                    "schedule_id" => schedule_id_clone.clone(),
+                                                ).increment(1);
+                                                metrics::gauge!(
+                                                    "mofa_scheduler_last_run_timestamp_ms",
+                                                    "schedule_id" => schedule_id_clone.clone(),
+                                                ).set(now as f64);
+                                            }
                                             tracing::info!(
                                                 "Schedule {} executed successfully",
                                                 schedule_id_clone
@@ -381,6 +510,13 @@ impl CronScheduler {
                                             );
                                         }
                                     }
+
+                                    #[cfg(feature = "scheduler-telemetry")]
+                                    metrics::gauge!(
+                                        "mofa_scheduler_active_runs",
+                                        "schedule_id" => schedule_id_clone.clone(),
+                                    ).decrement(1.0);
+
                                     // Permits released on drop.
                                     drop(schedule_permit);
                                     drop(global_permit);
@@ -408,7 +544,7 @@ impl CronScheduler {
 
 enum ScheduleTiming {
     Interval(tokio::time::Interval),
-    Cron(Schedule),
+    Cron(Box<Schedule>),
 }
 
 impl ScheduleTiming {
@@ -440,6 +576,7 @@ impl ScheduleTiming {
 
 #[cfg(test)]
 mod tests {
+    use std::mem::size_of;
     use std::sync::Arc;
     use std::sync::atomic::Ordering;
     use tokio::sync::Semaphore;
@@ -585,5 +722,129 @@ mod tests {
         // Paused: no next_run_ms.
         entry.paused.store(true, Ordering::Release);
         assert_eq!(entry.to_info(&clock).next_run_ms, None);
+    }
+
+    // ── Persistence integration tests ────────────────────────────────────────
+
+    fn make_persisted_scheduler(path: &std::path::Path) -> CronScheduler {
+        CronScheduler::new(Arc::new(MockRunner), 10)
+            .with_persistence(path)
+    }
+
+    /// Registering a schedule persists it so a fresh scheduler can reload it via `start()`.
+    #[tokio::test]
+    async fn test_register_persists_and_start_reloads() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("schedules.json");
+
+        // First scheduler: register and let it write to disk.
+        {
+            let s = make_persisted_scheduler(&path);
+            s.register(
+                ScheduleDefinition::new_interval(
+                    "s1",
+                    "agent",
+                    60_000,
+                    1,
+                    AgentInput::text("x"),
+                    MissedTickPolicy::Skip,
+                )
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+            assert_eq!(s.list().await.len(), 1);
+        }
+
+        // Second scheduler: start() must load the persisted schedule.
+        let s2 = make_persisted_scheduler(&path);
+        s2.start().await.unwrap();
+        let schedules = s2.list().await;
+        assert_eq!(schedules.len(), 1, "reloaded schedule list should have 1 entry");
+        assert_eq!(schedules[0].schedule_id, "s1");
+    }
+
+    /// `unregister` must update the persistence file so that a fresh scheduler
+    /// started from the same file does NOT reload the removed schedule.
+    #[tokio::test]
+    async fn test_unregister_removes_from_persistence() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("schedules.json");
+
+        // Register two schedules.
+        {
+            let s = make_persisted_scheduler(&path);
+            for id in ["keep", "remove"] {
+                s.register(
+                    ScheduleDefinition::new_interval(
+                        id,
+                        "agent",
+                        60_000,
+                        1,
+                        AgentInput::text("x"),
+                        MissedTickPolicy::Skip,
+                    )
+                    .unwrap(),
+                )
+                .await
+                .unwrap();
+            }
+
+            // Unregister one — this must write the updated list to disk.
+            s.unregister("remove").await.unwrap();
+            assert_eq!(s.list().await.len(), 1);
+        }
+
+        // Fresh scheduler: only "keep" should reload.
+        let s2 = make_persisted_scheduler(&path);
+        s2.start().await.unwrap();
+        let schedules = s2.list().await;
+        assert_eq!(schedules.len(), 1, "removed schedule must not be reloaded");
+        assert_eq!(schedules[0].schedule_id, "keep");
+    }
+
+    /// After unregistering all schedules the persistence file should be written
+    /// (as an empty array), and `start()` on a fresh scheduler is a no-op.
+    #[tokio::test]
+    async fn test_unregister_all_leaves_empty_file() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("schedules.json");
+
+        {
+            let s = make_persisted_scheduler(&path);
+            s.register(
+                ScheduleDefinition::new_interval(
+                    "only",
+                    "agent",
+                    60_000,
+                    1,
+                    AgentInput::text("x"),
+                    MissedTickPolicy::Skip,
+                )
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+            s.unregister("only").await.unwrap();
+        }
+
+        let s2 = make_persisted_scheduler(&path);
+        s2.start().await.unwrap();
+        assert!(s2.list().await.is_empty(), "empty file must reload as zero schedules");
+    }
+
+    #[test]
+    fn test_schedule_timing_uses_boxed_cron_variant() {
+        enum UnboxedScheduleTiming {
+            Interval(tokio::time::Interval),
+            Cron(Schedule),
+        }
+
+        // Regression guard: boxed Cron variant should keep enum size smaller
+        // than an equivalent unboxed representation.
+        assert!(
+            size_of::<ScheduleTiming>() < size_of::<UnboxedScheduleTiming>(),
+            "ScheduleTiming should be smaller with boxed Cron variant"
+        );
     }
 }

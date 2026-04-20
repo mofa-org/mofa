@@ -43,6 +43,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         load_balancing: LoadBalancingAlgorithm::RoundRobin,
         enable_rate_limiting: true,
         enable_circuit_breakers: true,
+        enable_local_llm_proxy: false,
+        local_llm_backend_url: None,
     };
 
     // Create gateway instance (without control plane for this example)

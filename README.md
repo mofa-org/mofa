@@ -223,7 +223,15 @@ MoFA adopts a **layered microkernel architecture** with `mofa-kernel` at its cor
     - 📊 Full process observability and traceability
     - 🔁 Closed-loop feedback and continuous optimization
 
-### 5. Persistence Layer
+### 5. Gateway & Distributed Control Plane
+- **HTTP Proxy**: Server-side proxy for mofa-local-llm with OpenAI-compatible API
+- **Health Checking**: Automatic backend health monitoring and circuit breakers
+- **Load Balancing**: Round-robin, least-connections, weighted, and random algorithms
+- **Rate Limiting**: Token bucket and sliding window strategies
+- **Distributed Consensus**: Raft-based consensus for cluster coordination
+- **Observability**: Prometheus metrics, OpenTelemetry tracing, structured logging
+
+### 6. Persistence Layer
 - **Multiple Backends**: Support PostgreSQL, MySQL, and SQLite
 - **Session Management**: Persistent agent session storage
 - **Memory System**: Stateful agent memory management
@@ -436,7 +444,7 @@ We ❤️ first-time contributors! Check out our [`good-first-issue`](https://gi
 | [mofa-studio](https://github.com/mofa-org/mofa-studio) | GPU-accelerated desktop voice-chat & model management app (Makepad) | 🚧 Prototype |
 | [GSoC](https://github.com/mofa-org/GSoC) | Google Summer of Code 2026 ideas & proposal guide | ✅ Active |
 | [mofa-input](https://github.com/mofa-org/mofa-input) | High-performance local AI voice input | ✅ Active |
-| [mofa-local-llm](https://github.com/mofa-org/mofa-local-llm) | Local LLM inference prototype for edge | 🚧 Experimental |
+| [mofa-local-llm](https://github.com/mofa-org/mofa-local-llm) | Local LLM inference with OpenAI-compatible API (integrates with mofa-gateway) | ✅ Active |
 | [makepad-chart](https://github.com/mofa-org/makepad-chart) | GPU-accelerated chart widgets for Makepad | ✅ Active |
 | [makepad-flow](https://github.com/mofa-org/makepad-flow) | Flow chart widget for visual workflow editing | ✅ Active |
 | [makepad-d3](https://github.com/mofa-org/makepad-d3) | D3-style data visualization for Makepad | ✅ Active |

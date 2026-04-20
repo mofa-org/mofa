@@ -12,12 +12,15 @@
 // Unified error conversions (GlobalError <-> plugin errors)
 pub mod error_conversions;
 
+pub mod asr;
 pub mod hot_reload;
 pub mod skill;
 pub mod tool;
 pub mod tools;
 pub mod tts;
 pub mod wasm_runtime;
+
+pub use asr::{ASREngine, ASRPlugin, ASRPluginConfig, MockASREngine};
 
 pub use mofa_kernel::{
     AgentPlugin, PluginConfig, PluginContext, PluginError, PluginEvent, PluginMetadata,
@@ -941,7 +944,7 @@ impl MemoryPlugin {
             // 按重要性降序排序
             // Sort by importance descending
             self.memories
-                .sort_by(|a, b| b.importance.partial_cmp(&a.importance).unwrap());
+                .sort_by(|a, b| b.importance.total_cmp(&a.importance));
             // 截断保留最重要的记忆
             // Truncate to keep most important ones
             self.memories.truncate(self.max_memories);

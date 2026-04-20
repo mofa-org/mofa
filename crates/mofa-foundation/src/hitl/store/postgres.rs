@@ -74,7 +74,7 @@ impl ReviewStore for PostgresReviewStore {
         let response_json = request
             .response
             .as_ref()
-            .map(|r| serde_json::to_value(r))
+            .map(serde_json::to_value)
             .transpose()
             .map_err(|e| ReviewStoreError::Serialization(e.to_string()))?;
 
@@ -133,7 +133,7 @@ impl ReviewStore for PostgresReviewStore {
     ) -> Result<(), ReviewStoreError> {
         let response_json = response
             .as_ref()
-            .map(|r| serde_json::to_value(r))
+            .map(serde_json::to_value)
             .transpose()
             .map_err(|e| ReviewStoreError::Serialization(e.to_string()))?;
 
@@ -286,7 +286,7 @@ impl PostgresReviewStore {
         let metadata: mofa_kernel::hitl::ReviewMetadata = serde_json::from_value(metadata_json)
             .map_err(|e| ReviewStoreError::Serialization(e.to_string()))?;
         let response: Option<ReviewResponse> = response_json
-            .map(|v| serde_json::from_value(v))
+            .map(serde_json::from_value)
             .transpose()
             .map_err(|e| ReviewStoreError::Serialization(e.to_string()))?;
 

@@ -77,8 +77,10 @@ pub mod control_plane;
 pub mod error;
 pub mod gateway;
 pub mod handlers;
+pub mod inference_bridge;
 pub mod middleware;
 pub mod observability;
+pub mod proxy;
 pub mod server;
 pub mod state;
 pub mod state_machine;
@@ -87,9 +89,23 @@ pub mod types;
 #[cfg(feature = "openai-compat")]
 pub mod openai_compat;
 
+/// Unified streaming abstractions (SSE + WebSocket) for gateway handlers.
+///
+/// # Modules
+///
+/// - [`streaming::SseBuilder`] — converts any [`mofa_kernel::llm::streaming::BoxTokenStream`]
+///   into an OpenAI-compatible SSE response (`role` → content chunks → stop → `[DONE]`).
+/// - [`streaming::proxy`] — SSE-aware HTTP proxy passthrough; streams `text/event-stream`
+///   responses without buffering and strips hop-by-hop headers.
+/// - [`streaming::ws`] — `GET /ws/v1/chat/completions` WebSocket endpoint with
+///   mid-stream cancellation support.
+#[cfg(feature = "openai-compat")]
+pub mod streaming;
+
 // Re-export main types
 pub use control_plane::{ControlPlane, ControlPlaneConfig};
 pub use error::{ControlPlaneError, GatewayError, GatewayResult};
 pub use gateway::{Gateway, GatewayConfig};
+pub use inference_bridge::{ChatCompletionRequest, ChatCompletionResponse, InferenceBridge};
 pub use server::{GatewayServer, ServerConfig};
 pub use types::*;

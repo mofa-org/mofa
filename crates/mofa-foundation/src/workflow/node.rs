@@ -127,7 +127,15 @@ impl RetryPolicy {
     /// Calculate delay for nth retry
     pub fn get_delay(&self, retry_count: u32) -> u64 {
         if self.exponential_backoff {
-            let delay = self.retry_delay_ms * 2u64.pow(retry_count);
+            // Use checked arithmetic to prevent integer overflow when retry_count
+            // is large (e.g. ≥64): an unchecked `2u64.pow(retry_count)` wraps to 0
+            // in release builds (→ zero delay, retry storm) and panics in debug.
+            // If either operation overflows we are already beyond max_delay_ms, so
+            // saturate at that cap instead.
+            let delay = 2u64
+                .checked_pow(retry_count)
+                .and_then(|exp| self.retry_delay_ms.checked_mul(exp))
+                .unwrap_or(self.max_delay_ms);
             delay.min(self.max_delay_ms)
         } else {
             self.retry_delay_ms
@@ -953,5 +961,26 @@ mod tests {
         assert_eq!(policy.get_delay(2), 4000);
         assert_eq!(policy.get_delay(10), 30000); // capped at max
         // capped at max
+    }
+
+    /// Verify that get_delay never panics or returns 0 for large retry counts.
+    ///
+    /// Before the fix, `2u64.pow(retry_count)` would overflow at retry_count ≥ 64:
+    ///   - release builds: wraparound to 0 → delay becomes 0 → unthrottled retry storm
+    ///   - debug builds: arithmetic-overflow panic → process crash
+    #[test]
+    fn test_retry_policy_large_count_does_not_overflow() {
+        let policy = RetryPolicy::default(); // retry_delay_ms: 1000, max_delay_ms: 30000
+
+        // These counts all overflow the raw 2u64.pow() calculation; the fixed
+        // implementation must clamp at max_delay_ms rather than return 0 or panic.
+        for &count in &[55u32, 63, 64, 65, 100, 1000, u32::MAX] {
+            let delay = policy.get_delay(count);
+            assert_eq!(
+                delay,
+                30_000,
+                "get_delay({count}) returned {delay}, expected max_delay_ms 30000"
+            );
+        }
     }
 }

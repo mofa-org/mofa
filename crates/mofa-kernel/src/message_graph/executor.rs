@@ -29,6 +29,7 @@ impl Default for MessageGraphExecutorConfig {
 
 /// Why a message entered dead-letter handling.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum DeadLetterReason {
     NoRouteMatch,
     MaxHopsExceeded { max_hops: u16, attempted_hops: u16 },
@@ -96,6 +97,7 @@ impl MessageGraphExecutionReport {
 
 /// Runtime errors for message graph execution.
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum MessageGraphExecutorError {
     #[error(transparent)]
     Graph(#[from] MessageGraphError),

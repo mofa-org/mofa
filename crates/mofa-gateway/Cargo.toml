@@ -32,7 +32,7 @@ tracing.workspace = true
 uuid.workspace = true
 thiserror.workspace = true
 eyre.workspace = true
-axum.workspace = true
+axum = { workspace = true, features = ["ws", "macros", "multipart"] }
 chrono.workspace = true
 
 # Local dependencies
@@ -42,6 +42,7 @@ mofa-kernel = { path = "../mofa-kernel", version = "0.1", features = [
 mofa-runtime = { path = "../mofa-runtime", version = "0.1" }
 mofa-foundation = { path = "../mofa-foundation", version = "0.1" }
 mofa-monitoring = { path = "../mofa-monitoring", version = "0.1", optional = true }
+mofa-integrations = { path = "../mofa-integrations", version = "0.1", optional = true }
 
 # Network and consensus (always available - lightweight Rust code)
 tonic = { version = "0.12", features = ["tls", "tls-roots"] }
@@ -59,6 +60,7 @@ prometheus = { version = "0.13", default-features = false }
 tower = "0.5"
 hyper = { version = "1.8", features = ["full"] }
 hyper-util = "0.1"
+http-body-util = "0.1"
 
 # Utilities
 dashmap = "5.5"
@@ -70,6 +72,12 @@ rand = "0.8"
 # Storage (optional - can use in-memory for testing)
 rocksdb = { version = "0.22", optional = true }
 tempfile = { workspace = true, optional = true }
+
+# MIME type detection from file extensions (used by s3 feature)
+mime_guess = { version = "2", optional = true }
+
+# Socket.IO types (direct dep for AppState / progress events)
+socketioxide = { version = "0.15", optional = true }
 
 # Metrics and observability (optional)
 opentelemetry = { workspace = true, optional = true }
@@ -107,8 +115,31 @@ monitoring = [
     "dep:mofa-monitoring",
 ]
 
-# Full feature set (all optional features)
-full = ["rocksdb", "monitoring", "openai-compat"]
+# Real-time Socket.IO bridge — forwards AgentBus broadcasts to connected clients
+socketio = ["dep:mofa-integrations", "mofa-integrations/socketio", "dep:socketioxide"]
 
+# AWS S3 / MinIO file storage — adds /api/v1/files/** HTTP endpoints
+s3 = ["dep:mofa-integrations", "mofa-integrations/s3", "dep:mime_guess"]
+
+# Full feature set (all optional features)
 # OpenAI-compatible HTTP gateway components
 openai-compat = ["dep:async-openai", "dep:subtle"]
+
+# Full feature set (all optional features)
+full = ["rocksdb", "monitoring", "socketio", "s3", "openai-compat"]
+
+[dev-dependencies]
+tokio = { version = "1.42", features = ["full", "test-util"] }
+tower = { version = "0.5", features = ["util"] }
+serde_json = "1.0"
+reqwest = { version = "0.12", features = ["json"] }
+criterion = { version = "0.5", features = ["async_tokio"] }
+
+[[bench]]
+name = "proxy_bench"
+harness = false
+
+[[example]]
+name = "gateway_inference_server"
+path = "examples/gateway_inference_server.rs"
+required-features = ["openai-compat"]

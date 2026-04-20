@@ -1,0 +1,75 @@
+name: Adversarial Security Gate
+
+on:
+  pull_request:
+    paths:
+      - 'tests/src/adversarial/**'
+      - 'tests/tests/adversarial_*'
+      - 'crates/mofa-foundation/src/react/**'
+      - 'crates/mofa-kernel/**'
+
+permissions:
+  contents: read
+
+jobs:
+  adversarial-gate:
+    name: Adversarial Security Check
+    runs-on: ubuntu-latest
+    env:
+      # Minimum pass rate (0.0–1.0). Set to 1.0 to require every adversarial
+      # test to pass; lower for softer gates during early adoption.
+      PASS_RATE_MIN: "1.0"
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache dependencies
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-adversarial-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Run Adversarial Suite Tests
+        run: |
+          cargo test -p mofa-testing --test adversarial_suite_tests -- --nocapture 2>&1 | tee adversarial-suite-output.txt
+
+      - name: Run CI Gate Tests
+        run: |
+          cargo test -p mofa-testing --test adversarial_ci_gate_tests -- --nocapture 2>&1 | tee adversarial-gate-output.txt
+
+      - name: Generate SecurityReport JSON
+        if: always()
+        run: |
+          mkdir -p target/security-reports
+          cat > target/security-reports/security-report.json << REPORT_EOF
+          {
+            "report_type": "SecurityReport",
+            "generated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "pass_rate_threshold": $PASS_RATE_MIN,
+            "adversarial_suite": "See adversarial-suite-output.txt",
+            "ci_gate_evaluation": "See adversarial-gate-output.txt"
+          }
+          REPORT_EOF
+
+      - name: Upload SecurityReport Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SecurityReport
+          path: |
+            target/security-reports/security-report.json
+            adversarial-suite-output.txt
+            adversarial-gate-output.txt
+          if-no-files-found: warn
+          retention-days: 30
