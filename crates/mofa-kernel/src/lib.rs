@@ -44,7 +44,7 @@ pub use config::*;
 
 // Storage traits (存储接口)
 pub mod storage;
-pub use storage::{ObjectStore, Storage};
+pub use storage::{ObjectMetadata, ObjectStore, Storage};
 
 // RAG traits (向量存储接口)
 pub mod rag;
