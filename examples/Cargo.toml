@@ -66,6 +66,7 @@ members = [
     "resume_from_checkpoint",
     "claw_demo",
     "swarm_orchestrator",
+    "swarm_pattern_selector",
     "swarm_hitl_gate",
 ]
 
