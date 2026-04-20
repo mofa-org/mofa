@@ -336,3 +336,65 @@ tasks:
 
 - [Workflows](../concepts/workflows.md) — Workflow concepts
 - [Examples](../examples/multi-agent-coordination.md) — Examples
+
+## Audit Logging
+
+`SwarmAuditLog` captures every significant event across the swarm pipeline into a single thread-safe, queryable record. it is designed to be cloned and passed into multiple components — all clones share the same underlying log.
+
+### basic usage
+
+```rust,ignore
+use mofa_foundation::swarm::{SwarmAuditLog, AuditEvent, AuditEventKind};
+
+let log = SwarmAuditLog::new();
+
+// pass clones to any component
+let log_for_scheduler = log.clone();
+let log_for_gate = log.clone();
+
+// record an event
+log.record(
+    AuditEvent::new(AuditEventKind::SchedulerStarted, "sequential scheduler starting")
+        .with_data(serde_json::json!({ "task_count": 5 })),
+);
+
+// query
+let started = log.entries_by_kind(&AuditEventKind::SubtaskStarted);
+let recent  = log.entries_since(checkpoint);
+
+// export to SwarmResult
+result.audit_events = log.to_audit_events();
+```
+
+### real-time observer
+
+implement `SwarmAuditor` to receive every entry the moment it is recorded:
+
+```rust,ignore
+use mofa_foundation::swarm::{AuditEntry, SwarmAuditor, SwarmAuditLog};
+
+struct SlackAuditor { webhook: String }
+
+impl SwarmAuditor for SlackAuditor {
+    fn on_entry(&self, entry: &AuditEntry) {
+        // post to slack, stream to observatory, write to file, etc.
+        println!("[{}] {:?}", entry.event.timestamp, entry.event.kind);
+    }
+}
+
+let log = SwarmAuditLog::new().with_auditor(SlackAuditor { webhook: url });
+```
+
+### AuditEventKind reference
+
+| kind | when |
+|------|------|
+| `SwarmStarted` / `SwarmCompleted` | swarm lifecycle |
+| `SubtaskStarted` / `SubtaskCompleted` / `SubtaskFailed` | task lifecycle |
+| `HITLRequested` / `HITLDecision` | human review interception |
+| `PatternSelected` | pattern selector chose a coordination pattern |
+| `AdmissionChecked` | admission gate allowed the DAG |
+| `AdmissionDenied` | admission gate rejected the DAG |
+| `SchedulerStarted` / `SchedulerCompleted` | scheduler lifecycle |
+| `SLAWarning` / `SLABreach` | SLA constraint events |
+| `AgentAssigned` / `AgentReassigned` | agent assignment changes |
