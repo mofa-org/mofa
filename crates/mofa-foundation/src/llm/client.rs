@@ -204,6 +204,8 @@ pub struct ChatRequestBuilder {
     // Retry configuration
     retry_policy: Option<LLMRetryPolicy>,
     retry_enabled: bool,
+    srp_config: Option<mofa_kernel::llm::srp::SrpConfig>,
+    cancellation_token: Option<tokio_util::sync::CancellationToken>,
 }
 
 impl ChatRequestBuilder {
@@ -218,6 +220,8 @@ impl ChatRequestBuilder {
             tool_timeout: Duration::from_secs(30),
             retry_policy: None,
             retry_enabled: false,
+            srp_config: None,
+            cancellation_token: None,
         }
     }
 
@@ -348,6 +352,20 @@ impl ChatRequestBuilder {
         self
     }
 
+    /// Streaming Response Protocol 
+    /// Set SRP configuration
+    pub fn with_srp_config(mut self, config: mofa_kernel::llm::srp::SrpConfig) -> Self {
+        self.srp_config = Some(config);
+        self
+    }
+
+    
+    /// Set cancellation token
+    pub fn with_cancellation_token(mut self, token: tokio_util::sync::CancellationToken) -> Self {
+        self.cancellation_token = Some(token);
+        self
+    }
+
     // ========================================================================
     // Retry Configuration
     // ========================================================================
@@ -449,6 +467,119 @@ impl ChatRequestBuilder {
     pub async fn send_stream(mut self) -> LLMResult<super::provider::ChatStream> {
         self.request.stream = Some(true);
         self.provider.chat_stream(self.request).await
+    }
+
+    /// Send SRP streaming request
+    pub async fn send_srp_stream(
+        mut self,
+    ) -> LLMResult<tokio_stream::wrappers::ReceiverStream<mofa_kernel::llm::srp::StreamEvent<mofa_kernel::llm::streaming::StreamChunk>>> {
+        self.request.stream = Some(true);
+        let mut chat_stream = self.provider.chat_stream(self.request).await?;
+
+        let config = self.srp_config.unwrap_or_default();
+        let token = self.cancellation_token.unwrap_or_else(tokio_util::sync::CancellationToken::new);
+        
+        let capacity = config.channel_capacity.max(1);
+        let (tx, rx) = tokio::sync::mpsc::channel(capacity);
+
+        let heartbeat_interval = if config.heartbeat_interval.is_zero() {
+            Duration::from_millis(1)
+        } else {
+            config.heartbeat_interval
+        };
+
+        tokio::spawn(async move {
+            use mofa_kernel::llm::srp::StreamEvent;
+            use futures::StreamExt;
+
+            let mut hb = tokio::time::interval(heartbeat_interval);
+            hb.tick().await;
+
+            loop {
+                tokio::select! {
+                    biased;
+
+                    _ = token.cancelled() => {
+                        let _ = tx.try_send(StreamEvent::Cancelled);
+                        break;
+                    }
+
+                    item = chat_stream.next() => {
+                        match item {
+                            Some(Ok(chunk)) => {
+                                hb.reset();
+                                let first = chunk.choices.into_iter().next();
+                                let mut delta_str = String::new();
+                                let mut f_reason = None;
+                                let mut t_calls = None;
+
+                                if let Some(c) = first {
+                                    if let Some(content) = c.delta.content {
+                                        delta_str = content;
+                                    }
+                                    f_reason = c.finish_reason.map(|r| match r {
+                                        super::types::FinishReason::Stop => mofa_kernel::llm::types::FinishReason::Stop,
+                                        super::types::FinishReason::Length => mofa_kernel::llm::types::FinishReason::Length,
+                                        super::types::FinishReason::ToolCalls => mofa_kernel::llm::types::FinishReason::ToolCalls,
+                                        super::types::FinishReason::ContentFilter => mofa_kernel::llm::types::FinishReason::ContentFilter,
+                                    });
+                                    if let Some(old_t_calls) = c.delta.tool_calls {
+                                        let mut new_calls = Vec::new();
+                                        for t in old_t_calls {
+                                            new_calls.push(mofa_kernel::llm::types::ToolCallDelta {
+                                                index: t.index,
+                                                id: t.id,
+                                                call_type: Some("function".to_string()),
+                                                function: t.function.map(|f| mofa_kernel::llm::types::FunctionCallDelta {
+                                                    name: f.name,
+                                                    arguments: f.arguments,
+                                                }),
+                                            });
+                                        }
+                                        t_calls = Some(new_calls);
+                                    }
+                                }
+
+                                let sc = mofa_kernel::llm::streaming::StreamChunk {
+                                    delta: delta_str,
+                                    finish_reason: f_reason,
+                                    usage: None,
+                                    tool_calls: t_calls,
+                                };
+
+                                let is_done = sc.is_done();
+                                if !sc.delta.is_empty() {
+                                    if tx.send(StreamEvent::Delta(sc)).await.is_err() {
+                                        break;
+                                    }
+                                }
+                                if is_done {
+                                    let _ = tx.send(StreamEvent::Done).await;
+                                    break;
+                                }
+                            }
+                            Some(Err(e)) => {
+                                tracing::warn!("srp: stream error from provider: {e}");
+                                let _ = tx.send(StreamEvent::Done).await;
+                                break;
+                            }
+                            None => {
+                                let _ = tx.send(StreamEvent::Done).await;
+                                break;
+                            }
+                        }
+                    }
+
+                    _ = hb.tick() => {
+                        if tx.send(StreamEvent::Heartbeat).await.is_err() {
+                            break;
+                        }
+                    }
+                }
+            }
+        });
+
+        Ok(tokio_stream::wrappers::ReceiverStream::new(rx))
     }
 
     /// 发送请求并自动执行工具调用

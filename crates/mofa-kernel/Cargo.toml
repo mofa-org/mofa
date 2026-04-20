@@ -35,8 +35,15 @@ toml = { version = "0.8", optional = true }
 config = { workspace = true, optional = true }
 regex = { workspace = true, optional = true }
 
+# Streaming Response Protocol (optional — enabled by the `streaming` feature)
+# tokio-util 0.7: CancellationToken is available without a feature flag.
+tokio-util = { version = "0.7" }
+tokio-stream = { version = "0.1" }
+
 [dev-dependencies]
 tempfile = "3"
+tokio = { version = "1", features = ["test-util"] }
+tokio-util = { version = "0.7" }
 
 [lints]
 workspace = true
