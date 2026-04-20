@@ -10,6 +10,78 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 // ─────────────────────────────────────────────────────────────────────────────
+// InvocationTarget
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Specifies WHERE a Gateway request should be dispatched.
+///
+/// The Gateway resolves an `InvocationTarget` before forwarding every request.
+/// This allows routing decisions to be made at a single point (the dispatcher)
+/// and makes the policy explicit and testable independently of HTTP handling.
+///
+/// # Variants
+///
+/// * `Agent`          — dispatch to a registered agent adapter (by `agent_id`).
+/// * `LocalInference` — pass through to the built-in `InferenceOrchestrator`.
+/// * `Proxy`          — forward to an external OpenAI-compatible HTTP endpoint.
+///
+/// The enum is `#[non_exhaustive]` so that future variants (e.g. a gRPC
+/// backend, a Wasm sandbox) can be added without breaking existing match arms.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub enum InvocationTarget {
+    /// Dispatch to a named agent registered in the `AgentRegistry`.
+    ///
+    /// The `agent_id` must correspond to a live entry in the registry;
+    /// a missing entry causes dispatch to fall back to `LocalInference`.
+    Agent {
+        /// Identifier of the target agent (e.g. `"summariser"`, `"mofa-kernel"`).
+        agent_id: String,
+    },
+    /// Dispatch to the local `InferenceOrchestrator`.
+    ///
+    /// Used when no registered agent matches the request, or when the caller
+    /// explicitly names a raw model (e.g. `"llama-3-8b"`).
+    LocalInference {
+        /// Model identifier forwarded to the orchestrator.
+        model: String,
+    },
+    /// Forward to an external OpenAI-compatible HTTP endpoint.
+    ///
+    /// The gateway acts as a transparent proxy; the request body is sent
+    /// verbatim to `url` and the response is relayed back to the caller.
+    Proxy {
+        /// Base URL of the external endpoint (e.g. `"https://api.openai.com"`).
+        url: String,
+    },
+}
+
+impl InvocationTarget {
+    /// Returns a short human-readable label suitable for log lines and metrics.
+    pub fn label(&self) -> &str {
+        match self {
+            InvocationTarget::Agent { .. }          => "agent",
+            InvocationTarget::LocalInference { .. } => "local_inference",
+            InvocationTarget::Proxy { .. }          => "proxy",
+        }
+    }
+}
+
+impl std::fmt::Display for InvocationTarget {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            InvocationTarget::Agent { agent_id } =>
+                write!(f, "Agent({})", agent_id),
+            InvocationTarget::LocalInference { model } =>
+                write!(f, "LocalInference({})", model),
+            InvocationTarget::Proxy { url } =>
+                write!(f, "Proxy({})", url),
+        }
+    }
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Request / Response
 // ─────────────────────────────────────────────────────────────────────────────
 

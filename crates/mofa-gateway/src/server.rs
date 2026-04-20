@@ -9,7 +9,7 @@ use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 use tracing::info;
 
-use crate::handlers::{agents_router, chat_router, health_router, openai_router};
+use crate::handlers::{agents_router, chat_router, health_router, openai_router, InvocationRouter};
 use crate::inference_bridge::InferenceBridge;
 use crate::middleware::RateLimiter;
 use crate::state::AppState;
@@ -225,13 +225,21 @@ impl GatewayServer {
                 .with_state(state);
             router = router.layer(sio_layer);
 
-            // Add OpenAI router if inference bridge is configured
-            if let Some(ref orch_config) = self.orchestrator_config {
-                let bridge = Arc::new(InferenceBridge::new(orch_config.clone()));
-                router = router
-                    .merge(openai_router())
-                    .layer(axum::Extension(bridge));
-            }
+            // Always add OpenAI router with InvocationTarget routing.
+            // InvocationRouter checks the registry first; if no agent matches
+            // it falls back to InferenceBridge → InferenceOrchestrator.
+            let bridge_config = self
+                .orchestrator_config
+                .clone()
+                .unwrap_or_default();
+            let bridge = Arc::new(InferenceBridge::new(bridge_config));
+            let invocation_router = Arc::new(InvocationRouter::new(
+                self.registry.clone(),
+                bridge,
+            ));
+            router = router
+                .merge(openai_router())
+                .layer(axum::Extension(invocation_router));
 
             if self.config.enable_tracing {
                 router = router.layer(TraceLayer::new_for_http());
@@ -260,13 +268,21 @@ impl GatewayServer {
             .merge(files_router())
             .with_state(state);
 
-        // Add OpenAI router if inference bridge is configured
-        if let Some(ref orch_config) = self.orchestrator_config {
-            let bridge = Arc::new(InferenceBridge::new(orch_config.clone()));
-            router = router
-                .merge(openai_router())
-                .layer(axum::Extension(bridge));
-        }
+        // Always add OpenAI router with InvocationTarget routing.
+        // InvocationRouter checks the registry first; if no agent matches
+        // it falls back to InferenceBridge → InferenceOrchestrator.
+        let bridge_config = self
+            .orchestrator_config
+            .clone()
+            .unwrap_or_default();
+        let bridge = Arc::new(InferenceBridge::new(bridge_config));
+        let invocation_router = Arc::new(InvocationRouter::new(
+            self.registry.clone(),
+            bridge,
+        ));
+        router = router
+            .merge(openai_router())
+            .layer(axum::Extension(invocation_router));
 
         if self.config.enable_tracing {
             router = router.layer(TraceLayer::new_for_http());
