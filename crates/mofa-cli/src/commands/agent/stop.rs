@@ -78,6 +78,13 @@ pub async fn run(
         false
     };
 
+    if let Some(mut persistent_meta) = ctx.persistent_agents.get(agent_id).await {
+        persistent_meta.mark_stopped();
+        if let Err(e) = ctx.persistent_agents.update(persistent_meta).await {
+            println!("  {} Failed to update persistent state: {}", "!".yellow(), e);
+        }
+    }
+
     // Unregister from the registry after persistence update so failures do not leave stale state.
     let removed = ctx
         .agent_registry

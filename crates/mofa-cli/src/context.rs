@@ -125,8 +125,8 @@ impl CliContext {
         let mut tool_registry = ToolRegistry::new();
         replay_persisted_tools(&mut tool_registry, &tool_store)?;
 
-        let agents_dir = data_dir.join("agents");
-        let persistent_agents = Arc::new(PersistentAgentRegistry::new(agents_dir).await.map_err(
+        let states_dir = data_dir.join("agent_states");
+        let persistent_agents = Arc::new(PersistentAgentRegistry::new(states_dir).await.map_err(
             |e| {
                 CliError::InitError(format!(
                     "Failed to initialize persistent agent registry: {}",
@@ -180,8 +180,8 @@ impl CliContext {
         let mut tool_registry = ToolRegistry::new();
         replay_persisted_tools(&mut tool_registry, &tool_store)?;
 
-        let agents_dir = data_dir.join("agents");
-        let persistent_agents = Arc::new(PersistentAgentRegistry::new(agents_dir).await.map_err(
+        let states_dir = data_dir.join("agent_states");
+        let persistent_agents = Arc::new(PersistentAgentRegistry::new(states_dir).await.map_err(
             |e| {
                 CliError::InitError(format!(
                     "Failed to initialize persistent agent registry: {}",
