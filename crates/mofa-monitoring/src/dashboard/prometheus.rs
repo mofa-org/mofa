@@ -108,12 +108,9 @@ pub struct PrometheusExportConfig {
 impl Default for PrometheusExportConfig {
     fn default() -> Self {
         // Environment level rollout control while keeping safe defaults.
-        let contract_version = std::env::var("MOFA_METRICS_CONTRACT_VERSION")
-            .map(sanitize_contract_version)
+        let contract_version = read_contract_version_from_env()
             .unwrap_or_else(|_| MOFA_METRICS_CONTRACT_VERSION.to_string());
-        let enable_otel_genai_aliases = std::env::var("MOFA_METRICS_ENABLE_OTEL_ALIASES")
-            .ok()
-            .and_then(parse_bool_env)
+        let enable_otel_genai_aliases = read_otel_aliases_from_env()
             .unwrap_or(true);
 
         Self {
@@ -122,6 +119,7 @@ impl Default for PrometheusExportConfig {
             contract_version,
             enable_otel_genai_aliases,
         }
+        .validate()
     }
 }
 
@@ -143,6 +141,31 @@ impl PrometheusExportConfig {
 
     pub fn with_otel_genai_aliases(mut self, enabled: bool) -> Self {
         self.enable_otel_genai_aliases = enabled;
+        self
+    }
+
+    /// Apply all supported environment-variable overrides.
+    pub fn with_env_overrides(mut self) -> Self {
+        if let Ok(version) = read_contract_version_from_env() {
+            self.contract_version = version;
+        }
+        self = self.with_otel_genai_aliases_from_env();
+        self
+    }
+
+    /// Apply OTel alias toggle from environment when present.
+    pub fn with_otel_genai_aliases_from_env(mut self) -> Self {
+        if let Some(enabled) = read_otel_aliases_from_env() {
+            self.enable_otel_genai_aliases = enabled;
+        }
+        self
+    }
+
+    /// Normalize and clamp all config fields to safe values.
+    pub fn validate(mut self) -> Self {
+        self.refresh_interval = sanitize_refresh_interval(self.refresh_interval);
+        self.cardinality = sanitize_cardinality_limits(self.cardinality.clone());
+        self.contract_version = sanitize_contract_version(self.contract_version);
         self
     }
 }
@@ -206,6 +229,16 @@ fn parse_bool_env(raw: String) -> Option<bool> {
             None
         }
     }
+}
+
+fn read_contract_version_from_env() -> Result<String, std::env::VarError> {
+    std::env::var("MOFA_METRICS_CONTRACT_VERSION").map(sanitize_contract_version)
+}
+
+fn read_otel_aliases_from_env() -> Option<bool> {
+    std::env::var("MOFA_METRICS_ENABLE_OTEL_ALIASES")
+        .ok()
+        .and_then(parse_bool_env)
 }
 
 /// Errors returned by the Prometheus exporter lifecycle.
