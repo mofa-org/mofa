@@ -106,7 +106,9 @@ async fn run_command(cli: Cli) -> CliResult<()> {
         }) => {
             commands::new::run(&name, &template, output.as_deref())
                 .into_report()
-                .attach_with(|| format!("scaffolding project '{name}' with template '{template}'"))?;
+                .attach_with(|| {
+                    format!("scaffolding project '{name}' with template '{template}'")
+                })?;
         }
 
         Some(Commands::Init { path }) => {

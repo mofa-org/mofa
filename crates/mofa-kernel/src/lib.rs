@@ -58,10 +58,10 @@ pub mod workflow;
 // Explicit re-exports instead of `pub use workflow::*` to avoid ambiguous
 // `policy` module collision with `hitl::policy`. Fixes #1217.
 pub use workflow::{
-    CircuitBreakerState, CircuitState, CompiledGraph, Command, ControlFlow, DebugEvent,
-    DebugSession, EdgeTarget, END, GraphConfig, GraphState, JsonState, NodeFunc, NodePolicy,
-    RemainingSteps, Reducer, ReducerType, RetryCondition, RuntimeContext, SendCommand,
-    SessionRecorder, START, StateGraph, StateSchema, StateUpdate, StepResult, StreamEvent,
+    CircuitBreakerState, CircuitState, Command, CompiledGraph, ControlFlow, DebugEvent,
+    DebugSession, END, EdgeTarget, GraphConfig, GraphState, JsonState, NodeFunc, NodePolicy,
+    Reducer, ReducerType, RemainingSteps, RetryCondition, RuntimeContext, START, SendCommand,
+    SessionRecorder, StateGraph, StateSchema, StateUpdate, StepResult, StreamEvent,
     TelemetryEmitter,
 };
 pub mod llm;
@@ -95,7 +95,7 @@ pub mod security;
 pub mod gateway;
 pub use gateway::{
     AgentResponse, ApiKeyStore, AuthClaims, AuthError, AuthProvider, GatewayConfigError,
-    GatewayContext, GatewayRequest, GatewayRateLimiter, GatewayResponse, GatewayRoute, HttpMethod,
+    GatewayContext, GatewayRateLimiter, GatewayRequest, GatewayResponse, GatewayRoute, HttpMethod,
     KeyStrategy, RateLimitDecision, RateLimiterConfig, RegistryError, RequestEnvelope, RouteMatch,
     RouteRegistry, RoutingContext,
 };
@@ -103,8 +103,8 @@ pub use gateway::{
 // Scheduler kernel contract (traits, types, errors for periodic agent execution)
 pub mod scheduler;
 pub use scheduler::{
-    AgentScheduler, Clock, MissedTickPolicy, ScheduleDefinition,
-    ScheduleHandle, ScheduleInfo, ScheduledAgentRunner, SchedulerError,
+    AgentScheduler, Clock, MissedTickPolicy, ScheduleDefinition, ScheduleHandle, ScheduleInfo,
+    ScheduledAgentRunner, SchedulerError,
 };
 
 // Speech kernel contracts (traits and types for TTS/ASR)

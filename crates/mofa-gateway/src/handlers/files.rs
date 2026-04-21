@@ -158,12 +158,10 @@ pub async fn upload_file(
     {
         match field.name() {
             Some("key") => {
-                key = Some(
-                    field
-                        .text()
-                        .await
-                        .map_err(|e| GatewayError::InvalidRequest(format!("key read error: {}", e)))?,
-                );
+                key =
+                    Some(field.text().await.map_err(|e| {
+                        GatewayError::InvalidRequest(format!("key read error: {}", e))
+                    })?);
             }
             Some("file") => {
                 data = Some(
@@ -195,7 +193,12 @@ pub async fn upload_file(
                 data.len(),
                 max
             );
-            emit_upload_event(&state, "file_upload_failed", &key, json!({ "reason": &msg }));
+            emit_upload_event(
+                &state,
+                "file_upload_failed",
+                &key,
+                json!({ "reason": &msg }),
+            );
             return Err(GatewayError::PayloadTooLarge(msg));
         }
     }
@@ -213,7 +216,12 @@ pub async fn upload_file(
     let size = data.len();
     if let Err(e) = s3.put(&key, data).await {
         let msg = e.to_string();
-        emit_upload_event(&state, "file_upload_failed", &key, json!({ "reason": &msg }));
+        emit_upload_event(
+            &state,
+            "file_upload_failed",
+            &key,
+            json!({ "reason": &msg }),
+        );
         return Err(GatewayError::S3Error(msg));
     }
 
@@ -286,7 +294,10 @@ pub async fn delete_file(
     }
 
     tracing::info!(key = %key, "file deleted");
-    Ok((StatusCode::OK, Json(json!({ "key": key, "status": "deleted" }))))
+    Ok((
+        StatusCode::OK,
+        Json(json!({ "key": key, "status": "deleted" })),
+    ))
 }
 
 /// GET /api/v1/files?prefix=...
@@ -424,10 +435,7 @@ pub fn files_router() -> axum::Router<Arc<AppState>> {
     use axum::routing::{delete, get, post};
     axum::Router::new()
         .route("/api/v1/files/upload", post(upload_file))
-        .route(
-            "/api/v1/files/:key",
-            get(download_file).delete(delete_file),
-        )
+        .route("/api/v1/files/:key", get(download_file).delete(delete_file))
         .route("/api/v1/files", get(list_files))
         .route("/api/v1/files/:key/presigned-get", get(presigned_get))
         .route("/api/v1/files/:key/presigned-put", post(presigned_put))

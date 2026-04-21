@@ -75,7 +75,11 @@ impl AppState {
 
     /// Attach a Socket.IO handle for server-side event emission.
     #[cfg(feature = "socketio")]
-    pub fn with_socketio(mut self, io: socketioxide::SocketIo, namespace: impl Into<String>) -> Self {
+    pub fn with_socketio(
+        mut self,
+        io: socketioxide::SocketIo,
+        namespace: impl Into<String>,
+    ) -> Self {
         self.socketio = Some((io, namespace.into()));
         self
     }

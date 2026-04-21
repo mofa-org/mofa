@@ -1,7 +1,7 @@
 //! In-memory pricing registry — concrete implementation of `ProviderPricingRegistry`.
 
-use std::collections::HashMap;
 use mofa_kernel::pricing::{ModelPricing, ProviderPricingRegistry};
+use std::collections::HashMap;
 
 /// In-memory pricing registry with built-in prices for major providers.
 /// Key format: `"provider/model"` (e.g. `"openai/gpt-4o"`)
@@ -161,9 +161,11 @@ mod tests {
     #[test]
     fn test_registry_unknown_model_returns_none() {
         let registry = InMemoryPricingRegistry::with_defaults();
-        assert!(registry
-            .get_pricing("unknown_provider", "unknown_model")
-            .is_none());
+        assert!(
+            registry
+                .get_pricing("unknown_provider", "unknown_model")
+                .is_none()
+        );
     }
 
     #[test]

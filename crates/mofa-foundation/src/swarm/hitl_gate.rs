@@ -41,7 +41,7 @@ use mofa_kernel::hitl::{
     ExecutionStep, ExecutionTrace, ReviewContext, ReviewRequest, ReviewResponse, ReviewType,
 };
 use serde::{Deserialize, Serialize};
-use tracing::{info_span, Instrument};
+use tracing::{Instrument, info_span};
 
 use crate::hitl::manager::ReviewManager;
 use crate::swarm::config::HITLMode;
@@ -109,22 +109,22 @@ pub trait HITLNotifier: Send + Sync {
 /// with no cross-field synchronisation requirement.
 #[derive(Debug, Default)]
 struct MetricsInner {
-    intercepted:             AtomicU64,
-    approved:                AtomicU64,
-    modified:                AtomicU64,
-    rejected:                AtomicU64,
-    auto_approved_timeout:   AtomicU64,
+    intercepted: AtomicU64,
+    approved: AtomicU64,
+    modified: AtomicU64,
+    rejected: AtomicU64,
+    auto_approved_timeout: AtomicU64,
     total_review_latency_ms: AtomicU64,
 }
 
 impl MetricsInner {
     fn snapshot(&self) -> HITLGateMetrics {
         HITLGateMetrics {
-            intercepted:             self.intercepted.load(Ordering::Relaxed),
-            approved:                self.approved.load(Ordering::Relaxed),
-            modified:                self.modified.load(Ordering::Relaxed),
-            rejected:                self.rejected.load(Ordering::Relaxed),
-            auto_approved_timeout:   self.auto_approved_timeout.load(Ordering::Relaxed),
+            intercepted: self.intercepted.load(Ordering::Relaxed),
+            approved: self.approved.load(Ordering::Relaxed),
+            modified: self.modified.load(Ordering::Relaxed),
+            rejected: self.rejected.load(Ordering::Relaxed),
+            auto_approved_timeout: self.auto_approved_timeout.load(Ordering::Relaxed),
             total_review_latency_ms: self.total_review_latency_ms.load(Ordering::Relaxed),
         }
     }
@@ -327,9 +327,9 @@ impl SwarmHITLGate {
 
                         let gate_span = info_span!(
                             "hitl.approval_gate",
-                            review_id  = tracing::field::Empty,
-                            decision   = tracing::field::Empty,
-                            timed_out  = tracing::field::Empty,
+                            review_id = tracing::field::Empty,
+                            decision = tracing::field::Empty,
+                            timed_out = tracing::field::Empty,
                         );
 
                         let review_start = std::time::Instant::now();
@@ -337,30 +337,40 @@ impl SwarmHITLGate {
                             .request_and_wait(&task_for_gate, &gate_span)
                             .instrument(gate_span.clone())
                             .await;
-                        let latency_ms = u64::try_from(
-                            review_start.elapsed().as_millis()
-                        ).unwrap_or(u64::MAX);
+                        let latency_ms =
+                            u64::try_from(review_start.elapsed().as_millis()).unwrap_or(u64::MAX);
 
                         match result {
                             Ok(None) => {
                                 gate.metrics.approved.fetch_add(1, Ordering::Relaxed);
-                                gate.metrics.total_review_latency_ms
+                                gate.metrics
+                                    .total_review_latency_ms
                                     .fetch_add(latency_ms, Ordering::Relaxed);
                                 if let Some(ref n) = gate.notifier {
-                                    n.on_decision(&task_for_gate, HITLDecision::Approved, latency_ms);
+                                    n.on_decision(
+                                        &task_for_gate,
+                                        HITLDecision::Approved,
+                                        latency_ms,
+                                    );
                                 }
                             }
                             Ok(Some(modified_desc)) => {
                                 gate.metrics.modified.fetch_add(1, Ordering::Relaxed);
-                                gate.metrics.total_review_latency_ms
+                                gate.metrics
+                                    .total_review_latency_ms
                                     .fetch_add(latency_ms, Ordering::Relaxed);
                                 if let Some(ref n) = gate.notifier {
-                                    n.on_decision(&task_for_gate, HITLDecision::Modified, latency_ms);
+                                    n.on_decision(
+                                        &task_for_gate,
+                                        HITLDecision::Modified,
+                                        latency_ms,
+                                    );
                                 }
                                 task.description = modified_desc;
                             }
                             Err(e) if gate.is_optional() => {
-                                gate.metrics.auto_approved_timeout
+                                gate.metrics
+                                    .auto_approved_timeout
                                     .fetch_add(1, Ordering::Relaxed);
                                 tracing::warn!(
                                     task_id = %task_for_gate.id,
@@ -377,10 +387,15 @@ impl SwarmHITLGate {
                             }
                             Err(e) => {
                                 gate.metrics.rejected.fetch_add(1, Ordering::Relaxed);
-                                gate.metrics.total_review_latency_ms
+                                gate.metrics
+                                    .total_review_latency_ms
                                     .fetch_add(latency_ms, Ordering::Relaxed);
                                 if let Some(ref n) = gate.notifier {
-                                    n.on_decision(&task_for_gate, HITLDecision::Rejected, latency_ms);
+                                    n.on_decision(
+                                        &task_for_gate,
+                                        HITLDecision::Rejected,
+                                        latency_ms,
+                                    );
                                 }
                                 return Err(e);
                             }
@@ -415,9 +430,7 @@ impl SwarmHITLGate {
         match self.mode {
             HITLMode::None => false,
             HITLMode::Required => true,
-            HITLMode::Optional => {
-                task.hitl_required || task.risk_level >= self.risk_threshold
-            }
+            HITLMode::Optional => task.hitl_required || task.risk_level >= self.risk_threshold,
             // Guard against future HITLMode variants (#[non_exhaustive]).
             _ => false,
         }
@@ -434,8 +447,7 @@ impl SwarmHITLGate {
         task: &SwarmSubtask,
         span: &tracing::Span,
     ) -> GlobalResult<Option<String>> {
-        let now_ms = u64::try_from(chrono::Utc::now().timestamp_millis())
-            .unwrap_or(u64::MAX);
+        let now_ms = u64::try_from(chrono::Utc::now().timestamp_millis()).unwrap_or(u64::MAX);
 
         let trace = ExecutionTrace {
             steps: vec![ExecutionStep {
@@ -469,9 +481,8 @@ impl SwarmHITLGate {
             }),
         );
 
-        let mut request =
-            ReviewRequest::new(&self.execution_id, ReviewType::Approval, context)
-                .with_node_id(&task.id);
+        let mut request = ReviewRequest::new(&self.execution_id, ReviewType::Approval, context)
+            .with_node_id(&task.id);
 
         request.metadata.priority = task.risk_level.to_priority();
         request.metadata.tags = vec![

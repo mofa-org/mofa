@@ -1,6 +1,6 @@
 //! Control-plane HTTP server
 
-use axum::{http::Method, Router};
+use axum::{Router, http::Method};
 use mofa_foundation::inference::OrchestratorConfig;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -22,9 +22,9 @@ use mofa_integrations::socketio::{SocketIoBridge, SocketIoConfig};
 use mofa_kernel::AgentBus;
 
 #[cfg(feature = "s3")]
-use mofa_integrations::s3::S3ObjectStore;
-#[cfg(feature = "s3")]
 use mofa_integrations::s3::S3Config;
+#[cfg(feature = "s3")]
+use mofa_integrations::s3::S3ObjectStore;
 
 /// Control-plane server configuration
 #[derive(Debug, Clone)]
@@ -228,9 +228,7 @@ impl GatewayServer {
             // Add OpenAI router if inference bridge is configured
             if let Some(ref orch_config) = self.orchestrator_config {
                 let bridge = Arc::new(InferenceBridge::new(orch_config.clone()));
-                router = router
-                    .merge(openai_router())
-                    .layer(axum::Extension(bridge));
+                router = router.merge(openai_router()).layer(axum::Extension(bridge));
             }
 
             if self.config.enable_tracing {
@@ -263,9 +261,7 @@ impl GatewayServer {
         // Add OpenAI router if inference bridge is configured
         if let Some(ref orch_config) = self.orchestrator_config {
             let bridge = Arc::new(InferenceBridge::new(orch_config.clone()));
-            router = router
-                .merge(openai_router())
-                .layer(axum::Extension(bridge));
+            router = router.merge(openai_router()).layer(axum::Extension(bridge));
         }
 
         if self.config.enable_tracing {

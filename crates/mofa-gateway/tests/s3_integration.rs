@@ -65,7 +65,10 @@ impl ObjectStore for MockObjectStore {
     }
 
     async fn presigned_get_url(&self, key: &str, expires: u64) -> AgentResult<String> {
-        Ok(format!("https://mock.example.com/{}?expires={}", key, expires))
+        Ok(format!(
+            "https://mock.example.com/{}?expires={}",
+            key, expires
+        ))
     }
 
     async fn presigned_put_url(
@@ -81,7 +84,10 @@ impl ObjectStore for MockObjectStore {
         ))
     }
 
-    async fn get_metadata(&self, key: &str) -> mofa_kernel::agent::error::AgentResult<Option<mofa_kernel::storage::ObjectMetadata>> {
+    async fn get_metadata(
+        &self,
+        key: &str,
+    ) -> mofa_kernel::agent::error::AgentResult<Option<mofa_kernel::storage::ObjectMetadata>> {
         let guard = self.data.read().await;
         match guard.get(key) {
             Some(data) => Ok(Some(mofa_kernel::storage::ObjectMetadata {
@@ -114,8 +120,7 @@ fn build_server_with_s3() -> GatewayServer {
         .with_port(0)
         .with_cors(false)
         .with_rate_limit(10_000, Duration::from_secs(60));
-    GatewayServer::new(config, registry)
-        .with_s3(MockObjectStore::new() as Arc<dyn ObjectStore>)
+    GatewayServer::new(config, registry).with_s3(MockObjectStore::new() as Arc<dyn ObjectStore>)
 }
 
 fn build_server_with_size_limit(max_bytes: u64) -> GatewayServer {
@@ -126,8 +131,7 @@ fn build_server_with_size_limit(max_bytes: u64) -> GatewayServer {
         .with_cors(false)
         .with_rate_limit(10_000, Duration::from_secs(60))
         .with_max_upload_size(max_bytes);
-    GatewayServer::new(config, registry)
-        .with_s3(MockObjectStore::new() as Arc<dyn ObjectStore>)
+    GatewayServer::new(config, registry).with_s3(MockObjectStore::new() as Arc<dyn ObjectStore>)
 }
 
 async fn body_json(resp: axum::response::Response) -> Value {
@@ -249,7 +253,8 @@ async fn list_files_with_prefix_filter() {
     store.put("other/c.txt", b"c".to_vec()).await.unwrap();
 
     let registry = Arc::new(AgentRegistry::new());
-    let config = ServerConfig::new().with_cors(false)
+    let config = ServerConfig::new()
+        .with_cors(false)
         .with_rate_limit(10_000, Duration::from_secs(60));
     let app = GatewayServer::new(config, registry)
         .with_s3(store as Arc<dyn ObjectStore>)
@@ -320,7 +325,10 @@ async fn upload_missing_key_field_returns_bad_request() {
             Request::builder()
                 .method("POST")
                 .uri("/api/v1/files/upload")
-                .header("content-type", format!("multipart/form-data; boundary={}", boundary))
+                .header(
+                    "content-type",
+                    format!("multipart/form-data; boundary={}", boundary),
+                )
                 .body(Body::from(body.into_bytes()))
                 .unwrap(),
         )
@@ -341,7 +349,10 @@ async fn upload_empty_key_returns_bad_request() {
             Request::builder()
                 .method("POST")
                 .uri("/api/v1/files/upload")
-                .header("content-type", format!("multipart/form-data; boundary={}", boundary))
+                .header(
+                    "content-type",
+                    format!("multipart/form-data; boundary={}", boundary),
+                )
                 .body(Body::from(body))
                 .unwrap(),
         )
@@ -358,10 +369,14 @@ async fn upload_empty_key_returns_bad_request() {
 #[tokio::test]
 async fn download_existing_file() {
     let store = MockObjectStore::new();
-    store.put("docs/readme.txt", b"readme content".to_vec()).await.unwrap();
+    store
+        .put("docs/readme.txt", b"readme content".to_vec())
+        .await
+        .unwrap();
 
     let registry = Arc::new(AgentRegistry::new());
-    let config = ServerConfig::new().with_cors(false)
+    let config = ServerConfig::new()
+        .with_cors(false)
         .with_rate_limit(10_000, Duration::from_secs(60));
     let app = GatewayServer::new(config, registry)
         .with_s3(store as Arc<dyn ObjectStore>)
@@ -409,7 +424,8 @@ async fn delete_existing_file_returns_ok() {
     store.put("to-delete.txt", b"bye".to_vec()).await.unwrap();
 
     let registry = Arc::new(AgentRegistry::new());
-    let config = ServerConfig::new().with_cors(false)
+    let config = ServerConfig::new()
+        .with_cors(false)
         .with_rate_limit(10_000, Duration::from_secs(60));
     let app = GatewayServer::new(config, registry)
         .with_s3(store as Arc<dyn ObjectStore>)
@@ -586,7 +602,10 @@ async fn metadata_missing_key_returns_not_found() {
 #[tokio::test]
 async fn metadata_returns_size_for_existing_file() {
     let store = MockObjectStore::new();
-    store.put("report.pdf", b"fake pdf content".to_vec()).await.unwrap();
+    store
+        .put("report.pdf", b"fake pdf content".to_vec())
+        .await
+        .unwrap();
 
     let registry = Arc::new(AgentRegistry::new());
     let config = ServerConfig::new()
@@ -609,8 +628,14 @@ async fn metadata_returns_size_for_existing_file() {
     assert_eq!(resp.status(), StatusCode::OK);
     let json = body_json(resp).await;
     assert_eq!(json["key"], "report.pdf");
-    assert_eq!(json["size"], 16, "size must match byte count of stored data");
-    assert!(json["last_modified"].is_string(), "last_modified should be a string");
+    assert_eq!(
+        json["size"], 16,
+        "size must match byte count of stored data"
+    );
+    assert!(
+        json["last_modified"].is_string(),
+        "last_modified should be a string"
+    );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -629,7 +654,10 @@ async fn upload_exceeds_size_limit_returns_413() {
             Request::builder()
                 .method("POST")
                 .uri("/api/v1/files/upload")
-                .header("content-type", format!("multipart/form-data; boundary={}", boundary))
+                .header(
+                    "content-type",
+                    format!("multipart/form-data; boundary={}", boundary),
+                )
                 .body(Body::from(body))
                 .unwrap(),
         )
@@ -656,7 +684,10 @@ async fn upload_within_size_limit_succeeds() {
             Request::builder()
                 .method("POST")
                 .uri("/api/v1/files/upload")
-                .header("content-type", format!("multipart/form-data; boundary={}", boundary))
+                .header(
+                    "content-type",
+                    format!("multipart/form-data; boundary={}", boundary),
+                )
                 .body(Body::from(body))
                 .unwrap(),
         )
@@ -678,7 +709,10 @@ async fn upload_exactly_at_size_limit_succeeds() {
             Request::builder()
                 .method("POST")
                 .uri("/api/v1/files/upload")
-                .header("content-type", format!("multipart/form-data; boundary={}", boundary))
+                .header(
+                    "content-type",
+                    format!("multipart/form-data; boundary={}", boundary),
+                )
                 .body(Body::from(body))
                 .unwrap(),
         )
@@ -704,7 +738,10 @@ async fn upload_returns_content_type_in_response() {
             Request::builder()
                 .method("POST")
                 .uri("/api/v1/files/upload")
-                .header("content-type", format!("multipart/form-data; boundary={}", boundary))
+                .header(
+                    "content-type",
+                    format!("multipart/form-data; boundary={}", boundary),
+                )
                 .body(Body::from(body))
                 .unwrap(),
         )
@@ -784,7 +821,11 @@ async fn download_sets_content_type_header_for_json() {
         .get("content-type")
         .and_then(|v| v.to_str().ok())
         .unwrap_or("");
-    assert!(ct.contains("application/json"), "expected application/json, got: {}", ct);
+    assert!(
+        ct.contains("application/json"),
+        "expected application/json, got: {}",
+        ct
+    );
 }
 
 #[cfg(feature = "s3")]
@@ -815,4 +856,3 @@ async fn presigned_put_auto_detects_content_type_from_extension() {
         ct
     );
 }
-

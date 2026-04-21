@@ -179,14 +179,18 @@ impl HealthChecker {
     }
 
     /// Perform an actual HTTP health check on a node.
-    async fn perform_health_check(node_id: &NodeId, address: std::net::SocketAddr, timeout_duration: Duration) -> bool {
+    async fn perform_health_check(
+        node_id: &NodeId,
+        address: std::net::SocketAddr,
+        timeout_duration: Duration,
+    ) -> bool {
         // Use tokio TcpStream to make a simple HTTP GET request
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
         use tokio::net::TcpStream;
-        
+
         // Connect to the node with timeout
         let stream_result = timeout(timeout_duration, TcpStream::connect(address)).await;
-        
+
         let mut stream = match stream_result {
             Ok(Ok(s)) => s,
             Ok(Err(e)) => {
@@ -198,7 +202,7 @@ impl HealthChecker {
                 return false;
             }
         };
-        
+
         // Send HTTP GET request
         // Host header should include port when non-default
         let host_header = if address.port() == 80 || address.port() == 443 {
@@ -206,8 +210,11 @@ impl HealthChecker {
         } else {
             format!("{}:{}", address.ip(), address.port())
         };
-        let request = format!("GET /health HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n", host_header);
-        
+        let request = format!(
+            "GET /health HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n",
+            host_header
+        );
+
         // Write request with timeout
         match timeout(timeout_duration, stream.write_all(request.as_bytes())).await {
             Ok(Ok(_)) => {}
@@ -220,7 +227,7 @@ impl HealthChecker {
                 return false;
             }
         }
-        
+
         // Read response with timeout
         let mut buffer = [0u8; 1024];
         match timeout(timeout_duration, stream.read(&mut buffer)).await {
@@ -235,7 +242,11 @@ impl HealthChecker {
                 false
             }
             Ok(Err(e)) => {
-                tracing::debug!("Failed to read health check response from {}: {}", node_id, e);
+                tracing::debug!(
+                    "Failed to read health check response from {}: {}",
+                    node_id,
+                    e
+                );
                 false
             }
             Err(_) => {
@@ -252,11 +263,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_health_checker() {
-        let checker = HealthChecker::new(
-            Duration::from_secs(5),
-            Duration::from_secs(1),
-            3,
-        );
+        let checker = HealthChecker::new(Duration::from_secs(5), Duration::from_secs(1), 3);
 
         let node_id = NodeId::new("node-1");
         checker.register_node(node_id.clone()).await;

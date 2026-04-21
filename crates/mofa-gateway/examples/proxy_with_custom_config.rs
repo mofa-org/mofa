@@ -34,11 +34,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("{}", "=".repeat(60));
 
     // Read configuration from environment or use defaults
-    let backend_url = env::var("MOFA_LOCAL_LLM_URL")
-        .unwrap_or_else(|_| "http://localhost:8000".to_string());
-    
-    let listen_addr = env::var("GATEWAY_LISTEN_ADDR")
-        .unwrap_or_else(|_| "0.0.0.0:8080".to_string());
+    let backend_url =
+        env::var("MOFA_LOCAL_LLM_URL").unwrap_or_else(|_| "http://localhost:8000".to_string());
+
+    let listen_addr =
+        env::var("GATEWAY_LISTEN_ADDR").unwrap_or_else(|_| "0.0.0.0:8080".to_string());
 
     println!("\n📋 Configuration:");
     println!("  Gateway Address: {}", listen_addr);
@@ -59,24 +59,36 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create and start gateway
     let mut gateway = Gateway::new(config).await?;
-    
+
     println!("\n✅ Gateway initialized successfully");
     println!("\n🔗 Available Endpoints:");
     println!("  Health:           http://{}/health", listen_addr);
     println!("  Metrics:          http://{}/metrics", listen_addr);
     println!("  Models List:      http://{}/v1/models", listen_addr);
-    println!("  Model Info:       http://{}/v1/models/{{model_id}}", listen_addr);
-    println!("  Chat Completions: http://{}/v1/chat/completions", listen_addr);
+    println!(
+        "  Model Info:       http://{}/v1/models/{{model_id}}",
+        listen_addr
+    );
+    println!(
+        "  Chat Completions: http://{}/v1/chat/completions",
+        listen_addr
+    );
 
     println!("\n📝 Example Requests:");
     println!("  # List models");
     println!("  curl http://{}/v1/models", listen_addr);
     println!();
     println!("  # Get model info");
-    println!("  curl http://{}/v1/models/qwen2.5-0.5b-instruct", listen_addr);
+    println!(
+        "  curl http://{}/v1/models/qwen2.5-0.5b-instruct",
+        listen_addr
+    );
     println!();
     println!("  # Chat completion");
-    println!("  curl -X POST http://{}/v1/chat/completions \\", listen_addr);
+    println!(
+        "  curl -X POST http://{}/v1/chat/completions \\",
+        listen_addr
+    );
     println!("    -H 'Content-Type: application/json' \\");
     println!("    -d '{{");
     println!("      \"model\": \"qwen2.5-0.5b-instruct\",");
@@ -96,10 +108,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Keep running until interrupted
     tokio::signal::ctrl_c().await?;
-    
+
     println!("\n\n🛑 Shutting down gateway...");
     gateway.stop().await?;
-    
+
     println!("✅ Gateway stopped successfully");
 
     Ok(())

@@ -5,12 +5,12 @@ use crate::error::{GatewayError, GatewayResult};
 use axum::body::Body;
 use axum::http::{HeaderMap, Method, Request, Response, Uri};
 use http_body_util::BodyExt;
-use hyper_util::client::legacy::connect::HttpConnector;
 use hyper_util::client::legacy::Client;
+use hyper_util::client::legacy::connect::HttpConnector;
 use hyper_util::rt::TokioExecutor;
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::{debug, warn, Instrument};
+use tracing::{Instrument, debug, warn};
 
 type HttpClient = Client<HttpConnector, Body>;
 
@@ -139,7 +139,9 @@ impl ProxyHandler {
             .method(Method::GET)
             .uri(uri)
             .body(Body::empty())
-            .map_err(|e| GatewayError::Network(format!("Failed to build health check request: {}", e)))?;
+            .map_err(|e| {
+                GatewayError::Network(format!("Failed to build health check request: {}", e))
+            })?;
 
         match tokio::time::timeout(Duration::from_secs(5), self.client.request(request)).await {
             Ok(Ok(response)) => Ok(response.status().is_success()),
@@ -157,7 +159,11 @@ impl ProxyHandler {
     /// Build the target URL by combining base_url with the request path.
     fn build_target_url(&self, path: &str) -> GatewayResult<String> {
         let path = path.trim_start_matches('/');
-        Ok(format!("{}/{}", self.backend.base_url.trim_end_matches('/'), path))
+        Ok(format!(
+            "{}/{}",
+            self.backend.base_url.trim_end_matches('/'),
+            path
+        ))
     }
 
     /// Copy headers from source to destination, excluding hop-by-hop headers.
@@ -167,8 +173,15 @@ impl ProxyHandler {
             // HeaderName::as_str() is already normalized to lowercase for standard headers
             let skip = matches!(
                 key.as_str(),
-                "connection" | "keep-alive" | "proxy-authenticate" | "proxy-authorization"
-                    | "te" | "trailers" | "transfer-encoding" | "upgrade" | "host"
+                "connection"
+                    | "keep-alive"
+                    | "proxy-authenticate"
+                    | "proxy-authorization"
+                    | "te"
+                    | "trailers"
+                    | "transfer-encoding"
+                    | "upgrade"
+                    | "host"
             );
 
             if !skip {

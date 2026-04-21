@@ -17,9 +17,9 @@ use aws_sdk_s3::Client;
 use aws_sdk_s3::config::Builder as S3Builder;
 use aws_sdk_s3::presigning::PresigningConfig;
 use aws_sdk_s3::primitives::ByteStream;
-use mofa_kernel::storage::ObjectMetadata;
 use mofa_kernel::ObjectStore;
 use mofa_kernel::agent::error::{AgentError, AgentResult};
+use mofa_kernel::storage::ObjectMetadata;
 use std::time::Duration;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -327,8 +327,7 @@ mod tests {
 
     #[test]
     fn with_endpoint_sets_url_and_enables_path_style() {
-        let cfg = S3Config::new("us-east-1", "my-bucket")
-            .with_endpoint("http://localhost:9000");
+        let cfg = S3Config::new("us-east-1", "my-bucket").with_endpoint("http://localhost:9000");
         assert_eq!(cfg.endpoint_url.as_deref(), Some("http://localhost:9000"));
         assert!(cfg.force_path_style, "path style must be enabled for MinIO");
     }
@@ -384,6 +383,9 @@ mod tests {
             "default impl must return Err for unsupported stores"
         );
         let msg = result.unwrap_err().to_string();
-        assert!(msg.contains("presigned_put_url"), "error should mention the method name");
+        assert!(
+            msg.contains("presigned_put_url"),
+            "error should mention the method name"
+        );
     }
 }

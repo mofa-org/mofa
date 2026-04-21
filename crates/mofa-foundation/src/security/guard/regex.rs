@@ -3,9 +3,7 @@
 //! Detects common prompt injection patterns using regex.
 
 use async_trait::async_trait;
-use mofa_kernel::security::{
-    ModerationCategory, ModerationVerdict, PromptGuard, SecurityResult,
-};
+use mofa_kernel::security::{ModerationCategory, ModerationVerdict, PromptGuard, SecurityResult};
 use once_cell::sync::Lazy;
 use regex::Regex;
 

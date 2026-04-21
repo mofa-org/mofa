@@ -382,10 +382,8 @@ pub trait SessionRecorder: Send + Sync {
     /// should override this for efficient server-side queries.
     async fn query_sessions(&self, query: &SessionQuery) -> AgentResult<Vec<DebugSession>> {
         let sessions = self.list_sessions().await?;
-        let filtered: Vec<DebugSession> = sessions
-            .into_iter()
-            .filter(|s| query.matches(s))
-            .collect();
+        let filtered: Vec<DebugSession> =
+            sessions.into_iter().filter(|s| query.matches(s)).collect();
         Ok(query.paginate(filtered))
     }
 }
@@ -521,7 +519,13 @@ mod tests {
         assert!(ts > 1_577_836_800_000);
     }
 
-    fn make_session(id: &str, wf: &str, status: &str, start: u64, end: Option<u64>) -> DebugSession {
+    fn make_session(
+        id: &str,
+        wf: &str,
+        status: &str,
+        start: u64,
+        end: Option<u64>,
+    ) -> DebugSession {
         DebugSession {
             session_id: id.to_string(),
             workflow_id: wf.to_string(),
@@ -581,9 +585,9 @@ mod tests {
         let short = make_session("s1", "wf", "completed", 1000, Some(1200));
         let long = make_session("s2", "wf", "completed", 1000, Some(2000));
         let running = make_session("s3", "wf", "running", 1000, None);
-        assert!(!query.matches(&short));    // 200ms < 500ms
-        assert!(query.matches(&long));      // 1000ms >= 500ms
-        assert!(!query.matches(&running));  // still running, duration unknown
+        assert!(!query.matches(&short)); // 200ms < 500ms
+        assert!(query.matches(&long)); // 1000ms >= 500ms
+        assert!(!query.matches(&running)); // still running, duration unknown
     }
 
     #[test]
@@ -608,11 +612,22 @@ mod tests {
     fn test_session_query_paginate() {
         // sessions created in ascending order: s0(0), s1(100), ..., s9(900)
         let sessions: Vec<DebugSession> = (0..10)
-            .map(|i| make_session(&format!("s{i}"), "wf", "completed", i * 100, Some(i * 100 + 50)))
+            .map(|i| {
+                make_session(
+                    &format!("s{i}"),
+                    "wf",
+                    "completed",
+                    i * 100,
+                    Some(i * 100 + 50),
+                )
+            })
             .collect();
 
         // limit only — sorted descending, so newest (s9) comes first
-        let q = SessionQuery { limit: Some(3), ..Default::default() };
+        let q = SessionQuery {
+            limit: Some(3),
+            ..Default::default()
+        };
         let result = q.paginate(sessions.clone());
         assert_eq!(result.len(), 3);
         assert_eq!(result[0].session_id, "s9");
@@ -620,11 +635,18 @@ mod tests {
         assert_eq!(result[2].session_id, "s7");
 
         // offset only — skip 7 newest, leaving 3 oldest
-        let q = SessionQuery { offset: Some(7), ..Default::default() };
+        let q = SessionQuery {
+            offset: Some(7),
+            ..Default::default()
+        };
         assert_eq!(q.paginate(sessions.clone()).len(), 3);
 
         // limit + offset — skip 5 newest, take next 2
-        let q = SessionQuery { limit: Some(2), offset: Some(5), ..Default::default() };
+        let q = SessionQuery {
+            limit: Some(2),
+            offset: Some(5),
+            ..Default::default()
+        };
         let result = q.paginate(sessions.clone());
         assert_eq!(result.len(), 2);
         assert_eq!(result[0].session_id, "s4");

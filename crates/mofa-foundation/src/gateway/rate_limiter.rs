@@ -250,6 +250,11 @@ mod tests {
     #[test]
     fn rate_limit_decision_is_allowed_helper() {
         assert!(RateLimitDecision::Allowed { remaining: 5 }.is_allowed());
-        assert!(!RateLimitDecision::Denied { retry_after_ms: 100 }.is_allowed());
+        assert!(
+            !RateLimitDecision::Denied {
+                retry_after_ms: 100
+            }
+            .is_allowed()
+        );
     }
 }

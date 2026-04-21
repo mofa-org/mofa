@@ -14,9 +14,9 @@ use std::time::Duration;
 
 use comfy_table::Table;
 use mofa_foundation::swarm::{
-    AgentSpec, AuditEvent, AuditEventKind, CoordinationPattern, FailurePolicy,
-    ParallelScheduler, SchedulerSummary, SequentialScheduler, SLAConfig,
-    SubtaskDAG, SubtaskExecutorFn, SwarmScheduler, SwarmSchedulerConfig, SwarmSubtask,
+    AgentSpec, AuditEvent, AuditEventKind, CoordinationPattern, FailurePolicy, ParallelScheduler,
+    SLAConfig, SchedulerSummary, SequentialScheduler, SubtaskDAG, SubtaskExecutorFn,
+    SwarmScheduler, SwarmSchedulerConfig, SwarmSubtask,
 };
 use serde::Deserialize;
 
@@ -115,7 +115,12 @@ fn check_coverage(agents: &[AgentSpec], tasks: &[TaskSpec]) -> CoverageResult {
     let mut gaps: Vec<String> = gaps.into_iter().collect();
     gaps.sort_unstable();
 
-    CoverageResult { covered, partial, uncovered, gaps }
+    CoverageResult {
+        covered,
+        partial,
+        uncovered,
+        gaps,
+    }
 }
 
 // ── DAG construction ──────────────────────────────────────────────────────────
@@ -166,9 +171,7 @@ fn select_pattern(
 // ── Executor ──────────────────────────────────────────────────────────────────
 
 fn make_executor() -> SubtaskExecutorFn {
-    Arc::new(|_idx, task| {
-        Box::pin(async move { Ok(format!("completed: {}", task.id)) })
-    })
+    Arc::new(|_idx, task| Box::pin(async move { Ok(format!("completed: {}", task.id)) }))
 }
 
 // ── Audit events ──────────────────────────────────────────────────────────────
@@ -182,7 +185,11 @@ fn collect_audit_events(config_name: &str, summary: &SchedulerSummary) -> Vec<Au
         if r.outcome.is_success() {
             events.push(AuditEvent::new(
                 AuditEventKind::SubtaskCompleted,
-                format!("task {} succeeded ({:.0}ms)", r.task_id, r.wall_time.as_millis()),
+                format!(
+                    "task {} succeeded ({:.0}ms)",
+                    r.task_id,
+                    r.wall_time.as_millis()
+                ),
             ));
         } else {
             events.push(AuditEvent::new(
@@ -193,7 +200,10 @@ fn collect_audit_events(config_name: &str, summary: &SchedulerSummary) -> Vec<Au
     }
     events.push(AuditEvent::new(
         AuditEventKind::SwarmCompleted,
-        format!("{}/{} tasks succeeded", summary.succeeded, summary.total_tasks),
+        format!(
+            "{}/{} tasks succeeded",
+            summary.succeeded, summary.total_tasks
+        ),
     ));
     events
 }
@@ -206,13 +216,25 @@ fn print_stage(n: u8, total: u8, label: &str) {
 
 fn print_coverage_report(cov: &CoverageResult) {
     if !cov.covered.is_empty() {
-        println!("      covered  ({} tasks):  {}", cov.covered.len(), cov.covered.join(", "));
+        println!(
+            "      covered  ({} tasks):  {}",
+            cov.covered.len(),
+            cov.covered.join(", ")
+        );
     }
     if !cov.partial.is_empty() {
-        println!("      partial  ({} tasks):  {}", cov.partial.len(), cov.partial.join(", "));
+        println!(
+            "      partial  ({} tasks):  {}",
+            cov.partial.len(),
+            cov.partial.join(", ")
+        );
     }
     if !cov.uncovered.is_empty() {
-        println!("      uncovered ({} tasks): {}", cov.uncovered.len(), cov.uncovered.join(", "));
+        println!(
+            "      uncovered ({} tasks): {}",
+            cov.uncovered.len(),
+            cov.uncovered.join(", ")
+        );
     }
     if !cov.gaps.is_empty() {
         println!("      missing capabilities: {}", cov.gaps.join(", "));
@@ -225,7 +247,14 @@ fn print_coverage_report(cov: &CoverageResult) {
 fn print_summary_table(summary: &SchedulerSummary) {
     let mut table = Table::new();
     table.load_preset(comfy_table::presets::UTF8_FULL);
-    table.set_header(["pattern", "tasks", "succeeded", "failed", "skipped", "wall time"]);
+    table.set_header([
+        "pattern",
+        "tasks",
+        "succeeded",
+        "failed",
+        "skipped",
+        "wall time",
+    ]);
     table.add_row([
         summary.pattern.to_string(),
         summary.total_tasks.to_string(),
@@ -252,9 +281,18 @@ fn print_prometheus_metrics(summary: &SchedulerSummary) {
     println!("mofa_swarm_scheduler_runs_total{{pattern=\"{p}\"}} 1");
     println!("# HELP mofa_swarm_tasks_total total subtasks by pattern and status");
     println!("# TYPE mofa_swarm_tasks_total counter");
-    println!("mofa_swarm_tasks_total{{pattern=\"{p}\",status=\"succeeded\"}} {}", summary.succeeded);
-    println!("mofa_swarm_tasks_total{{pattern=\"{p}\",status=\"failed\"}} {}", summary.failed);
-    println!("mofa_swarm_tasks_total{{pattern=\"{p}\",status=\"skipped\"}} {}", summary.skipped);
+    println!(
+        "mofa_swarm_tasks_total{{pattern=\"{p}\",status=\"succeeded\"}} {}",
+        summary.succeeded
+    );
+    println!(
+        "mofa_swarm_tasks_total{{pattern=\"{p}\",status=\"failed\"}} {}",
+        summary.failed
+    );
+    println!(
+        "mofa_swarm_tasks_total{{pattern=\"{p}\",status=\"skipped\"}} {}",
+        summary.skipped
+    );
     println!("# HELP mofa_swarm_scheduler_duration_seconds wall time per scheduler run in seconds");
     println!("# TYPE mofa_swarm_scheduler_duration_seconds gauge");
     println!(
@@ -399,11 +437,7 @@ pub async fn run(
     // 3. admission
     print_stage(3, total, "admission check");
     if cfg.sla.max_duration_secs > 0 {
-        let estimated: u64 = cfg
-            .tasks
-            .iter()
-            .map(|t| (t.complexity * 30.0) as u64)
-            .sum();
+        let estimated: u64 = cfg.tasks.iter().map(|t| (t.complexity * 30.0) as u64).sum();
         println!(
             "      sla max: {}s   estimated: {}s   tokens budget: {}",
             cfg.sla.max_duration_secs, estimated, cfg.sla.max_cost_tokens

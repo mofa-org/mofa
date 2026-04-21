@@ -304,9 +304,8 @@ impl WasmMemory {
 
     /// Allocate and write data
     pub fn alloc_bytes(&mut self, data: &[u8]) -> WasmResult<GuestSlice> {
-        let size = u32::try_from(data.len()).map_err(|_| WasmError::AllocationFailed {
-            size: u32::MAX,
-        })?;
+        let size = u32::try_from(data.len())
+            .map_err(|_| WasmError::AllocationFailed { size: u32::MAX })?;
         let ptr = self.alloc(size)?;
         self.write(ptr, data)?;
         Ok(GuestSlice::new(ptr, size))

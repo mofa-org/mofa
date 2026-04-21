@@ -20,8 +20,10 @@ async fn create_test_gateway(local_llm_url: &str) -> Gateway {
     config.enable_local_llm_proxy = true;
     config.local_llm_backend_url = Some(local_llm_url.to_string());
     config.listen_addr = "127.0.0.1:0".parse().unwrap(); // Random port
-    
-    Gateway::new(config).await.expect("Failed to create gateway")
+
+    Gateway::new(config)
+        .await
+        .expect("Failed to create gateway")
 }
 
 /// Run with `cargo test -p mofa-gateway -- --ignored` against a live mofa-local-llm server.
@@ -37,7 +39,9 @@ async fn test_proxy_models_list_success() {
     sleep(Duration::from_millis(100)).await;
 
     // Get the actual bound address (important when using random port)
-    let bound_addr = gateway.bound_addr().expect("Gateway should have bound address");
+    let bound_addr = gateway
+        .bound_addr()
+        .expect("Gateway should have bound address");
     let gateway_url = format!("http://{}", bound_addr);
 
     // Test /v1/models endpoint
@@ -48,7 +52,7 @@ async fn test_proxy_models_list_success() {
         .expect("Failed to send request");
 
     assert_eq!(response.status(), StatusCode::OK);
-    
+
     let body: serde_json::Value = response.json().await.expect("Failed to parse JSON");
     assert!(body.get("data").is_some());
     assert!(body["data"].is_array());
@@ -66,7 +70,9 @@ async fn test_proxy_model_info_success() {
     gateway.start().await.expect("Failed to start gateway");
     sleep(Duration::from_millis(100)).await;
 
-    let bound_addr = gateway.bound_addr().expect("Gateway should have bound address");
+    let bound_addr = gateway
+        .bound_addr()
+        .expect("Gateway should have bound address");
     let gateway_url = format!("http://{}", bound_addr);
 
     // Test /v1/models/:model_id endpoint
@@ -96,7 +102,9 @@ async fn test_proxy_chat_completions_success() {
     gateway.start().await.expect("Failed to start gateway");
     sleep(Duration::from_millis(100)).await;
 
-    let bound_addr = gateway.bound_addr().expect("Gateway should have bound address");
+    let bound_addr = gateway
+        .bound_addr()
+        .expect("Gateway should have bound address");
     let gateway_url = format!("http://{}", bound_addr);
 
     // Test /v1/chat/completions endpoint
@@ -117,7 +125,9 @@ async fn test_proxy_chat_completions_success() {
 
     // Should get either 200 (success) or error status
     assert!(
-        response.status().is_success() || response.status().is_client_error() || response.status().is_server_error(),
+        response.status().is_success()
+            || response.status().is_client_error()
+            || response.status().is_server_error(),
         "Got unexpected status: {}",
         response.status()
     );
@@ -132,11 +142,13 @@ async fn test_proxy_backend_down() {
     gateway.start().await.expect("Failed to start gateway");
     sleep(Duration::from_millis(500)).await; // Give time for health check to fail
 
-    let bound_addr = gateway.bound_addr().expect("Gateway should have bound address");
+    let bound_addr = gateway
+        .bound_addr()
+        .expect("Gateway should have bound address");
     let gateway_url = format!("http://{}", bound_addr);
 
     let client = reqwest::Client::new();
-    
+
     // Request should fail gracefully
     let response = client
         .get(format!("{}/v1/models", gateway_url))
@@ -148,10 +160,10 @@ async fn test_proxy_backend_down() {
     // The test passes if gateway handles the request without panicking
     println!("Backend down test: got status {}", response.status());
     assert!(
-        response.status() == StatusCode::SERVICE_UNAVAILABLE 
-        || response.status() == StatusCode::INTERNAL_SERVER_ERROR
-        || response.status() == StatusCode::BAD_GATEWAY
-        || response.status() == StatusCode::OK, // OK if health check hasn't run yet
+        response.status() == StatusCode::SERVICE_UNAVAILABLE
+            || response.status() == StatusCode::INTERNAL_SERVER_ERROR
+            || response.status() == StatusCode::BAD_GATEWAY
+            || response.status() == StatusCode::OK, // OK if health check hasn't run yet
         "Got unexpected status: {}",
         response.status()
     );
@@ -166,9 +178,11 @@ async fn test_proxy_timeout() {
     let mut config = GatewayConfig::default();
     config.enable_local_llm_proxy = true;
     config.local_llm_backend_url = Some("http://localhost:8000".to_string());
-    
-    let _gateway = Gateway::new(config).await.expect("Failed to create gateway");
-    
+
+    let _gateway = Gateway::new(config)
+        .await
+        .expect("Failed to create gateway");
+
     // Gateway was created successfully - test passes
 }
 
@@ -182,7 +196,9 @@ async fn test_health_check_integration() {
     gateway.start().await.expect("Failed to start gateway");
     sleep(Duration::from_millis(500)).await; // Give time for health check
 
-    let bound_addr = gateway.bound_addr().expect("Gateway should have bound address");
+    let bound_addr = gateway
+        .bound_addr()
+        .expect("Gateway should have bound address");
     let gateway_url = format!("http://{}", bound_addr);
 
     // Gateway health should be OK
@@ -204,11 +220,13 @@ async fn test_circuit_breaker_opens_on_failures() {
     gateway.start().await.expect("Failed to start gateway");
     sleep(Duration::from_millis(500)).await; // Give time for initial setup
 
-    let bound_addr = gateway.bound_addr().expect("Gateway should have bound address");
+    let bound_addr = gateway
+        .bound_addr()
+        .expect("Gateway should have bound address");
     let gateway_url = format!("http://{}", bound_addr);
 
     let client = reqwest::Client::new();
-    
+
     // Make multiple requests to trigger circuit breaker
     let mut failure_count = 0;
     for i in 0..5 {
@@ -219,11 +237,11 @@ async fn test_circuit_breaker_opens_on_failures() {
             .expect("Failed to send request");
 
         println!("Request {}: Status {}", i + 1, response.status());
-        
+
         if !response.status().is_success() {
             failure_count += 1;
         }
-        
+
         sleep(Duration::from_millis(200)).await;
     }
 
@@ -241,7 +259,11 @@ async fn test_circuit_breaker_opens_on_failures() {
     let duration = start.elapsed();
 
     // Should complete quickly (either circuit breaker open or backend responding)
-    assert!(duration < Duration::from_secs(5), "Request took too long: {:?}", duration);
+    assert!(
+        duration < Duration::from_secs(5),
+        "Request took too long: {:?}",
+        duration
+    );
 
     gateway.stop().await.expect("Failed to stop gateway");
 }
@@ -256,7 +278,9 @@ async fn test_concurrent_requests() {
     gateway.start().await.expect("Failed to start gateway");
     sleep(Duration::from_millis(100)).await;
 
-    let bound_addr = gateway.bound_addr().expect("Gateway should have bound address");
+    let bound_addr = gateway
+        .bound_addr()
+        .expect("Gateway should have bound address");
     let gateway_url = format!("http://{}", bound_addr);
 
     // Send multiple concurrent requests

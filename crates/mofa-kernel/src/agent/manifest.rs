@@ -31,10 +31,7 @@ pub struct AgentManifest {
 
 impl AgentManifest {
     /// Returns a builder for constructing an `AgentManifest`.
-    pub fn builder(
-        agent_id: impl Into<String>,
-        name: impl Into<String>,
-    ) -> AgentManifestBuilder {
+    pub fn builder(agent_id: impl Into<String>, name: impl Into<String>) -> AgentManifestBuilder {
         AgentManifestBuilder::new(agent_id.into(), name.into())
     }
 }

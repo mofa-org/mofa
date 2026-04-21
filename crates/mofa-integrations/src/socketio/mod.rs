@@ -85,7 +85,13 @@ impl SocketIoBridge {
     /// Returns `(layer, router, io)`. Apply `layer` to your axum application.
     /// The returned [`SocketIo`] handle can be used to emit events server-side
     /// (e.g. file-upload progress notifications from HTTP handlers).
-    pub fn build(self) -> (socketioxide::layer::SocketIoLayer, Router, socketioxide::SocketIo) {
+    pub fn build(
+        self,
+    ) -> (
+        socketioxide::layer::SocketIoLayer,
+        Router,
+        socketioxide::SocketIo,
+    ) {
         let auth_token = self.config.auth_token.clone();
         // One clone for the forwarding task, the original consumed by io.ns()
         let namespace_fwd = self.config.namespace.clone();

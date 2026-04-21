@@ -35,8 +35,7 @@ fn base_config() -> ServerConfig {
 #[tokio::test]
 async fn health_endpoint_works_without_socketio() {
     let registry = Arc::new(AgentRegistry::new());
-    let app = GatewayServer::new(base_config(), registry)
-        .build_router();
+    let app = GatewayServer::new(base_config(), registry).build_router();
 
     let resp = app
         .oneshot(
@@ -55,8 +54,7 @@ async fn health_endpoint_works_without_socketio() {
 #[tokio::test]
 async fn socketio_polling_path_is_404_without_layer() {
     let registry = Arc::new(AgentRegistry::new());
-    let app = GatewayServer::new(base_config(), registry)
-        .build_router();
+    let app = GatewayServer::new(base_config(), registry).build_router();
 
     let resp = app
         .oneshot(
@@ -89,8 +87,7 @@ mod with_socketio {
         let registry = Arc::new(AgentRegistry::new());
         let bus = Arc::new(AgentBus::new());
         let sio_cfg = SocketIoConfig::new().with_auth_token("test-token");
-        GatewayServer::new(base_config(), registry)
-            .with_socket_io(bus, sio_cfg)
+        GatewayServer::new(base_config(), registry).with_socket_io(bus, sio_cfg)
     }
 
     /// Health endpoint must still respond 200 when the Socket.IO layer is active.
@@ -346,7 +343,10 @@ mod with_socketio {
                 Request::builder()
                     .method("POST")
                     .uri("/api/v1/files/upload")
-                    .header("content-type", format!("multipart/form-data; boundary={}", boundary))
+                    .header(
+                        "content-type",
+                        format!("multipart/form-data; boundary={}", boundary),
+                    )
                     .body(Body::from(body))
                     .unwrap(),
             )
@@ -404,7 +404,12 @@ mod with_socketio {
 
         // Health endpoint should work
         let resp = app
-            .oneshot(Request::builder().uri("/health").body(Body::empty()).unwrap())
+            .oneshot(
+                Request::builder()
+                    .uri("/health")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::OK);

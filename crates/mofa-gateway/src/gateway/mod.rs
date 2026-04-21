@@ -24,7 +24,10 @@ pub use rate_limiter::*;
 pub use router::*;
 
 use crate::error::{GatewayError, GatewayResult};
-use crate::types::{LoadBalancingAlgorithm, NodeId, RequestMetadata, ChatCompletionResponse, Message, Role, Usage, Choice};
+use crate::types::{
+    ChatCompletionResponse, Choice, LoadBalancingAlgorithm, Message, NodeId, RequestMetadata, Role,
+    Usage,
+};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -250,7 +253,10 @@ impl Gateway {
                 .await;
 
             // Create circuit breaker for mofa-local-llm
-            let _breaker = self.circuit_breakers.get_or_create(&local_llm_node_id).await;
+            let _breaker = self
+                .circuit_breakers
+                .get_or_create(&local_llm_node_id)
+                .await;
 
             // Create proxy handler and add to app_state
             let proxy_handler = Arc::new(ProxyHandler::new(backend.to_proxy_backend()));
@@ -297,7 +303,8 @@ impl Gateway {
             })?;
 
         // Get the actual bound address (important when using port 0 for random port)
-        let bound_addr = listener.local_addr()
+        let bound_addr = listener
+            .local_addr()
             .map_err(|e| GatewayError::Network(format!("Failed to get bound address: {}", e)))?;
         self.bound_addr = Some(bound_addr);
 
