@@ -224,6 +224,7 @@ mod tests {
             .unwrap()
     }
 
+    #[cfg(unix)]
     #[tokio::test]
     async fn child_process_sandbox_echoes_input() {
         let sb = ChildProcessSandbox::new(
@@ -254,6 +255,7 @@ mod tests {
         assert!(matches!(err, SandboxError::SubprocessNotAllowed { .. }));
     }
 
+    #[cfg(unix)]
     #[tokio::test]
     async fn child_process_sandbox_enforces_wall_timeout() {
         let policy = SandboxPolicy::builder()
@@ -291,6 +293,7 @@ mod tests {
         assert_eq!(sb.tier(), SandboxTier::Process);
     }
 
+    #[cfg(unix)]
     #[tokio::test]
     async fn child_process_sandbox_scrubs_env_by_default() {
         // Without EnvRead capability + env_allow_list, the child gets a
