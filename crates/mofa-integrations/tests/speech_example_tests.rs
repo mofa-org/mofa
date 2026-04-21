@@ -194,6 +194,7 @@ mod deepgram_examples {
 // SpeechConfig / SpeechProviderConfig (registry_builder)
 // ============================================================================
 
+#[cfg(any(feature = "openai-speech", feature = "elevenlabs", feature = "deepgram"))]
 mod registry_builder_tests {
     use mofa_integrations::speech::registry_builder::{SpeechConfig, SpeechProviderConfig};
 
