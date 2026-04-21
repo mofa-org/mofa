@@ -49,9 +49,9 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
-        assert!(msg_1.expect("peer_1 missing message").is_some());
-        assert!(msg_2.expect("peer_2 missing message").is_some());
-        assert!(msg_3.expect("peer_3 missing message").is_some());
+        assert!(msg_1.is_ok(), "peer_1 missing message");
+        assert!(msg_2.is_ok(), "peer_2 missing message");
+        assert!(msg_3.is_ok(), "peer_3 missing message");
 
         if let AgentMessage::TaskRequest { task_id, .. } = &task_msg {
             let tracker = coordinator.task_tracker.read().await;
@@ -99,12 +99,15 @@ mod tests {
     async fn receive_peer(
         bus: &AgentBus,
         id: &str,
-    ) -> Result<Option<AgentMessage>, mofa_kernel::bus::BusError> {
-        bus.receive_message(
-            id,
-            CommunicationMode::PointToPoint("coordinator".to_string()),
-        )
-        .await
+    ) -> Result<AgentMessage, mofa_kernel::bus::BusError> {
+        let mut receiver = bus
+            .subscribe(
+                id,
+                CommunicationMode::PointToPoint("coordinator".to_string()),
+            )
+            .await
+            .unwrap();
+        receiver.recv().await
     }
 
     #[tokio::test]
@@ -134,14 +137,14 @@ mod tests {
 
         // Stage 1 turns the initial request into pipeline output for stage 2
         let stage1 = tokio::spawn(async move {
-            let msg = bus_stage1
-                .receive_message(
+            let mut receiver = bus_stage1
+                .subscribe(
                     "stage1",
                     CommunicationMode::PointToPoint("coordinator".to_string()),
                 )
                 .await
-                .unwrap()
                 .unwrap();
+            let msg = receiver.recv().await.unwrap();
             let AgentMessage::TaskRequest { task_id, content } = msg else {
                 panic!("expected task request");
             };
@@ -162,14 +165,14 @@ mod tests {
 
         // Stage 2 should receive the same root task id, not a fresh generated id.
         let stage2 = tokio::spawn(async move {
-            let msg = bus_stage2
-                .receive_message(
+            let mut receiver = bus_stage2
+                .subscribe(
                     "stage2",
                     CommunicationMode::PointToPoint("coordinator".to_string()),
                 )
                 .await
-                .unwrap()
                 .unwrap();
+            let msg = receiver.recv().await.unwrap();
             let AgentMessage::TaskRequest { task_id, content } = msg else {
                 panic!("expected task request");
             };
@@ -190,14 +193,14 @@ mod tests {
 
         // Stage 3 completes the chain and lets us assert lineage end to end.
         let stage3 = tokio::spawn(async move {
-            let msg = bus_stage3
-                .receive_message(
+            let mut receiver = bus_stage3
+                .subscribe(
                     "stage3",
                     CommunicationMode::PointToPoint("coordinator".to_string()),
                 )
                 .await
-                .unwrap()
                 .unwrap();
+            let msg = receiver.recv().await.unwrap();
             let AgentMessage::TaskRequest { task_id, content } = msg else {
                 panic!("expected task request");
             };
@@ -215,6 +218,8 @@ mod tests {
                 .unwrap();
             task_id
         });
+
+        tokio::time::sleep(Duration::from_millis(50)).await;
 
         coordinator
             .coordinate_task(&AgentMessage::TaskRequest {
@@ -246,14 +251,14 @@ mod tests {
 
         let bus_stage1 = bus.clone();
         tokio::spawn(async move {
-            let msg = bus_stage1
-                .receive_message(
+            let mut receiver = bus_stage1
+                .subscribe(
                     "stage1",
                     CommunicationMode::PointToPoint("coordinator".to_string()),
                 )
                 .await
-                .unwrap()
                 .unwrap();
+            let msg = receiver.recv().await.unwrap();
             let AgentMessage::TaskRequest { task_id, content } = msg else {
                 panic!("expected task request");
             };
@@ -273,17 +278,19 @@ mod tests {
 
         let bus_stage2 = bus.clone();
         tokio::spawn(async move {
-            let _ = bus_stage2
-                .receive_message(
+            let mut receiver = bus_stage2
+                .subscribe(
                     "stage2",
                     CommunicationMode::PointToPoint("coordinator".to_string()),
                 )
                 .await
-                .unwrap()
                 .unwrap();
+            let _ = receiver.recv().await.unwrap();
             // Hold the stage open without replying so the coordinator hits its timeout path
             tokio::time::sleep(Duration::from_secs(10)).await;
         });
+
+        tokio::time::sleep(Duration::from_millis(50)).await;
 
         let err = coordinator
             .coordinate_task(&AgentMessage::TaskRequest {
@@ -314,14 +321,14 @@ mod tests {
 
         let bus_stage1 = bus.clone();
         tokio::spawn(async move {
-            let msg = bus_stage1
-                .receive_message(
+            let mut receiver = bus_stage1
+                .subscribe(
                     "stage1",
                     CommunicationMode::PointToPoint("coordinator".to_string()),
                 )
                 .await
-                .unwrap()
                 .unwrap();
+            let msg = receiver.recv().await.unwrap();
             let AgentMessage::TaskRequest { task_id, content } = msg else {
                 panic!("expected task request");
             };
@@ -341,14 +348,14 @@ mod tests {
 
         let bus_stage2 = bus.clone();
         tokio::spawn(async move {
-            let msg = bus_stage2
-                .receive_message(
+            let mut receiver = bus_stage2
+                .subscribe(
                     "stage2",
                     CommunicationMode::PointToPoint("coordinator".to_string()),
                 )
                 .await
-                .unwrap()
                 .unwrap();
+            let msg = receiver.recv().await.unwrap();
             let AgentMessage::TaskRequest { task_id, .. } = msg else {
                 panic!("expected task request");
             };
@@ -365,6 +372,8 @@ mod tests {
                 .await
                 .unwrap();
         });
+
+        tokio::time::sleep(Duration::from_millis(50)).await;
 
         let err = coordinator
             .coordinate_task(&AgentMessage::TaskRequest {

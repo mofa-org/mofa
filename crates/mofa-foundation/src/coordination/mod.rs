@@ -153,17 +153,15 @@ impl AgentCoordinator {
                     GlobalError::Other(format!("Pipeline stage {} has no upstream output", stage))
                 })?,
             };
-            let response_bus = self.bus.clone();
-            let response_agent_id = agent_id.to_string();
-            let response_handle = tokio::spawn(async move {
-                response_bus
-                    .receive_message(
-                        "coordinator",
-                        CommunicationMode::PointToPoint(response_agent_id),
-                    )
-                    .await
-            });
-            tokio::task::yield_now().await;
+            let mut receiver = self
+                .bus
+                .subscribe(
+                    "coordinator",
+                    CommunicationMode::PointToPoint(agent_id.to_string()),
+                )
+                .await
+                .map_err(|e| GlobalError::Other(e.to_string()))?;
+
             // 点对点发送给当前阶段智能体
             // Send point-to-point to the agent of the current stage
             self.bus
@@ -174,10 +172,11 @@ impl AgentCoordinator {
                 )
                 .await
                 .map_err(|e| GlobalError::Other(e.to_string()))?;
+
             // Wait on the coordinator side reply channel with a bounded timeout.
             let stage_response = timeout(
                 Duration::from_secs(PIPELINE_STAGE_TIMEOUT_SECS),
-                response_handle,
+                receiver.recv(),
             )
             .await
             .map_err(|_| {
@@ -186,17 +185,14 @@ impl AgentCoordinator {
                     stage, agent_id
                 ))
             })?
-            .map_err(|e| {
-                GlobalError::Other(format!("Pipeline stage {} join failed: {}", stage, e))
-            })?
             .map_err(|e| GlobalError::Other(e.to_string()))?;
 
             match stage_response {
-                Some(AgentMessage::TaskResponse {
+                AgentMessage::TaskResponse {
                     task_id,
                     result,
                     status,
-                }) => {
+                } => {
                     // A stage must answer for the same root task the pipeline started with.
                     if task_id != root_task_id {
                         return Err(GlobalError::Other(format!(
@@ -212,16 +208,10 @@ impl AgentCoordinator {
                     }
                     last_output = Some(result);
                 }
-                Some(other) => {
+                other => {
                     return Err(GlobalError::Other(format!(
                         "Pipeline stage {} ({}) returned unexpected message: {:?}",
                         stage, agent_id, other
-                    )));
-                }
-                None => {
-                    return Err(GlobalError::Other(format!(
-                        "Pipeline stage {} ({}) closed without a response",
-                        stage, agent_id
                     )));
                 }
             }

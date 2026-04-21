@@ -134,7 +134,8 @@ pub async fn run(
     }
 
     // Register with persistent wrapper to ensure it appears in status reporting
-    let mut persistent_metadata = crate::state::AgentMetadata::new(agent_id.to_string(), agent_config.name.clone());
+    let mut persistent_metadata =
+        crate::state::AgentMetadata::new(agent_id.to_string(), agent_config.name.clone());
     persistent_metadata.description = agent_config.description.clone();
     if !config_file.as_os_str().is_empty() {
         persistent_metadata = persistent_metadata.with_config(config_file.clone());

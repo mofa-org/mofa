@@ -81,7 +81,11 @@ pub async fn run(
     if let Some(mut persistent_meta) = ctx.persistent_agents.get(agent_id).await {
         persistent_meta.mark_stopped();
         if let Err(e) = ctx.persistent_agents.update(persistent_meta).await {
-            println!("  {} Failed to update persistent state: {}", "!".yellow(), e);
+            println!(
+                "  {} Failed to update persistent state: {}",
+                "!".yellow(),
+                e
+            );
         }
     }
 
