@@ -55,10 +55,15 @@ impl<T: Serialize + DeserializeOwned> PersistedStore<T> {
                 None => continue,
             };
 
-            // Attempt to decode as hex. If it fails, assume it's a legacy unencoded file.
-            let id = match hex::decode(file_stem) {
-                Ok(bytes) => String::from_utf8(bytes).unwrap_or_else(|_| file_stem.to_string()),
-                Err(_) => file_stem.to_string(),
+            // Handle empty IDs which are encoded as "_"
+            let id = if file_stem == "_" {
+                String::new()
+            } else {
+                // Attempt to decode as hex. If it fails, assume it's a legacy unencoded file.
+                match hex::decode(file_stem) {
+                    Ok(bytes) => String::from_utf8(bytes).unwrap_or_else(|_| file_stem.to_string()),
+                    Err(_) => file_stem.to_string(),
+                }
             };
 
             let payload = fs::read(path)?;
