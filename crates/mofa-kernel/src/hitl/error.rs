@@ -20,8 +20,18 @@ pub enum HitlError {
     #[error("Invalid review response: {reason}")]
     InvalidResponse { reason: String },
 
-    #[error("Review policy evaluation failed: {reason}")]
+   #[error("Review policy evaluation failed: {reason}")]
     PolicyError { reason: String },
+
+    // Fix: Added the variant name back below the attribute
+    #[error("Whale Protection Triggered: Transaction value {value} exceeds the {threshold} SOL limit")]
+    WhaleThresholdExceeded { value: f64, threshold: f64 },
+
+    #[error("Missing Audit Trail: High-integrity fintech operations require an 'audit_trail' in the context")]
+    MissingAuditData,
+
+    #[error("Web3 Signature Verification Failed: The provided signature is malformed or unauthorized")]
+    InvalidSignature,
 
     #[error("Review store error: {0}")]
     StoreError(#[from] StoreError),

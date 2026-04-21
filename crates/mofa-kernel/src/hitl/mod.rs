@@ -13,7 +13,12 @@ pub use context::{
     TelemetrySnapshot,
 };
 pub use error::{HitlError, HitlResult, StoreError};
-pub use policy::{AlwaysReviewPolicy, AuditValidationPolicy, NeverReviewPolicy, ReviewPolicy};
+
+// ✅ ONE CLEAN BLOCK: This replaces the two separate policy blocks you had.
+pub use policy::{
+    AlwaysReviewPolicy, AuditValidationPolicy, NeverReviewPolicy, ReviewPolicy, WhaleGuardPolicy,
+};
+
 pub use types::{
     ReviewMetadata, ReviewRequest, ReviewRequestId, ReviewResponse, ReviewStatus, ReviewType,
 };

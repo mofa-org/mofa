@@ -129,6 +129,41 @@ impl ReviewContext {
         self
     }
 }
+
+
+
+
+impl ReviewContext {
+    /// Specialized constructor for high-value blockchain (Whale) protection.
+    /// This "plugs in" the destination and value directly into the Security Seal.
+    pub fn new_whale_trade(
+        token: &str,
+        amount: f64,
+        target_address: &str,
+    ) -> Self {
+        let trace = ExecutionTrace { steps: vec![], duration_ms: 0 };
+        
+        let mut blockchain_meta = HashMap::new();
+        blockchain_meta.insert("token_symbol".to_string(), serde_json::json!(token));
+        blockchain_meta.insert("token_amount".to_string(), serde_json::json!(amount));
+        blockchain_meta.insert("target_address".to_string(), serde_json::json!(target_address));
+
+        let audit = AuditingData {
+            intent: "High-Value Transaction Guard".to_string(),
+            result: format!("Transfer {} {} to {}", amount, token, target_address),
+            relevant_trace_steps: vec!["Risk threshold check initiated".to_string()],
+            metadata: blockchain_meta,
+            policy_status: "Awaiting_Manual_Signoff".to_string(),
+        };
+
+        Self::new(trace, serde_json::json!({}))
+            .with_auditing_data(audit)
+    }
+}
+
+
+
+
 #[cfg(test)]
 mod tests {
     use super::*;

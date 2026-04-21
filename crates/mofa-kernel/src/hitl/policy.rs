@@ -91,6 +91,47 @@ impl ReviewPolicy for AuditValidationPolicy {
     }
 }
 
+pub struct WhaleGuardPolicy {
+    pub sol_threshold: f64,
+}
+
+#[async_trait]
+impl ReviewPolicy for WhaleGuardPolicy {
+    async fn should_request_review(
+        &self,
+        context: &ReviewContext,
+    ) -> HitlResult<Option<ReviewRequest>> {
+        // Look into the 'audit_trail' stored in context.additional
+        if let Some(audit_val) = context.additional.get("audit_trail") {
+            // Extract the amount from the blockchain metadata
+            let amount = audit_val["metadata"]["amount"].as_f64().unwrap_or(0.0);
+
+            // If it's a "Whale" amount, trigger the pause button
+            if amount >= self.sol_threshold {
+                let request = ReviewRequest::new(
+                    "whale_protection_trigger".to_string(),
+                    ReviewType::Approval,
+                    context.clone(),
+                );
+                return Ok(Some(request));
+            }
+        }
+        Ok(None)
+    }
+
+    async fn can_auto_approve(&self, _request: &ReviewRequest) -> HitlResult<bool> {
+        Ok(false) // High-value transfers ALWAYS need a human signature
+    }
+
+    fn name(&self) -> &str {
+        "WhaleGuardPolicy"
+    }
+}
+
+
+
+
+
 #[cfg(test)]
 mod policy_tests {
     use super::*;
@@ -124,5 +165,28 @@ mod policy_tests {
         assert_eq!(request.execution_id, "audit_check");
 
         println!("✅ Audit Guard successfully caught the transaction!");
+    } // <--- Added this to close the first test
+
+    #[tokio::test]
+    async fn test_whale_guard_triggers_on_large_amount() {
+        let policy = WhaleGuardPolicy { sol_threshold: 100.0 };
+        let trace = ExecutionTrace { steps: vec![], duration_ms: 0 };
+        
+        // Simulate a 150 SOL Whale Trade
+        let audit = AuditingData {
+            intent: "Whale Trade".to_string(),
+            result: "Execute".to_string(),
+            relevant_trace_steps: vec![],
+            metadata: HashMap::from([("amount".to_string(), json!(150.0))]),
+            policy_status: "Pending".to_string(),
+        };
+
+        let context = ReviewContext::new(trace, json!({})).with_auditing_data(audit);
+        let result = policy.should_request_review(&context).await.unwrap();
+
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().execution_id, "whale_protection_trigger");
+        
+        println!("✅ Whale Guard successfully blocked the 150 SOL transaction!");
     }
-}
+} // <--- Module ends here
