@@ -120,21 +120,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let fraud_bus = bus.clone();
     let fraud_recv = tokio::spawn(async move {
-        fraud_bus
-            .receive_message(
+        let mut receiver = fraud_bus
+            .subscribe(
                 "fraud-worker",
                 CommunicationMode::PointToPoint("message_graph_executor".to_string()),
             )
             .await
+            .unwrap();
+        receiver.recv().await
     });
     let stream_bus = bus.clone();
     let stream_recv = tokio::spawn(async move {
-        stream_bus
-            .receive_message(
+        let mut receiver = stream_bus
+            .subscribe(
                 "stream-observer",
                 CommunicationMode::PubSub("orders.fulfillment".to_string()),
             )
             .await
+            .unwrap();
+        receiver.recv().await
     });
 
     tokio::time::sleep(Duration::from_millis(20)).await;
@@ -152,8 +156,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await
         .map_err(|e| -> Box<dyn std::error::Error> { format!("timed out waiting for fraud target message: {}", e).into() })?
         .map_err(|e| -> Box<dyn std::error::Error> { format!("fraud receiver task failed: {}", e).into() })?
-        .map_err(|e| -> Box<dyn std::error::Error> { format!("fraud receive failed: {}", e).into() })?
-        .ok_or_else(|| -> Box<dyn std::error::Error> { format!("fraud receiver got no message").into() })?;
+        .map_err(|e| -> Box<dyn std::error::Error> { format!("fraud receive failed: {}", e).into() })?;
     let routed = decode_event_envelope(fraud_msg)?;
     println!(
         "fraud target received type='{}' hop_count={}",
@@ -164,8 +167,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await
         .map_err(|e| -> Box<dyn std::error::Error> { format!("timed out waiting for stream target message: {}", e).into() })?
         .map_err(|e| -> Box<dyn std::error::Error> { format!("stream receiver task failed: {}", e).into() })?
-        .map_err(|e| -> Box<dyn std::error::Error> { format!("stream receive failed: {}", e).into() })?
-        .ok_or_else(|| -> Box<dyn std::error::Error> { format!("stream receiver got no message").into() })?;
+        .map_err(|e| -> Box<dyn std::error::Error> { format!("stream receive failed: {}", e).into() })?;
     match stream_msg {
         AgentMessage::StreamMessage {
             stream_id,
@@ -179,12 +181,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let dlq_bus = bus.clone();
     let dlq_recv = tokio::spawn(async move {
-        dlq_bus
-            .receive_message(
+        let mut receiver = dlq_bus
+            .subscribe(
                 "dlq-observer",
                 CommunicationMode::PubSub("orders.dlq".to_string()),
             )
             .await
+            .unwrap();
+        receiver.recv().await
     });
 
     tokio::time::sleep(Duration::from_millis(20)).await;
@@ -200,8 +204,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await
         .map_err(|e| -> Box<dyn std::error::Error> { format!("timed out waiting for dlq message: {}", e).into() })?
         .map_err(|e| -> Box<dyn std::error::Error> { format!("dlq receiver task failed: {}", e).into() })?
-        .map_err(|e| -> Box<dyn std::error::Error> { format!("dlq receive failed: {}", e).into() })?
-        .ok_or_else(|| -> Box<dyn std::error::Error> { format!("dlq receiver got no message").into() })?;
+        .map_err(|e| -> Box<dyn std::error::Error> { format!("dlq receive failed: {}", e).into() })?;
     let dlq_envelope = decode_event_envelope(dlq_msg)?;
     let reason = dlq_envelope
         .headers
