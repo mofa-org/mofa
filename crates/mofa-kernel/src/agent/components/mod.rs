@@ -9,6 +9,7 @@ pub mod coordinator;
 pub mod mcp;
 pub mod memory;
 pub mod reasoner;
+pub mod sandbox;
 pub mod tool;
 
 pub use context_compressor::{
@@ -18,4 +19,9 @@ pub use coordinator::{CoordinationPattern, Coordinator, DispatchResult, Task};
 pub use mcp::{McpClient, McpServerConfig, McpServerInfo, McpToolInfo, McpTransportConfig};
 pub use memory::{Embedder, Memory, MemoryItem, MemoryStats, MemoryValue, Message, MessageRole};
 pub use reasoner::{Decision, Reasoner, ReasoningResult, ThoughtStep};
+pub use sandbox::{
+    NetEndpoint, ObservationDecision, PathPattern, SandboxCapability, SandboxError,
+    SandboxExecutionStats, SandboxObserver, SandboxPolicy, SandboxPolicyBuilder, SandboxRequest,
+    SandboxResourceLimits, SandboxResponse, SandboxResult, SandboxTier, ToolSandbox,
+};
 pub use tool::{Tool, ToolDescriptor, ToolInput, ToolMetadata, ToolRegistry, ToolResult};
