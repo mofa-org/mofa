@@ -277,11 +277,39 @@ detection.
 
 ## Status
 
-- Kernel trait contracts and policy model — this change
-- Foundation backends (`NullSandbox`, `ProcessSandbox`, `WasmtimeSandbox`),
-  `SandboxedTool<T>` wrapper, integration tests, runnable example —
-  follow-up
+- Kernel trait contracts and policy model — delivered
+- Foundation backends and adapter — delivered:
+  - `NullSandbox` — passthrough (`SandboxTier::None`)
+  - `InProcessSandbox` — same-process policy enforcement with
+    wall-timeout and output-cap (`SandboxTier::None`)
+  - `ChildProcessSandbox` — OS child per invocation with JSON over
+    stdin/stdout, env scrub, wall-timeout (`SandboxTier::Process`)
+  - `SandboxedTool` — adapter making any `ToolSandbox` look like a
+    regular `Tool` for existing `ToolRegistry` consumers
+- `WasmtimeSandbox` (`SandboxTier::LanguageVm`) — follow-up
 - Prometheus sandbox metrics exporter — follow-up
+
+### Backend selection matrix
+
+```mermaid
+flowchart LR
+    subgraph Trust [Trust level]
+        T1[trusted]
+        T2[semi-trusted]
+        T3[untrusted<br/>external binary]
+        T4[untrusted<br/>arbitrary code]
+    end
+    subgraph Backend [Backend choice]
+        B1[NullSandbox<br/>Tier: None]
+        B2[InProcessSandbox<br/>Tier: None]
+        B3[ChildProcessSandbox<br/>Tier: Process]
+        B4[WasmtimeSandbox<br/>Tier: LanguageVm]
+    end
+    T1 --> B1
+    T2 --> B2
+    T3 --> B3
+    T4 -. follow-up .-> B4
+```
 
 ---
 

@@ -4274,7 +4274,7 @@ dependencies = [
  "mofa-foundation",
  "tokio",
  "tracing",
- "tracing-subscriber 0.3.22",
+ "tracing-subscriber 0.3.23",
 ]
 
 [[package]]
@@ -4878,6 +4878,7 @@ dependencies = [
  "chrono",
  "mofa-foundation",
  "mofa-kernel",
+ "regex",
  "serde",
  "serde_json",
  "tokio",
@@ -5971,7 +5972,7 @@ dependencies = [
  "opentelemetry_sdk",
  "tokio",
  "tracing",
- "tracing-subscriber 0.3.22",
+ "tracing-subscriber 0.3.23",
 ]
 
 [[package]]
@@ -7866,7 +7867,7 @@ dependencies = [
  "mofa-kernel",
  "tokio",
  "tracing",
- "tracing-subscriber 0.3.22",
+ "tracing-subscriber 0.3.23",
 ]
 
 [[package]]
@@ -7879,7 +7880,7 @@ dependencies = [
  "mofa-kernel",
  "tokio",
  "tracing",
- "tracing-subscriber 0.3.22",
+ "tracing-subscriber 0.3.23",
 ]
 
 [[package]]
@@ -8557,6 +8558,19 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
+]
+
+[[package]]
+name = "tool_sandbox_demo"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "mofa-foundation",
+ "mofa-kernel",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "tracing-subscriber 0.3.23",
 ]
 
 [[package]]
