@@ -1,0 +1,17 @@
+[package]
+name = "tool_sandbox_demo"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+mofa-foundation = { path = "../../crates/mofa-foundation" }
+mofa-kernel = { path = "../../crates/mofa-kernel" }
+
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+async-trait.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true
