@@ -27,10 +27,12 @@ mod tests {
         let bus_1 = bus.clone();
         let bus_2 = bus.clone();
         let bus_3 = bus.clone();
-        let recv_1 = tokio::spawn(async move { receive_peer(&bus_1, "peer_1").await });
-        let recv_2 = tokio::spawn(async move { receive_peer(&bus_2, "peer_2").await });
-        let recv_3 = tokio::spawn(async move { receive_peer(&bus_3, "peer_3").await });
-        tokio::time::sleep(Duration::from_millis(20)).await;
+        let mut sub_1 = subscribe_peer(&bus_1, "peer_1").await;
+        let mut sub_2 = subscribe_peer(&bus_2, "peer_2").await;
+        let mut sub_3 = subscribe_peer(&bus_3, "peer_3").await;
+        let recv_1 = tokio::spawn(async move { sub_1.recv().await });
+        let recv_2 = tokio::spawn(async move { sub_2.recv().await });
+        let recv_3 = tokio::spawn(async move { sub_3.recv().await });
 
         // Send after receivers are subscribed
         let result = coordinator.coordinate_task(&task_msg).await;
@@ -136,15 +138,15 @@ mod tests {
         let bus_stage3 = bus.clone();
 
         // Stage 1 turns the initial request into pipeline output for stage 2
+        let mut receiver1 = bus_stage1
+            .subscribe(
+                "stage1",
+                CommunicationMode::PointToPoint("coordinator".to_string()),
+            )
+            .await
+            .unwrap();
         let stage1 = tokio::spawn(async move {
-            let mut receiver = bus_stage1
-                .subscribe(
-                    "stage1",
-                    CommunicationMode::PointToPoint("coordinator".to_string()),
-                )
-                .await
-                .unwrap();
-            let msg = receiver.recv().await.unwrap();
+            let msg = receiver1.recv().await.unwrap();
             let AgentMessage::TaskRequest { task_id, content } = msg else {
                 panic!("expected task request");
             };
@@ -164,15 +166,15 @@ mod tests {
         });
 
         // Stage 2 should receive the same root task id, not a fresh generated id.
+        let mut receiver2 = bus_stage2
+            .subscribe(
+                "stage2",
+                CommunicationMode::PointToPoint("coordinator".to_string()),
+            )
+            .await
+            .unwrap();
         let stage2 = tokio::spawn(async move {
-            let mut receiver = bus_stage2
-                .subscribe(
-                    "stage2",
-                    CommunicationMode::PointToPoint("coordinator".to_string()),
-                )
-                .await
-                .unwrap();
-            let msg = receiver.recv().await.unwrap();
+            let msg = receiver2.recv().await.unwrap();
             let AgentMessage::TaskRequest { task_id, content } = msg else {
                 panic!("expected task request");
             };
@@ -192,15 +194,15 @@ mod tests {
         });
 
         // Stage 3 completes the chain and lets us assert lineage end to end.
+        let mut receiver3 = bus_stage3
+            .subscribe(
+                "stage3",
+                CommunicationMode::PointToPoint("coordinator".to_string()),
+            )
+            .await
+            .unwrap();
         let stage3 = tokio::spawn(async move {
-            let mut receiver = bus_stage3
-                .subscribe(
-                    "stage3",
-                    CommunicationMode::PointToPoint("coordinator".to_string()),
-                )
-                .await
-                .unwrap();
-            let msg = receiver.recv().await.unwrap();
+            let msg = receiver3.recv().await.unwrap();
             let AgentMessage::TaskRequest { task_id, content } = msg else {
                 panic!("expected task request");
             };
@@ -218,8 +220,6 @@ mod tests {
                 .unwrap();
             task_id
         });
-
-        tokio::time::sleep(Duration::from_millis(50)).await;
 
         coordinator
             .coordinate_task(&AgentMessage::TaskRequest {
@@ -250,15 +250,15 @@ mod tests {
         coordinator.register_role("stage3", "stage3").await.unwrap();
 
         let bus_stage1 = bus.clone();
+        let mut receiver1 = bus_stage1
+            .subscribe(
+                "stage1",
+                CommunicationMode::PointToPoint("coordinator".to_string()),
+            )
+            .await
+            .unwrap();
         tokio::spawn(async move {
-            let mut receiver = bus_stage1
-                .subscribe(
-                    "stage1",
-                    CommunicationMode::PointToPoint("coordinator".to_string()),
-                )
-                .await
-                .unwrap();
-            let msg = receiver.recv().await.unwrap();
+            let msg = receiver1.recv().await.unwrap();
             let AgentMessage::TaskRequest { task_id, content } = msg else {
                 panic!("expected task request");
             };
@@ -277,20 +277,18 @@ mod tests {
         });
 
         let bus_stage2 = bus.clone();
+        let mut receiver2 = bus_stage2
+            .subscribe(
+                "stage2",
+                CommunicationMode::PointToPoint("coordinator".to_string()),
+            )
+            .await
+            .unwrap();
         tokio::spawn(async move {
-            let mut receiver = bus_stage2
-                .subscribe(
-                    "stage2",
-                    CommunicationMode::PointToPoint("coordinator".to_string()),
-                )
-                .await
-                .unwrap();
-            let _ = receiver.recv().await.unwrap();
+            let _ = receiver2.recv().await.unwrap();
             // Hold the stage open without replying so the coordinator hits its timeout path
             tokio::time::sleep(Duration::from_secs(10)).await;
         });
-
-        tokio::time::sleep(Duration::from_millis(50)).await;
 
         let err = coordinator
             .coordinate_task(&AgentMessage::TaskRequest {
@@ -320,15 +318,15 @@ mod tests {
         coordinator.register_role("stage3", "stage3").await.unwrap();
 
         let bus_stage1 = bus.clone();
+        let mut receiver1 = bus_stage1
+            .subscribe(
+                "stage1",
+                CommunicationMode::PointToPoint("coordinator".to_string()),
+            )
+            .await
+            .unwrap();
         tokio::spawn(async move {
-            let mut receiver = bus_stage1
-                .subscribe(
-                    "stage1",
-                    CommunicationMode::PointToPoint("coordinator".to_string()),
-                )
-                .await
-                .unwrap();
-            let msg = receiver.recv().await.unwrap();
+            let msg = receiver1.recv().await.unwrap();
             let AgentMessage::TaskRequest { task_id, content } = msg else {
                 panic!("expected task request");
             };
@@ -347,15 +345,15 @@ mod tests {
         });
 
         let bus_stage2 = bus.clone();
+        let mut receiver2 = bus_stage2
+            .subscribe(
+                "stage2",
+                CommunicationMode::PointToPoint("coordinator".to_string()),
+            )
+            .await
+            .unwrap();
         tokio::spawn(async move {
-            let mut receiver = bus_stage2
-                .subscribe(
-                    "stage2",
-                    CommunicationMode::PointToPoint("coordinator".to_string()),
-                )
-                .await
-                .unwrap();
-            let msg = receiver.recv().await.unwrap();
+            let msg = receiver2.recv().await.unwrap();
             let AgentMessage::TaskRequest { task_id, .. } = msg else {
                 panic!("expected task request");
             };
@@ -372,8 +370,6 @@ mod tests {
                 .await
                 .unwrap();
         });
-
-        tokio::time::sleep(Duration::from_millis(50)).await;
 
         let err = coordinator
             .coordinate_task(&AgentMessage::TaskRequest {
