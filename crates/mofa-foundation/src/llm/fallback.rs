@@ -234,7 +234,7 @@ impl ProviderCircuitBreaker {
     /// Returns `true` if the circuit is currently open (provider should be
     /// skipped).
     fn is_open(&self) -> bool {
-        let state = self.state.lock().expect("circuit breaker mutex poisoned");
+        let state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         state
             .open_until
             .map(|until| Instant::now() < until)
@@ -244,7 +244,7 @@ impl ProviderCircuitBreaker {
     /// Record a successful call — resets the failure counter and closes the
     /// circuit.
     fn record_success(&self) {
-        let mut state = self.state.lock().expect("circuit breaker mutex poisoned");
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         state.consecutive_failures = 0;
         state.open_until = None;
     }
@@ -252,7 +252,7 @@ impl ProviderCircuitBreaker {
     /// Record a failure that triggered a fallback.  Opens the circuit once the
     /// threshold is reached.
     fn record_failure(&self) {
-        let mut state = self.state.lock().expect("circuit breaker mutex poisoned");
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         state.consecutive_failures = state.consecutive_failures.saturating_add(1);
         if state.consecutive_failures >= self.threshold {
             state.open_until = Some(Instant::now() + self.cooldown);
