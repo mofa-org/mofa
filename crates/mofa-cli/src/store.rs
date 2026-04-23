@@ -55,10 +55,15 @@ impl<T: Serialize + DeserializeOwned> PersistedStore<T> {
                 None => continue,
             };
 
-            // Attempt to decode as hex. If it fails, assume it's a legacy unencoded file.
-            let id = match hex::decode(file_stem) {
-                Ok(bytes) => String::from_utf8(bytes).unwrap_or_else(|_| file_stem.to_string()),
-                Err(_) => file_stem.to_string(),
+            // Handle empty IDs which are encoded as "_"
+            let id = if file_stem == "_" {
+                String::new()
+            } else {
+                // Attempt to decode as hex. If it fails, assume it's a legacy unencoded file.
+                match hex::decode(file_stem) {
+                    Ok(bytes) => String::from_utf8(bytes).unwrap_or_else(|_| file_stem.to_string()),
+                    Err(_) => file_stem.to_string(),
+                }
             };
 
             let payload = fs::read(path)?;
@@ -242,8 +247,14 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let store = PersistedStore::<TestEntry>::new(temp.path()).unwrap();
 
-        let e1 = TestEntry { name: "1".into(), value: 1 };
-        let e2 = TestEntry { name: "2".into(), value: 2 };
+        let e1 = TestEntry {
+            name: "1".into(),
+            value: 1,
+        };
+        let e2 = TestEntry {
+            name: "2".into(),
+            value: 2,
+        };
 
         store.save("agent@node", &e1).unwrap();
         store.save("agent#node", &e2).unwrap();
@@ -255,7 +266,7 @@ mod tests {
         // list should return both
         let items = store.list().unwrap();
         assert_eq!(items.len(), 2);
-        
+
         // Assert items are decoded correctly
         let (id1, _) = &items[0];
         let (id2, _) = &items[1];

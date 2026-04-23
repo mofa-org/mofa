@@ -208,6 +208,7 @@ impl GlobalError {
 ///
 /// Classifies errors by their impact and whether recovery is possible.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum ErrorSeverity {
     /// Fatal: unrecoverable, the operation cannot proceed
     Fatal,

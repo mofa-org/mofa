@@ -52,6 +52,7 @@ members = [
     "security/pii_only",
     "integrations_demo",
     "cron_scheduler",
+    "gateway_socketio_s3",
     "native_dataflow",
     "mcp_tools",
     "memory_scheduler_demo",
@@ -60,10 +61,12 @@ members = [
     "rag_retrieval_demo",
     "rag_indexing_demo",
     "adversarial_testing_demo",
+    "production_observability",
     "llm_fallback_chain",
     "resume_from_checkpoint",
     "claw_demo",
     "swarm_orchestrator",
+    "swarm_hitl_gate",
 ]
 
 [workspace.package]

@@ -3,8 +3,26 @@
 //! Defines abstract storage interfaces that can be implemented
 //! by different storage backends (in-memory, file, database, etc.)
 
-use crate::agent::error::AgentResult;
+use crate::agent::error::{AgentError, AgentResult};
 use async_trait::async_trait;
+
+// ============================================================================
+// Object Metadata
+// ============================================================================
+
+/// Metadata for an object held in an object store.
+///
+/// Returned by [`ObjectStore::get_metadata`] without downloading the object
+/// body (equivalent to an HTTP `HEAD` request).
+#[derive(Debug, Clone)]
+pub struct ObjectMetadata {
+    /// Size of the object in bytes.
+    pub size: u64,
+    /// MIME type / `Content-Type`, if known.
+    pub content_type: Option<String>,
+    /// RFC 3339 last-modified timestamp, if known.
+    pub last_modified: Option<String>,
+}
 
 // ============================================================================
 // Generic Storage Trait
@@ -124,6 +142,42 @@ pub trait ObjectStore: Send + Sync {
     ///
     /// `expires_secs` is the number of seconds until the URL becomes invalid.
     async fn presigned_get_url(&self, key: &str, expires_secs: u64) -> AgentResult<String>;
+
+    /// Generate a time-limited presigned URL for a `PUT` request.
+    ///
+    /// Clients can use the returned URL to upload an object directly to the
+    /// storage backend without routing bytes through this server.
+    ///
+    /// `expires_secs` is the number of seconds until the URL becomes invalid.
+    /// `content_type` optionally constrains the upload to a specific MIME type;
+    /// the client must send the same `Content-Type` header when using the URL.
+    ///
+    /// Returns `Err` by default. Implementations backed by S3-compatible storage
+    /// should override this method.
+    async fn presigned_put_url(
+        &self,
+        key: &str,
+        expires_secs: u64,
+        content_type: Option<&str>,
+    ) -> AgentResult<String> {
+        let _ = (key, expires_secs, content_type);
+        Err(AgentError::ExecutionFailed(
+            "presigned_put_url is not supported by this ObjectStore implementation".into(),
+        ))
+    }
+
+    /// Retrieve metadata for an object without downloading its bytes.
+    ///
+    /// Returns `Ok(None)` if the key does not exist.
+    ///
+    /// The default implementation returns `Err`. Backends that support
+    /// `HEAD`-style requests (e.g. S3) should override this method.
+    async fn get_metadata(&self, key: &str) -> AgentResult<Option<ObjectMetadata>> {
+        let _ = key;
+        Err(AgentError::ExecutionFailed(
+            "get_metadata is not supported by this ObjectStore implementation".into(),
+        ))
+    }
 }
 
 #[cfg(test)]

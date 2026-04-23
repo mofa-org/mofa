@@ -126,7 +126,7 @@ mod tests {
         let role = Role::new("admin")
             .with_permission("tool:delete")
             .with_permission("tool:create");
-        
+
         assert!(role.has_permission("tool:delete"));
         assert!(role.has_permission("tool:create"));
         assert!(!role.has_permission("tool:read"));
@@ -135,18 +135,18 @@ mod tests {
     #[test]
     fn test_role_registry() {
         let mut registry = RoleRegistry::new();
-        
+
         let admin = Role::new("admin")
             .with_permission("tool:delete")
             .with_permission("tool:create");
-        
+
         let user = Role::new("user")
             .with_permission("tool:read")
             .with_parent_role("admin"); // Inherit from admin
-        
+
         registry.register_role(admin);
         registry.register_role(user);
-        
+
         assert!(registry.has_permission("admin", "tool:delete"));
         assert!(registry.has_permission("user", "tool:read"));
         // User should inherit admin permissions

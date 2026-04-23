@@ -82,8 +82,16 @@ impl SocketIoBridge {
 
     /// Build the Socket.IO layer and a companion router.
     ///
-    /// Apply the returned `layer` to your axum application.
-    pub fn build(self) -> (socketioxide::layer::SocketIoLayer, Router) {
+    /// Returns `(layer, router, io)`. Apply `layer` to your axum application.
+    /// The returned [`SocketIo`] handle can be used to emit events server-side
+    /// (e.g. file-upload progress notifications from HTTP handlers).
+    pub fn build(
+        self,
+    ) -> (
+        socketioxide::layer::SocketIoLayer,
+        Router,
+        socketioxide::SocketIo,
+    ) {
         let auth_token = self.config.auth_token.clone();
         // One clone for the forwarding task, the original consumed by io.ns()
         let namespace_fwd = self.config.namespace.clone();
@@ -159,10 +167,51 @@ impl SocketIoBridge {
             },
         );
 
-        (layer, Router::new())
+        (layer, Router::new(), io)
     }
 }
 
 fn agent_message_to_json(msg: &AgentMessage) -> Value {
     serde_json::to_value(msg).unwrap_or_else(|_| json!({ "error": "serialization failed" }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_config_has_expected_values() {
+        let cfg = SocketIoConfig::new();
+        assert_eq!(cfg.namespace, "/agents");
+        assert!(cfg.auth_token.is_none());
+    }
+
+    #[test]
+    fn with_auth_token_sets_token() {
+        let cfg = SocketIoConfig::new().with_auth_token("s3cr3t");
+        assert_eq!(cfg.auth_token.as_deref(), Some("s3cr3t"));
+    }
+
+    #[test]
+    fn with_namespace_overrides_default() {
+        let cfg = SocketIoConfig::new().with_namespace("/gateway");
+        assert_eq!(cfg.namespace, "/gateway");
+    }
+
+    #[test]
+    fn builder_is_composable() {
+        let cfg = SocketIoConfig::new()
+            .with_auth_token("tok")
+            .with_namespace("/custom");
+        assert_eq!(cfg.auth_token.as_deref(), Some("tok"));
+        assert_eq!(cfg.namespace, "/custom");
+    }
+
+    #[test]
+    fn default_trait_impl_matches_new() {
+        let a = SocketIoConfig::default();
+        let b = SocketIoConfig::new();
+        assert_eq!(a.namespace, b.namespace);
+        assert_eq!(a.auth_token, b.auth_token);
+    }
 }

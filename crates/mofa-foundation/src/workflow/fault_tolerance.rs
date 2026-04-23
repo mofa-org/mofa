@@ -223,12 +223,11 @@ pub(crate) async fn execute_with_policy<S: GraphState>(
                     return Err(NodeExecutionOutcome::Error(e));
                 }
 
-                last_error = Some(e);
-
                 // Still have retries left?
                 if attempt + 1 < max_attempts {
                     let delay = policy.backoff_for_attempt(attempt);
-                    let err_msg = last_error.as_ref().unwrap().to_string();
+                    let err_msg = e.to_string();
+                    last_error = Some(e);
 
                     debug!(
                         node_id = node_id,
@@ -251,6 +250,8 @@ pub(crate) async fn execute_with_policy<S: GraphState>(
                     }
 
                     tokio::time::sleep(delay).await;
+                } else {
+                    last_error = Some(e);
                 }
             }
         }
@@ -318,4 +319,3 @@ pub(crate) enum NodeExecutionOutcome {
 }
 
 // ────────────────────── Tests ──────────────────────
-

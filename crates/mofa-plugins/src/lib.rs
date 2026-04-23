@@ -944,7 +944,7 @@ impl MemoryPlugin {
             // 按重要性降序排序
             // Sort by importance descending
             self.memories
-                .sort_by(|a, b| b.importance.partial_cmp(&a.importance).unwrap());
+                .sort_by(|a, b| b.importance.total_cmp(&a.importance));
             // 截断保留最重要的记忆
             // Truncate to keep most important ones
             self.memories.truncate(self.max_memories);

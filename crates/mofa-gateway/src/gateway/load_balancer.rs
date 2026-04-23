@@ -112,38 +112,39 @@ impl LoadBalancer {
                 // proportionally to its weight
                 let weights = self.node_weights.read().await;
                 let mut current_weights = self.weighted_current_weights.write().await;
-                
+
                 // Initialize current weights if needed
                 for node in nodes.iter() {
                     current_weights.entry(node.clone()).or_insert(0);
                 }
-                
+
                 // Find node with maximum (current_weight + weight)
                 let mut max_effective_weight = i32::MIN;
                 let mut selected = None;
-                
+
                 for node in nodes.iter() {
                     let weight = weights.get(node).copied().unwrap_or(1) as i32;
                     let current = current_weights.get(node).copied().unwrap_or(0);
                     let effective_weight = current + weight;
-                    
+
                     if effective_weight > max_effective_weight {
                         max_effective_weight = effective_weight;
                         selected = Some(node.clone());
                     }
                 }
-                
+
                 // Decrease current weight of selected node by sum of all weights
                 if let Some(ref selected_node) = selected {
-                    let total_weight: i32 = nodes.iter()
+                    let total_weight: i32 = nodes
+                        .iter()
                         .map(|n| weights.get(n).copied().unwrap_or(1) as i32)
                         .sum();
-                    
+
                     if let Some(current) = current_weights.get_mut(selected_node) {
                         *current -= total_weight;
                     }
                 }
-                
+
                 Ok(selected)
             }
             LoadBalancingAlgorithm::Random => {

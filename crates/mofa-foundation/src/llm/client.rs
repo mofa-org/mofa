@@ -3,6 +3,31 @@
 //!
 //! 提供便捷的 LLM 交互 API，包括消息管理、工具调用循环等
 //! Provides convenient LLM interaction APIs, including message management, tool call loops, etc.
+//!
+//! ## OpenTelemetry Instrumentation (`otel-tracing` feature)
+//!
+//! Enable the `otel-tracing` feature to emit a `gen_ai.chat_completion` span
+//! (SpanKind::Client) on every [`ChatSession::send`] call.
+//!
+//! ```toml
+//! # Cargo.toml
+//! mofa-foundation = { version = "0.1", features = ["otel-tracing"] }
+//! ```
+//!
+//! The span records these attributes:
+//!
+//! | Attribute | Value |
+//! |-----------|-------|
+//! | `gen_ai.system` | Provider name, e.g. `"openai"` |
+//! | `gen_ai.request.model` | Model name, e.g. `"gpt-4o"` |
+//! | `gen_ai.response.model` | Model that actually responded |
+//! | `gen_ai.usage.input_tokens` | Prompt tokens from the response |
+//! | `gen_ai.usage.output_tokens` | Completion tokens from the response |
+//! | `session.id` | UUID of the [`ChatSession`] |
+//!
+//! The global tracer is read via [`opentelemetry::global::tracer`] — set any
+//! OTel-compatible provider (Jaeger, OTLP, console) before calling [`ChatSession::send`]
+//! and spans will appear automatically.
 
 use super::provider::{LLMConfig, LLMProvider};
 use super::token_budget::ContextWindowManager;
@@ -1119,7 +1144,6 @@ impl ChatSession {
             self.messages.push(msg);
         }
     }
-
     /// Apply the ContextWindowManager's sliding window policy to `self.messages`.
     ///
     /// Rebuilds `self.messages` from the trim result, stripping the system prefix
@@ -1195,8 +1219,7 @@ impl ChatSession {
                     Ok(resp) => {
                         if let Some(text) = resp.content() {
                             self.messages.clear();
-                            self.messages
-                                .push(ChatMessage::assistant(text.to_string()));
+                            self.messages.push(ChatMessage::assistant(text.to_string()));
                         }
                     }
                     Err(e) => {
@@ -1220,10 +1243,9 @@ impl ChatSession {
 
                 // Temporarily shrink the window to half by re-applying
                 let trimmed = {
-                    let half_manager = ContextWindowManager::new(half_budget)
-                        .with_policy(super::token_budget::ContextWindowPolicy::SlidingWindow {
-                            keep_last_n: 2,
-                        });
+                    let half_manager = ContextWindowManager::new(half_budget).with_policy(
+                        super::token_budget::ContextWindowPolicy::SlidingWindow { keep_last_n: 2 },
+                    );
                     half_manager.apply(&candidate)
                 };
 
@@ -1276,12 +1298,86 @@ impl ChatSession {
             builder = builder.with_tool_executor(executor.clone());
         }
 
+        // OTel span for the provider call (feature-gated).
+        // We use local helper functions to avoid `#[cfg]` on `let` statements.
+        #[cfg(feature = "otel-tracing")]
+        fn __make_otel_span(
+            client: &LLMClient,
+            session_id: uuid::Uuid,
+        ) -> opentelemetry::global::BoxedSpan {
+            use opentelemetry::KeyValue;
+            use opentelemetry::trace::Span as _;
+            use opentelemetry::trace::{SpanKind, Tracer};
+
+            let tracer = opentelemetry::global::tracer("mofa-foundation");
+            let provider_name = client.provider().name().to_string();
+            let model_name = client
+                .config()
+                .default_model
+                .clone()
+                .unwrap_or_else(|| client.provider().default_model().to_string());
+
+            let mut span = tracer
+                .span_builder("gen_ai.chat_completion")
+                .with_kind(SpanKind::Client)
+                .start(&tracer);
+
+            span.set_attribute(KeyValue::new("gen_ai.system", provider_name));
+            span.set_attribute(KeyValue::new("gen_ai.request.model", model_name));
+            span.set_attribute(KeyValue::new("session.id", session_id.to_string()));
+            span
+        }
+
+        #[cfg(not(feature = "otel-tracing"))]
+        fn __make_otel_span(_client: &LLMClient, _session_id: uuid::Uuid) -> () {
+            ()
+        }
+
+        let mut __otel_span = __make_otel_span(&self.client, self.session_id);
+
         // Fire the request
         let response = if self.tool_executor.is_some() {
             builder.send_with_tools().await?
         } else {
             builder.send().await?
         };
+
+        #[cfg(feature = "otel-tracing")]
+        fn __end_otel_span(
+            span: &mut opentelemetry::global::BoxedSpan,
+            response: &ChatCompletionResponse,
+        ) {
+            use opentelemetry::KeyValue;
+            use opentelemetry::trace::Span as _;
+
+            span.set_attribute(KeyValue::new(
+                "gen_ai.usage.input_tokens",
+                response
+                    .usage
+                    .as_ref()
+                    .map(|u| u.prompt_tokens as i64)
+                    .unwrap_or(0),
+            ));
+            span.set_attribute(KeyValue::new(
+                "gen_ai.usage.output_tokens",
+                response
+                    .usage
+                    .as_ref()
+                    .map(|u| u.completion_tokens as i64)
+                    .unwrap_or(0),
+            ));
+            span.set_attribute(KeyValue::new(
+                "gen_ai.response.model",
+                response.model.clone(),
+            ));
+            span.set_status(opentelemetry::trace::Status::Ok);
+            span.end();
+        }
+
+        #[cfg(not(feature = "otel-tracing"))]
+        fn __end_otel_span(_span: &mut (), _response: &ChatCompletionResponse) {}
+
+        __end_otel_span(&mut __otel_span, &response);
 
         // Store response metadata
         self.last_response_metadata = Some(super::types::LLMResponseMetadata::from(&response));
@@ -1690,7 +1786,12 @@ mod tests {
             },
         );
 
-        let _ = client.chat().user("hi").send().await.expect("chat should work");
+        let _ = client
+            .chat()
+            .user("hi")
+            .send()
+            .await
+            .expect("chat should work");
 
         let req = provider
             .last_request
@@ -1720,7 +1821,10 @@ mod tests {
         let provider = Arc::new(MockProvider::new("emb-model", Some("ok")));
         let client = LLMClient::new(provider);
 
-        let single = client.embed("one").await.expect("single embedding should work");
+        let single = client
+            .embed("one")
+            .await
+            .expect("single embedding should work");
         assert_eq!(single, vec![0.1, 0.2]);
 
         let batch = client
@@ -1737,8 +1841,8 @@ mod tests {
         let provider = Arc::new(MockProvider::new("model", Some("ok")));
         let client = LLMClient::new(provider);
         let manager = Arc::new(super::ContextWindowManager::new(8192));
-        let session = ChatSession::with_id(uuid::Uuid::nil(), client)
-            .with_token_budget(manager, 6554, false);
+        let session =
+            ChatSession::with_id(uuid::Uuid::nil(), client).with_token_budget(manager, 6554, false);
         // The budget is set — force_compress should work without panicking even on empty history
         assert_eq!(session.messages().len(), 0);
     }
@@ -1750,14 +1854,22 @@ mod tests {
         let mut session = ChatSession::with_id(uuid::Uuid::nil(), client);
         // Add 10 assistant messages + 1 user message
         for i in 0..10 {
-            session.messages_mut().push(ChatMessage::assistant(format!("msg {}", i)));
+            session
+                .messages_mut()
+                .push(ChatMessage::assistant(format!("msg {}", i)));
         }
-        session.messages_mut().push(ChatMessage::user("final question"));
+        session
+            .messages_mut()
+            .push(ChatMessage::user("final question"));
         // force_compress with no manager should keep last 4 messages and return the user msg
         let popped = session.force_compress().await;
         assert!(popped.is_some(), "should return the user message");
         // After compress, history ≤ 4
-        assert!(session.messages().len() <= 4, "expected at most 4 messages, got {}", session.messages().len());
+        assert!(
+            session.messages().len() <= 4,
+            "expected at most 4 messages, got {}",
+            session.messages().len()
+        );
     }
 
     #[tokio::test]
@@ -1766,18 +1878,23 @@ mod tests {
         let client = LLMClient::new(provider);
         // Small window of 100 tokens, use_llm_summarize=false so no LLM call
         let manager = Arc::new(super::ContextWindowManager::new(100));
-        let mut session = ChatSession::with_id(uuid::Uuid::nil(), client)
-            .with_token_budget(manager, 50, false);
+        let mut session =
+            ChatSession::with_id(uuid::Uuid::nil(), client).with_token_budget(manager, 50, false);
         // Build a large history
         for i in 0..20 {
-            session.messages_mut().push(ChatMessage::assistant(format!("message number {}", i)));
+            session
+                .messages_mut()
+                .push(ChatMessage::assistant(format!("message number {}", i)));
         }
         session.messages_mut().push(ChatMessage::user("hello"));
         let before = session.messages().len();
         let popped = session.force_compress().await;
         assert!(popped.is_some());
         // History must have been trimmed
-        assert!(session.messages().len() < before, "history should shrink after force_compress");
+        assert!(
+            session.messages().len() < before,
+            "history should shrink after force_compress"
+        );
     }
 
     #[tokio::test]
@@ -1788,7 +1905,11 @@ mod tests {
         // Push a user message manually so send_existing_messages can send it
         session.messages_mut().push(ChatMessage::user("hi"));
         let result = session.send_existing_messages().await;
-        assert!(result.is_ok(), "send_existing_messages should succeed: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "send_existing_messages should succeed: {:?}",
+            result
+        );
         assert_eq!(result.unwrap(), "hello from mock");
     }
 
@@ -1799,12 +1920,17 @@ mod tests {
         // Session without token budget — trigger = 0
         let mut session = ChatSession::with_id(uuid::Uuid::nil(), client);
         for i in 0..5 {
-            session.messages_mut().push(ChatMessage::assistant(format!("past {}", i)));
+            session
+                .messages_mut()
+                .push(ChatMessage::assistant(format!("past {}", i)));
         }
         // send() adds one more user message — total should be 6 after send
         let _ = session.send("new question").await;
         // History contains the prior 5 + new user msg + assistant reply = 7
-        assert!(session.messages().len() >= 6, "no messages should be dropped when trigger=0");
+        assert!(
+            session.messages().len() >= 6,
+            "no messages should be dropped when trigger=0"
+        );
     }
 }
 

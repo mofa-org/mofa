@@ -106,7 +106,9 @@ async fn run_command(cli: Cli) -> CliResult<()> {
         }) => {
             commands::new::run(&name, &template, output.as_deref())
                 .into_report()
-                .attach_with(|| format!("scaffolding project '{name}' with template '{template}'"))?;
+                .attach_with(|| {
+                    format!("scaffolding project '{name}' with template '{template}'")
+                })?;
         }
 
         Some(Commands::Init { path }) => {
@@ -384,6 +386,18 @@ async fn run_command(cli: Cli) -> CliResult<()> {
                     &qdrant_collection,
                 )
                 .await?;
+            }
+        },
+
+        Some(Commands::Swarm { action }) => match action {
+            cli::SwarmCommands::Run {
+                file,
+                dry_run,
+                metrics,
+                pattern,
+                timeout,
+            } => {
+                commands::swarm::run(&file, dry_run, metrics, pattern, timeout).await?;
             }
         },
 

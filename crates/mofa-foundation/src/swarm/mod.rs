@@ -1,6 +1,7 @@
 pub mod analyzer;
 pub mod config;
 pub mod dag;
+pub mod hitl_gate;
 pub mod patterns;
 pub mod telemetry;
 
@@ -10,6 +11,7 @@ pub use config::{
     SwarmResult, SwarmStatus,
 };
 pub use dag::{DependencyEdge, DependencyKind, RiskLevel, SubtaskDAG, SubtaskStatus, SwarmSubtask};
+pub use hitl_gate::{HITLDecision, HITLGateMetrics, HITLNotifier, SwarmHITLGate};
 pub use patterns::CoordinationPattern;
 pub mod scheduler;
 pub use scheduler::{

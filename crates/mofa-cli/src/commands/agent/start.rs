@@ -133,6 +133,24 @@ pub async fn run(
         }
     }
 
+    // Register with persistent wrapper to ensure it appears in status reporting
+    let mut persistent_metadata =
+        crate::state::AgentMetadata::new(agent_id.to_string(), agent_config.name.clone());
+    persistent_metadata.description = agent_config.description.clone();
+    if !config_file.as_os_str().is_empty() {
+        persistent_metadata = persistent_metadata.with_config(config_file.clone());
+    }
+    persistent_metadata.mark_started(std::process::id());
+
+    if let Err(e) = ctx.persistent_agents.register(persistent_metadata).await {
+        let _ = ctx.agent_store.delete(agent_id);
+        let _ = ctx.agent_registry.unregister(agent_id).await;
+        return Err(CliError::StateError(format!(
+            "Failed to update persistent agent state '{}': {}",
+            agent_id, e
+        )));
+    }
+
     println!("{} Agent '{}' started successfully", "✓".green(), agent_id);
 
     Ok(())

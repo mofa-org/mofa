@@ -29,6 +29,7 @@ impl Default for MessageGraphExecutorConfig {
 
 /// Why a message entered dead-letter handling.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum DeadLetterReason {
     NoRouteMatch,
     MaxHopsExceeded { max_hops: u16, attempted_hops: u16 },
@@ -96,6 +97,7 @@ impl MessageGraphExecutionReport {
 
 /// Runtime errors for message graph execution.
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum MessageGraphExecutorError {
     #[error(transparent)]
     Graph(#[from] MessageGraphError),
@@ -697,24 +699,21 @@ mod tests {
         .unwrap();
 
         let fraud_bus = bus.clone();
-        let fraud_receiver = tokio::spawn(async move {
-            fraud_bus
-                .receive_message(
-                    "fraud-worker",
-                    CommunicationMode::PointToPoint("message_graph_executor".to_string()),
-                )
-                .await
-        });
+        let mut fraud_receiver = fraud_bus
+            .subscribe(
+                "fraud-worker",
+                CommunicationMode::PointToPoint("message_graph_executor".to_string()),
+            )
+            .await
+            .unwrap();
         let stream_bus = bus.clone();
-        let stream_receiver = tokio::spawn(async move {
-            stream_bus
-                .receive_message(
-                    "stream-consumer",
-                    CommunicationMode::PubSub("orders.fulfillment".to_string()),
-                )
-                .await
-        });
-        tokio::time::sleep(Duration::from_millis(20)).await;
+        let mut stream_receiver = stream_bus
+            .subscribe(
+                "stream-consumer",
+                CommunicationMode::PubSub("orders.fulfillment".to_string()),
+            )
+            .await
+            .unwrap();
 
         let envelope = MessageEnvelope::new("order.created", br#"{"id":"A-100"}"#.to_vec())
             .with_header("risk", "high");
@@ -729,20 +728,16 @@ mod tests {
                 .any(|d| d.to == "fulfillment_stream")
         );
 
-        let fraud_message = timeout(Duration::from_secs(1), fraud_receiver)
+        let fraud_message = timeout(Duration::from_secs(1), fraud_receiver.recv())
             .await
-            .unwrap()
-            .unwrap()
             .unwrap()
             .unwrap();
         let routed_envelope = decode_event_envelope(fraud_message);
         assert_eq!(routed_envelope.message_type, envelope.message_type);
         assert_eq!(routed_envelope.hop_count, 2);
 
-        let stream_message = timeout(Duration::from_secs(1), stream_receiver)
+        let stream_message = timeout(Duration::from_secs(1), stream_receiver.recv())
             .await
-            .unwrap()
-            .unwrap()
             .unwrap()
             .unwrap();
         match stream_message {
@@ -773,15 +768,13 @@ mod tests {
         .unwrap();
 
         let dlq_bus = bus.clone();
-        let dlq_receiver = tokio::spawn(async move {
-            dlq_bus
-                .receive_message(
-                    "dlq-consumer",
-                    CommunicationMode::PubSub("orders.dlq".to_string()),
-                )
-                .await
-        });
-        tokio::time::sleep(Duration::from_millis(20)).await;
+        let mut dlq_receiver = dlq_bus
+            .subscribe(
+                "dlq-consumer",
+                CommunicationMode::PubSub("orders.dlq".to_string()),
+            )
+            .await
+            .unwrap();
 
         let envelope = MessageEnvelope::new("order.cancelled", br#"{"id":"A-200"}"#.to_vec());
         let report = executor.execute(envelope).await.unwrap();
@@ -793,10 +786,8 @@ mod tests {
         assert!(report.dead_letters[0].delivered);
         assert!(report.dead_letters[0].delivery_error.is_none());
 
-        let dead_letter_message = timeout(Duration::from_secs(1), dlq_receiver)
+        let dead_letter_message = timeout(Duration::from_secs(1), dlq_receiver.recv())
             .await
-            .unwrap()
-            .unwrap()
             .unwrap()
             .unwrap();
         let dead_letter_envelope = decode_event_envelope(dead_letter_message);
@@ -880,15 +871,13 @@ mod tests {
         .unwrap();
 
         let dlq_bus = bus.clone();
-        let dlq_receiver = tokio::spawn(async move {
-            dlq_bus
-                .receive_message(
-                    "dlq-consumer",
-                    CommunicationMode::PubSub("backpressure.dlq".to_string()),
-                )
-                .await
-        });
-        tokio::time::sleep(Duration::from_millis(20)).await;
+        let mut dlq_receiver = dlq_bus
+            .subscribe(
+                "dlq-consumer",
+                CommunicationMode::PubSub("backpressure.dlq".to_string()),
+            )
+            .await
+            .unwrap();
 
         let report = executor
             .execute(MessageEnvelope::new("work", b"{}".to_vec()))
@@ -903,10 +892,8 @@ mod tests {
         assert!(report.dead_letters[0].delivered);
         assert!(report.dead_letters[0].delivery_error.is_none());
 
-        let dead_letter_message = timeout(Duration::from_secs(1), dlq_receiver)
+        let dead_letter_message = timeout(Duration::from_secs(1), dlq_receiver.recv())
             .await
-            .unwrap()
-            .unwrap()
             .unwrap()
             .unwrap();
         let dead_letter_envelope = decode_event_envelope(dead_letter_message);

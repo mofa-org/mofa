@@ -28,6 +28,28 @@ pub enum CommunicationMode {
 }
 pub type AgentChannelMap =
     Arc<RwLock<HashMap<String, HashMap<CommunicationMode, broadcast::Sender<Vec<u8>>>>>>;
+
+/// A stateful receiver for consuming messages from the AgentBus.
+pub struct MessageReceiver {
+    inner: tokio::sync::broadcast::Receiver<Vec<u8>>,
+}
+
+impl MessageReceiver {
+    /// Receive the next message from the channel.
+    pub async fn recv(&mut self) -> Result<AgentMessage, BusError> {
+        match self.inner.recv().await {
+            Ok(data) => {
+                bincode::deserialize(&data).map_err(|e| BusError::Serialization(e.to_string()))
+            }
+            Err(tokio::sync::broadcast::error::RecvError::Closed) => {
+                Err(BusError::ChannelNotFound("Channel closed".to_string()))
+            }
+            Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => Err(
+                BusError::ChannelNotFound(format!("Channel lagged by {}", n)),
+            ),
+        }
+    }
+}
 /// 通信总线核心结构体
 /// Core structure for the communication bus
 #[derive(Clone)]
@@ -168,47 +190,24 @@ impl AgentBus {
         Ok(())
     }
 
-    pub async fn receive_message(
+    pub async fn subscribe(
         &self,
         id: &str,
         mode: CommunicationMode,
-    ) -> Result<Option<AgentMessage>, BusError> {
-        // 处理广播模式
-        // Handle broadcast mode
-        if matches!(mode, CommunicationMode::Broadcast) {
-            let mut receiver = self.broadcast_channel.subscribe();
-            match receiver.recv().await {
-                Ok(data) => {
-                    let message = bincode::deserialize(&data)
-                        .map_err(|e| BusError::Serialization(e.to_string()))?;
-                    Ok(Some(message))
-                }
-                Err(_) => Ok(None),
-            }
+    ) -> Result<MessageReceiver, BusError> {
+        let receiver = if matches!(mode, CommunicationMode::Broadcast) {
+            self.broadcast_channel.subscribe()
         } else {
-            // 处理其他模式
-            // Handle other modes
-            let channel = {
-                let agent_channels = self.agent_channels.read().await;
-                let Some(channels) = agent_channels.get(id) else {
-                    return Ok(None);
-                };
-                let Some(channel) = channels.get(&mode) else {
-                    return Ok(None);
-                };
-                channel.clone()
-            };
-
-            let mut receiver = channel.subscribe();
-            match receiver.recv().await {
-                Ok(data) => {
-                    let message = bincode::deserialize(&data)
-                        .map_err(|e| BusError::Serialization(e.to_string()))?;
-                    Ok(Some(message))
-                }
-                Err(_) => Ok(None),
-            }
-        }
+            let agent_channels = self.agent_channels.read().await;
+            let channels = agent_channels
+                .get(id)
+                .ok_or_else(|| BusError::AgentNotRegistered(id.to_string()))?;
+            let channel = channels.get(&mode).ok_or_else(|| {
+                BusError::ChannelNotFound(format!("Channel not found for mode {:?}", mode))
+            })?;
+            channel.subscribe()
+        };
+        Ok(MessageReceiver { inner: receiver })
     }
 
     /// Subscribe to the global broadcast channel.
@@ -268,17 +267,15 @@ mod tests {
         .unwrap();
 
         let bus_for_receive = bus.clone();
-        let receive_task = tokio::spawn(async move {
-            bus_for_receive
-                .receive_message(
-                    "receiver",
-                    CommunicationMode::PointToPoint("sender".to_string()),
-                )
-                .await
-        });
+        let mut receiver = bus_for_receive
+            .subscribe(
+                "receiver",
+                CommunicationMode::PointToPoint("sender".to_string()),
+            )
+            .await
+            .unwrap();
 
-        // Give receive_message time to subscribe and park on recv().
-        sleep(Duration::from_millis(50)).await;
+        let receive_task = tokio::spawn(async move { receiver.recv().await });
 
         let writer_meta = test_agent_metadata("writer");
         let register_res = timeout(
@@ -311,10 +308,9 @@ mod tests {
             .expect("receive task timed out")
             .expect("receive task join failed")
             .expect("receive_message returned error");
-        assert!(
-            received.is_some(),
-            "expected one received point-to-point message"
-        );
+        // received is an AgentMessage, so it successfully received.
+        // We can just verify it's the expected TaskRequest.
+        assert!(matches!(received, AgentMessage::TaskRequest { .. }));
     }
 
     #[tokio::test]
@@ -322,14 +318,12 @@ mod tests {
         let bus = AgentBus::new();
 
         let bus_for_receive = bus.clone();
-        let receive_task = tokio::spawn(async move {
-            bus_for_receive
-                .receive_message("receiver", CommunicationMode::Broadcast)
-                .await
-        });
+        let mut receiver = bus_for_receive
+            .subscribe("receiver", CommunicationMode::Broadcast)
+            .await
+            .unwrap();
 
-        // Give receive_message time to subscribe and park on recv().
-        sleep(Duration::from_millis(50)).await;
+        let receive_task = tokio::spawn(async move { receiver.recv().await });
 
         let writer_meta = test_agent_metadata("writer");
         let register_res = timeout(
@@ -362,9 +356,7 @@ mod tests {
             .expect("receive task timed out")
             .expect("receive task join failed")
             .expect("receive_message returned error");
-        assert!(
-            received.is_some(),
-            "expected one received broadcast message"
-        );
+        // received is an AgentMessage, so it successfully received.
+        assert!(matches!(received, AgentMessage::TaskRequest { .. }));
     }
 }

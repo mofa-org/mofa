@@ -24,20 +24,20 @@
 //! | [`RateLimiterConfig`] | Shared rate limiter configuration |
 
 pub mod auth;
-pub mod rate_limiter;
+mod config_error;
 pub mod envelope;
 pub mod error;
+pub mod rate_limiter;
 pub mod route;
-mod config_error;
 mod types;
 
 #[cfg(test)]
 mod tests;
 
 pub use auth::{ApiKeyStore, AuthClaims, AuthError, AuthProvider};
-pub use envelope::{AgentResponse, RequestEnvelope};
-pub use rate_limiter::{GatewayRateLimiter, KeyStrategy, RateLimitDecision, RateLimiterConfig};
-pub use error::RegistryError;
-pub use route::{GatewayRoute, HttpMethod, RouteRegistry, RoutingContext};
 pub use config_error::GatewayConfigError;
+pub use envelope::{AgentResponse, RequestEnvelope};
+pub use error::RegistryError;
+pub use rate_limiter::{GatewayRateLimiter, KeyStrategy, RateLimitDecision, RateLimiterConfig};
+pub use route::{GatewayRoute, HttpMethod, RouteRegistry, RoutingContext};
 pub use types::{GatewayContext, GatewayRequest, GatewayResponse, RouteMatch};

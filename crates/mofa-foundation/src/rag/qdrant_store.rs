@@ -56,6 +56,12 @@ fn string_id_to_u64(id: &str) -> u64 {
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     id.hash(&mut hasher);
     hasher.finish()
+    let digest = Sha256::digest(id.as_bytes());
+    u64::from_le_bytes(
+        digest[..8]
+            .try_into()
+            .expect("SHA-256 output is at least 8 bytes"),
+    )
 }
 
 /// Extract a string value from a Qdrant payload Value.
