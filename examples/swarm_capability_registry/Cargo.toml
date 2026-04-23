@@ -1,0 +1,11 @@
+[package]
+name = "swarm_capability_registry"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "swarm_capability_registry"
+path = "src/main.rs"
+
+[dependencies]
+mofa-foundation = { path = "../../crates/mofa-foundation" }
