@@ -97,19 +97,13 @@ mod tests {
         .unwrap();
     }
 
-    // Receive one message for a peer
-    async fn receive_peer(
-        bus: &AgentBus,
-        id: &str,
-    ) -> Result<AgentMessage, mofa_kernel::bus::BusError> {
-        let mut receiver = bus
-            .subscribe(
-                id,
-                CommunicationMode::PointToPoint("coordinator".to_string()),
-            )
-            .await
-            .unwrap();
-        receiver.recv().await
+    async fn subscribe_peer(bus: &AgentBus, id: &str) -> mofa_kernel::bus::MessageReceiver {
+        bus.subscribe(
+            id,
+            CommunicationMode::PointToPoint("coordinator".to_string()),
+        )
+        .await
+        .unwrap()
     }
 
     #[tokio::test]
