@@ -97,6 +97,15 @@ mod tests {
         .unwrap();
     }
 
+    async fn subscribe_peer(bus: &AgentBus, id: &str) -> mofa_kernel::bus::MessageReceiver {
+        bus.subscribe(
+            id,
+            CommunicationMode::PointToPoint("coordinator".to_string()),
+        )
+        .await
+        .unwrap()
+    }
+
     // Receive one message for a peer
     async fn receive_peer(
         bus: &AgentBus,
