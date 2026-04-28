@@ -148,7 +148,8 @@ impl RagPipeline {
 mod tests {
     use super::*;
     use crate::rag::types::Document;
-    use std::sync::{Arc, Mutex};
+    use std::sync::Arc;
+    use tokio::sync::Mutex;
 
     struct FakeRetriever {
         docs: Vec<ScoredDocument>,
@@ -167,7 +168,7 @@ mod tests {
     #[async_trait]
     impl Retriever for FakeRetriever {
         async fn retrieve(&self, _query: &str, top_k: usize) -> AgentResult<Vec<ScoredDocument>> {
-            let mut guard = self.last_top_k.lock().unwrap();
+            let mut guard = self.last_top_k.lock().await;
             *guard = Some(top_k);
             Ok(self.docs.iter().take(top_k).cloned().collect())
         }
@@ -252,7 +253,7 @@ mod tests {
         );
         let _ = pipeline.run_with_top_k("hello", 2).await.unwrap();
 
-        let seen = *top_k_ref.lock().unwrap();
+        let seen = *top_k_ref.lock().await;
         assert_eq!(seen, Some(2));
     }
 

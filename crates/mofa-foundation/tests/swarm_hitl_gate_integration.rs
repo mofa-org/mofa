@@ -12,8 +12,8 @@ use mofa_foundation::hitl::{
 };
 use mofa_foundation::swarm::{
     FailurePolicy, HITLDecision, HITLGateMetrics, HITLMode, HITLNotifier, ParallelScheduler,
-    RiskLevel, SchedulerSummary, SequentialScheduler, SubtaskDAG, SubtaskExecutorFn,
-    SwarmHITLGate, SwarmScheduler, SwarmSchedulerConfig, SwarmSubtask, TaskOutcome,
+    RiskLevel, SchedulerSummary, SequentialScheduler, SubtaskDAG, SubtaskExecutorFn, SwarmHITLGate,
+    SwarmScheduler, SwarmSchedulerConfig, SwarmSubtask, TaskOutcome,
 };
 use mofa_kernel::hitl::ReviewResponse;
 
@@ -33,9 +33,7 @@ fn make_manager() -> Arc<ReviewManager> {
 }
 
 fn echo_executor() -> SubtaskExecutorFn {
-    Arc::new(|_idx, task: SwarmSubtask| {
-        Box::pin(async move { Ok(format!("{}-done", task.id)) })
-    })
+    Arc::new(|_idx, task: SwarmSubtask| Box::pin(async move { Ok(format!("{}-done", task.id)) }))
 }
 
 /// Spawn a background task that polls `ReviewManager` for pending reviews and
@@ -89,7 +87,10 @@ async fn test_gate_none_mode_bypasses_all_tasks() {
     assert_eq!(summary.succeeded, 1);
     assert_eq!(summary.failed, 0);
     let pending = manager.list_pending(None, None).await.unwrap();
-    assert!(pending.is_empty(), "HITLMode::None must never submit reviews");
+    assert!(
+        pending.is_empty(),
+        "HITLMode::None must never submit reviews"
+    );
 }
 
 // ── Test 2: HITLMode::Required intercepts even Low-risk tasks ────────────────
@@ -105,18 +106,22 @@ async fn test_gate_required_mode_intercepts_low_risk() {
     let executor = gate.wrap_executor(echo_executor());
 
     let mut dag = SubtaskDAG::new("required-mode");
-    dag.add_task(
-        SwarmSubtask::new("low-task", "Search the web").with_risk_level(RiskLevel::Low),
-    );
+    dag.add_task(SwarmSubtask::new("low-task", "Search the web").with_risk_level(RiskLevel::Low));
 
-    spawn_auto_resolver(Arc::clone(&manager), ReviewResponse::Approved { comment: None });
+    spawn_auto_resolver(
+        Arc::clone(&manager),
+        ReviewResponse::Approved { comment: None },
+    );
 
     let summary = SequentialScheduler::with_config(SwarmSchedulerConfig::default())
         .execute(&mut dag, executor)
         .await
         .unwrap();
 
-    assert_eq!(summary.succeeded, 1, "Low-risk task must succeed after approval");
+    assert_eq!(
+        summary.succeeded, 1,
+        "Low-risk task must succeed after approval"
+    );
 }
 
 // ── Test 3: HITLMode::Optional intercepts High-risk tasks ────────────────────
@@ -139,7 +144,9 @@ async fn test_gate_optional_mode_intercepts_high_risk() {
 
     spawn_auto_resolver(
         Arc::clone(&manager),
-        ReviewResponse::Approved { comment: Some("LGTM".to_string()) },
+        ReviewResponse::Approved {
+            comment: Some("LGTM".to_string()),
+        },
     );
 
     let summary = SequentialScheduler::with_config(SwarmSchedulerConfig::default())
@@ -163,9 +170,7 @@ async fn test_gate_optional_mode_passes_low_risk_direct() {
     let executor = gate.wrap_executor(echo_executor());
 
     let mut dag = SubtaskDAG::new("optional-low");
-    dag.add_task(
-        SwarmSubtask::new("low-task", "Search the web").with_risk_level(RiskLevel::Low),
-    );
+    dag.add_task(SwarmSubtask::new("low-task", "Search the web").with_risk_level(RiskLevel::Low));
 
     let summary = SequentialScheduler::with_config(SwarmSchedulerConfig::default())
         .execute(&mut dag, executor)
@@ -174,7 +179,10 @@ async fn test_gate_optional_mode_passes_low_risk_direct() {
 
     assert_eq!(summary.succeeded, 1);
     let pending = manager.list_pending(None, None).await.unwrap();
-    assert!(pending.is_empty(), "Low-risk task in Optional mode must not be reviewed");
+    assert!(
+        pending.is_empty(),
+        "Low-risk task in Optional mode must not be reviewed"
+    );
 }
 
 // ── Test 5: Rejected review causes task failure ───────────────────────────────
@@ -221,7 +229,10 @@ async fn test_gate_rejects_task_on_reviewer_rejection() {
             "failure reason must include reviewer message: {reason}"
         );
     } else {
-        panic!("Expected Failure outcome, got: {:?}", summary.results[0].outcome);
+        panic!(
+            "Expected Failure outcome, got: {:?}",
+            summary.results[0].outcome
+        );
     }
 }
 
@@ -338,7 +349,10 @@ async fn test_gate_works_with_parallel_scheduler() {
     dag.add_dependency(analyze_a, merge).unwrap();
     dag.add_dependency(analyze_b, merge).unwrap();
 
-    spawn_auto_resolver(Arc::clone(&manager), ReviewResponse::Approved { comment: None });
+    spawn_auto_resolver(
+        Arc::clone(&manager),
+        ReviewResponse::Approved { comment: None },
+    );
 
     let summary = ParallelScheduler::with_config(SwarmSchedulerConfig::default())
         .execute(&mut dag, executor)
@@ -363,9 +377,7 @@ async fn test_gate_metrics_track_decisions_correctly() {
 
     // high-a and high-b get intercepted; low bypasses the gate
     let mut dag = SubtaskDAG::new("metrics-dag");
-    dag.add_task(
-        SwarmSubtask::new("high-a", "Write to database").with_risk_level(RiskLevel::High),
-    );
+    dag.add_task(SwarmSubtask::new("high-a", "Write to database").with_risk_level(RiskLevel::High));
     dag.add_task(
         SwarmSubtask::new("high-b", "Deploy service").with_risk_level(RiskLevel::Critical),
     );
@@ -412,7 +424,10 @@ async fn test_gate_metrics_track_decisions_correctly() {
         .unwrap();
 
     let metrics = gate.metrics();
-    assert_eq!(metrics.intercepted, 2, "two high-risk tasks must be intercepted");
+    assert_eq!(
+        metrics.intercepted, 2,
+        "two high-risk tasks must be intercepted"
+    );
 
     // Every intercepted task must resolve to exactly one outcome.
     let resolved =
@@ -458,11 +473,13 @@ async fn test_gate_custom_predicate_overrides_risk_threshold() {
 
     // This task is Critical risk but lacks the capability — must NOT be intercepted.
     dag.add_task(
-        SwarmSubtask::new("compute", "Heavy number crunching")
-            .with_risk_level(RiskLevel::Critical),
+        SwarmSubtask::new("compute", "Heavy number crunching").with_risk_level(RiskLevel::Critical),
     );
 
-    spawn_auto_resolver(Arc::clone(&manager), ReviewResponse::Approved { comment: None });
+    spawn_auto_resolver(
+        Arc::clone(&manager),
+        ReviewResponse::Approved { comment: None },
+    );
 
     let summary = SequentialScheduler::with_config(SwarmSchedulerConfig::default())
         .execute(&mut dag, executor)
@@ -497,7 +514,10 @@ async fn test_gate_notifier_receives_events() {
             self.intercepted.lock().unwrap().push(task.id.clone());
         }
         fn on_decision(&self, task: &SwarmSubtask, decision: HITLDecision, _latency_ms: u64) {
-            self.decisions.lock().unwrap().push((task.id.clone(), decision));
+            self.decisions
+                .lock()
+                .unwrap()
+                .push((task.id.clone(), decision));
         }
     }
 
@@ -514,11 +534,12 @@ async fn test_gate_notifier_receives_events() {
     let executor = gate.clone().wrap_executor(echo_executor());
 
     let mut dag = SubtaskDAG::new("notifier-dag");
-    dag.add_task(
-        SwarmSubtask::new("task-a", "Do something safe").with_risk_level(RiskLevel::Low),
-    );
+    dag.add_task(SwarmSubtask::new("task-a", "Do something safe").with_risk_level(RiskLevel::Low));
 
-    spawn_auto_resolver(Arc::clone(&manager), ReviewResponse::Approved { comment: None });
+    spawn_auto_resolver(
+        Arc::clone(&manager),
+        ReviewResponse::Approved { comment: None },
+    );
 
     let summary = SequentialScheduler::with_config(SwarmSchedulerConfig::default())
         .execute(&mut dag, executor)
@@ -530,9 +551,17 @@ async fn test_gate_notifier_receives_events() {
     let intercepted = notifier.intercepted.lock().unwrap();
     let decisions = notifier.decisions.lock().unwrap();
 
-    assert_eq!(intercepted.len(), 1, "notifier must receive one on_intercepted call");
+    assert_eq!(
+        intercepted.len(),
+        1,
+        "notifier must receive one on_intercepted call"
+    );
     assert_eq!(intercepted[0], "task-a");
-    assert_eq!(decisions.len(), 1, "notifier must receive one on_decision call");
+    assert_eq!(
+        decisions.len(),
+        1,
+        "notifier must receive one on_decision call"
+    );
     assert_eq!(decisions[0].0, "task-a");
     assert_eq!(decisions[0].1, HITLDecision::Approved);
 }

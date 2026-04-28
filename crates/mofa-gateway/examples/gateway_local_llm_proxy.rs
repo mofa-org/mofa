@@ -27,26 +27,24 @@
 
 use mofa_gateway::gateway::{Gateway, GatewayConfig};
 use std::time::Duration;
-use tracing::{info, Level};
+use tracing::{Level, info};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize tracing
-    tracing_subscriber::fmt()
-        .with_max_level(Level::INFO)
-        .init();
+    tracing_subscriber::fmt().with_max_level(Level::INFO).init();
 
     info!("Starting MoFA Gateway with mofa-local-llm proxy");
 
     // Configure gateway
     let mut config = GatewayConfig::default();
-    
+
     // Enable local-llm proxy (default is true, but explicit for clarity)
     config.enable_local_llm_proxy = true;
-    
+
     // Optionally set custom backend URL (defaults to http://localhost:8000)
     // config.local_llm_backend_url = Some("http://localhost:8000".to_string());
-    
+
     // Or use environment variable:
     // MOFA_LOCAL_LLM_URL=http://localhost:8000 cargo run --example gateway_local_llm_proxy
     // MOFA_LOCAL_LLM_ENABLED=true cargo run --example gateway_local_llm_proxy
@@ -73,10 +71,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Wait for shutdown signal
     tokio::signal::ctrl_c().await?;
-    
+
     info!("Shutting down gateway...");
     gateway.stop().await?;
-    
+
     info!("Gateway stopped");
 
     Ok(())

@@ -38,10 +38,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Example 1: List all available models
     println!("\n📋 Example 1: List All Models");
     println!("{}", "-".repeat(60));
-    
+
     match list_models(&client, gateway_url).await {
         Ok(models) => {
-            println!("✅ Found {} models:", models["data"].as_array().unwrap().len());
+            println!(
+                "✅ Found {} models:",
+                models["data"].as_array().unwrap().len()
+            );
             for model in models["data"].as_array().unwrap() {
                 println!("  - {}", model["id"].as_str().unwrap());
             }
@@ -52,14 +55,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Example 2: Get specific model information
     println!("\n📋 Example 2: Get Model Information");
     println!("{}", "-".repeat(60));
-    
+
     let model_id = "qwen2.5-0.5b-instruct";
     match get_model_info(&client, gateway_url, model_id).await {
         Ok(model) => {
             println!("✅ Model Information:");
             println!("  ID: {}", model["id"].as_str().unwrap());
             println!("  Object: {}", model["object"].as_str().unwrap());
-            println!("  Owner: {}", model.get("owned_by").and_then(|v| v.as_str()).unwrap_or("N/A"));
+            println!(
+                "  Owner: {}",
+                model
+                    .get("owned_by")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("N/A")
+            );
         }
         Err(e) => println!("❌ Error: {}", e),
     }
@@ -67,17 +76,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Example 3: Simple chat completion
     println!("\n📋 Example 3: Simple Chat Completion");
     println!("{}", "-".repeat(60));
-    
-    let messages = vec![
-        json!({"role": "user", "content": "What is Rust programming language?"}),
-    ];
-    
+
+    let messages = vec![json!({"role": "user", "content": "What is Rust programming language?"})];
+
     match chat_completion(&client, gateway_url, model_id, messages, 100).await {
         Ok(response) => {
             println!("✅ Chat Response:");
-            let content = response["choices"][0]["message"]["content"].as_str().unwrap();
+            let content = response["choices"][0]["message"]["content"]
+                .as_str()
+                .unwrap();
             println!("  {}", content);
-            
+
             if let Some(usage) = response.get("usage") {
                 println!("\n  Usage:");
                 println!("    Prompt tokens: {}", usage["prompt_tokens"]);
@@ -91,16 +100,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Example 4: Chat with system message
     println!("\n📋 Example 4: Chat with System Message");
     println!("{}", "-".repeat(60));
-    
+
     let messages = vec![
         json!({"role": "system", "content": "You are a helpful coding assistant."}),
         json!({"role": "user", "content": "Write a hello world in Rust"}),
     ];
-    
+
     match chat_completion(&client, gateway_url, model_id, messages, 150).await {
         Ok(response) => {
             println!("✅ Chat Response:");
-            let content = response["choices"][0]["message"]["content"].as_str().unwrap();
+            let content = response["choices"][0]["message"]["content"]
+                .as_str()
+                .unwrap();
             println!("  {}", content);
         }
         Err(e) => println!("❌ Error: {}", e),
@@ -109,17 +120,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Example 5: Multi-turn conversation
     println!("\n📋 Example 5: Multi-turn Conversation");
     println!("{}", "-".repeat(60));
-    
+
     let messages = vec![
         json!({"role": "user", "content": "What is 2+2?"}),
         json!({"role": "assistant", "content": "2+2 equals 4."}),
         json!({"role": "user", "content": "What about 3+3?"}),
     ];
-    
+
     match chat_completion(&client, gateway_url, model_id, messages, 50).await {
         Ok(response) => {
             println!("✅ Chat Response:");
-            let content = response["choices"][0]["message"]["content"].as_str().unwrap();
+            let content = response["choices"][0]["message"]["content"]
+                .as_str()
+                .unwrap();
             println!("  {}", content);
         }
         Err(e) => println!("❌ Error: {}", e),
@@ -128,7 +141,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Example 6: Error handling - invalid model
     println!("\n📋 Example 6: Error Handling - Invalid Model");
     println!("{}", "-".repeat(60));
-    
+
     match get_model_info(&client, gateway_url, "non-existent-model").await {
         Ok(_) => println!("✅ Model found (unexpected)"),
         Err(e) => println!("✅ Expected error: {}", e),
@@ -137,7 +150,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Example 7: Check gateway health
     println!("\n📋 Example 7: Gateway Health Check");
     println!("{}", "-".repeat(60));
-    
+
     match check_health(&client, gateway_url).await {
         Ok(health) => {
             println!("✅ Gateway Health:");
@@ -165,14 +178,14 @@ async fn list_models(
         .get(format!("{}/v1/models", gateway_url))
         .send()
         .await?;
-    
+
     let status = response.status();
     let body = response.json::<serde_json::Value>().await?;
-    
+
     if !status.is_success() {
         return Err(format!("Request failed: {}", status).into());
     }
-    
+
     Ok(body)
 }
 
@@ -186,14 +199,14 @@ async fn get_model_info(
         .get(format!("{}/v1/models/{}", gateway_url, model_id))
         .send()
         .await?;
-    
+
     let status = response.status();
     let body = response.json::<serde_json::Value>().await?;
-    
+
     if !status.is_success() {
         return Err(format!("Request failed: {}", status).into());
     }
-    
+
     Ok(body)
 }
 
@@ -211,20 +224,20 @@ async fn chat_completion(
         "max_tokens": max_tokens,
         "temperature": 0.7,
     });
-    
+
     let response = client
         .post(format!("{}/v1/chat/completions", gateway_url))
         .json(&request_body)
         .send()
         .await?;
-    
+
     let status = response.status();
     let body = response.json::<serde_json::Value>().await?;
-    
+
     if !status.is_success() {
         return Err(format!("Request failed: {}", status).into());
     }
-    
+
     Ok(body)
 }
 
@@ -233,17 +246,14 @@ async fn check_health(
     client: &Client,
     gateway_url: &str,
 ) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
-    let response = client
-        .get(format!("{}/health", gateway_url))
-        .send()
-        .await?;
-    
+    let response = client.get(format!("{}/health", gateway_url)).send().await?;
+
     let status = response.status();
     let body = response.json::<serde_json::Value>().await?;
-    
+
     if !status.is_success() {
         return Err(format!("Request failed: {}", status).into());
     }
-    
+
     Ok(body)
 }

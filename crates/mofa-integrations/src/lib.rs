@@ -22,7 +22,7 @@
 //! let bus = Arc::new(AgentBus::new());
 //! let config = SocketIoConfig::new().with_auth_token("secret");
 //! let bridge = SocketIoBridge::new(config, bus);
-//! let (layer, router_fn) = bridge.build();
+//! let (layer, router, socket_io) = bridge.build();
 //! // merge `layer` and the router into your axum app
 //! # }
 //! ```
@@ -47,5 +47,9 @@ pub mod socketio;
 #[cfg(feature = "s3")]
 pub mod s3;
 
-#[cfg(any(feature = "openai-speech", feature = "elevenlabs", feature = "deepgram"))]
+#[cfg(any(
+    feature = "openai-speech",
+    feature = "elevenlabs",
+    feature = "deepgram"
+))]
 pub mod speech;

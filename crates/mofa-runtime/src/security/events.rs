@@ -151,10 +151,12 @@ mod tests {
             false,
             Some("insufficient permissions".to_string()),
         );
-        
+
         assert!(event.timestamp_ms() > 0);
         match event {
-            SecurityEvent::PermissionCheck { subject, allowed, .. } => {
+            SecurityEvent::PermissionCheck {
+                subject, allowed, ..
+            } => {
                 assert_eq!(subject, "agent-1");
                 assert!(!allowed);
             }

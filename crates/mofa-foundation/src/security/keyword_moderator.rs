@@ -95,11 +95,17 @@ impl KeywordModerator {
         Self {
             toxic_keywords: toxic_keywords
                 .into_iter()
-                .map(|k| { let lower = k.to_lowercase(); (k, lower) })
+                .map(|k| {
+                    let lower = k.to_lowercase();
+                    (k, lower)
+                })
                 .collect(),
             harmful_keywords: harmful_keywords
                 .into_iter()
-                .map(|k| { let lower = k.to_lowercase(); (k, lower) })
+                .map(|k| {
+                    let lower = k.to_lowercase();
+                    (k, lower)
+                })
                 .collect(),
         }
     }
@@ -124,9 +130,7 @@ impl ContentModerator for KeywordModerator {
     ) -> SecurityResult<ModerationVerdict> {
         for category in &policy.enabled_categories {
             let detection = match category {
-                ModerationCategory::Toxic => {
-                    Self::check_keywords(content, &self.toxic_keywords)
-                }
+                ModerationCategory::Toxic => Self::check_keywords(content, &self.toxic_keywords),
                 ModerationCategory::Harmful => {
                     Self::check_keywords(content, &self.harmful_keywords)
                 }
@@ -302,24 +306,21 @@ mod tests {
 
     #[tokio::test]
     async fn moderator_blocks_toxic_keyword() {
-        let moderator = KeywordModerator::new(
-            vec!["badword".into()],
-            vec![],
-        );
+        let moderator = KeywordModerator::new(vec!["badword".into()], vec![]);
         let policy = ContentPolicy {
             enabled_categories: vec![ModerationCategory::Toxic],
             block_on_detection: true,
         };
-        let verdict = moderator.moderate("This has a badword", &policy).await.unwrap();
+        let verdict = moderator
+            .moderate("This has a badword", &policy)
+            .await
+            .unwrap();
         assert!(verdict.is_blocked());
     }
 
     #[tokio::test]
     async fn moderator_flags_when_configured() {
-        let moderator = KeywordModerator::new(
-            vec!["suspicious".into()],
-            vec![],
-        );
+        let moderator = KeywordModerator::new(vec!["suspicious".into()], vec![]);
         let policy = ContentPolicy {
             enabled_categories: vec![ModerationCategory::Toxic],
             block_on_detection: false,
@@ -334,10 +335,7 @@ mod tests {
 
     #[tokio::test]
     async fn moderator_allows_clean_text() {
-        let moderator = KeywordModerator::new(
-            vec!["badword".into()],
-            vec!["harmful_thing".into()],
-        );
+        let moderator = KeywordModerator::new(vec!["badword".into()], vec!["harmful_thing".into()]);
         let policy = ContentPolicy::default();
         let verdict = moderator
             .moderate("This is perfectly normal text", &policy)
@@ -348,15 +346,15 @@ mod tests {
 
     #[tokio::test]
     async fn moderator_case_insensitive() {
-        let moderator = KeywordModerator::new(
-            vec!["BLOCKED".into()],
-            vec![],
-        );
+        let moderator = KeywordModerator::new(vec!["BLOCKED".into()], vec![]);
         let policy = ContentPolicy {
             enabled_categories: vec![ModerationCategory::Toxic],
             block_on_detection: true,
         };
-        let verdict = moderator.moderate("this is blocked text", &policy).await.unwrap();
+        let verdict = moderator
+            .moderate("this is blocked text", &policy)
+            .await
+            .unwrap();
         assert!(verdict.is_blocked());
     }
 

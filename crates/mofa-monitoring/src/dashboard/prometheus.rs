@@ -480,7 +480,11 @@ impl PrometheusExporter {
         out
     }
 
-    async fn append_exporter_internal_metrics(&self, out: &mut String, last_refresh_unix_seconds: f64) {
+    async fn append_exporter_internal_metrics(
+        &self,
+        out: &mut String,
+        last_refresh_unix_seconds: f64,
+    ) {
         let render_hist = self.render_duration_histogram.read().await;
         write_metric_header(
             out,
@@ -1846,9 +1850,8 @@ mod tests {
             "missing TYPE line for input tokens"
         );
         assert!(
-            output.contains(
-                "mofa_llm_input_tokens_total{provider=\"openai\",model=\"gpt-4\"} 1000"
-            ),
+            output
+                .contains("mofa_llm_input_tokens_total{provider=\"openai\",model=\"gpt-4\"} 1000"),
             "missing or wrong value for input tokens; output was:\n{output}"
         );
     }
@@ -1903,7 +1906,9 @@ mod tests {
         );
         // 42 ms = 0.042 s — check with float tolerance via string search
         assert!(
-            output.contains("mofa_llm_time_to_first_token_seconds{provider=\"openai\",model=\"gpt-4\"} 0.042"),
+            output.contains(
+                "mofa_llm_time_to_first_token_seconds{provider=\"openai\",model=\"gpt-4\"} 0.042"
+            ),
             "wrong value for time_to_first_token; output was:\n{output}"
         );
     }

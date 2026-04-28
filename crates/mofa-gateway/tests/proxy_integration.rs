@@ -18,7 +18,7 @@ async fn test_gateway_with_local_llm_proxy_enabled() {
 
     // Start gateway (this will register routes)
     let start_result = gateway.start().await;
-    
+
     // Gateway should start successfully even if backend is not available
     assert!(start_result.is_ok());
 
@@ -71,7 +71,7 @@ async fn test_proxy_backend_configuration() {
     let backend2 = LocalLLMBackend::new("http://example.com:9000")
         .with_health_endpoint("/custom/health")
         .with_timeout(Duration::from_secs(120));
-    
+
     assert_eq!(backend2.base_url, "http://example.com:9000");
     assert_eq!(backend2.health_endpoint, "/custom/health");
     assert_eq!(backend2.timeout, Duration::from_secs(120));

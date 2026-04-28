@@ -35,11 +35,7 @@ pub struct GatewayRequest {
 
 impl GatewayRequest {
     /// Construct a minimal request with the given id, path, and method.
-    pub fn new(
-        id: impl Into<String>,
-        path: impl Into<String>,
-        method: HttpMethod,
-    ) -> Self {
+    pub fn new(id: impl Into<String>, path: impl Into<String>, method: HttpMethod) -> Self {
         Self {
             id: id.into(),
             path: path.into(),

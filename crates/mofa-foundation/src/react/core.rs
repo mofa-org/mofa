@@ -700,13 +700,11 @@ Rules:
 
         async {
             match maybe_tool {
-                Some(tool) => {
-                    match tokio::time::timeout(timeout_dur, tool.execute(input)).await {
-                        Ok(Ok(result)) => result,
-                        Ok(Err(e)) => format!("Tool error: {}", e),
-                        Err(_) => format!("Tool '{}' timed out after {:?}", tool_name, timeout_dur),
-                    }
-                }
+                Some(tool) => match tokio::time::timeout(timeout_dur, tool.execute(input)).await {
+                    Ok(Ok(result)) => result,
+                    Ok(Err(e)) => format!("Tool error: {}", e),
+                    Err(_) => format!("Tool '{}' timed out after {:?}", tool_name, timeout_dur),
+                },
                 None => {
                     let tools = self.tools.read().await;
                     format!(

@@ -10,6 +10,8 @@ Production-grade distributed control plane and gateway for MoFA framework.
 - **HTTP Proxy**: Server-side proxy for mofa-local-llm with OpenAI-compatible API
 - **High Availability**: Leader election, automatic failover, health checking
 - **Observability**: Prometheus metrics, OpenTelemetry tracing, structured logging
+- **Socket.IO Bridge** *(feature: `socketio`)*: Real-time `AgentBus` → Socket.IO event forwarding; emits `file_upload_started/completed/failed` events on file uploads
+- **File Storage API** *(feature: `s3`)*: AWS S3 / MinIO-backed `/api/v1/files/**` endpoints with automatic MIME detection, metadata queries, presigned URLs, and configurable upload size limits
 
 ## Architecture
 
@@ -52,8 +54,10 @@ All features complete and tested:
 - Raft consensus engine with leader election and log replication
 - Control plane core with state machine replication
 - Gateway layer with HTTP server, routing, load balancing
+- Socket.IO real-time bridge with upload-progress events (`socketio` feature)
+- S3 / MinIO file storage API with MIME detection, metadata, size limits (`s3` feature)
 - Observability (Prometheus metrics, OpenTelemetry tracing)
-- 51 tests passing (32 unit, 12 integration, 5 multi-node, 2 doctests)
+- 75+ tests passing (unit + integration, covering all optional features)
 
 ## Examples
 
@@ -97,9 +101,11 @@ The `examples/` directory contains practical examples:
 - **Health Checking**: Node health monitoring and automatic removal
 - **HTTP Proxy**: Server-side proxy for mofa-local-llm with OpenAI-compatible endpoints
 - **Observability**: Prometheus metrics, OpenTelemetry tracing, structured logging
-- **Testing**: 51 tests passing (32 unit, 12 integration, 5 multi-node, 2 doctests)
-- **Examples**: 9 complete examples covering all features
-- **Documentation**: Architecture, migration, performance, troubleshooting guides
+- **Socket.IO Bridge** (`socketio`): Forwards `AgentBus` broadcasts to clients; upload lifecycle events
+- **File Storage** (`s3`): 7 endpoints — upload, download, delete, list, metadata, presigned GET/PUT; MIME auto-detection; configurable size limits
+- **Testing**: 75+ tests covering all optional features
+- **Examples**: Full working example (`gateway_socketio_s3`) + 9 concept examples
+- **Documentation**: Architecture, Socket.IO + S3 usage, migration, troubleshooting guides
 
 ## License
 

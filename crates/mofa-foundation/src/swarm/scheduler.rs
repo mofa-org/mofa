@@ -14,8 +14,8 @@ use tracing::{error, info, instrument, warn};
 
 use mofa_kernel::agent::types::error::{GlobalError, GlobalResult};
 
-use crate::swarm::{CoordinationPattern, SubtaskDAG, SwarmSubtask};
 use crate::swarm::hitl_gate::HITLGateMetrics;
+use crate::swarm::{CoordinationPattern, SubtaskDAG, SwarmSubtask};
 
 /// task executor used by schedulers
 pub type SubtaskExecutorFn =

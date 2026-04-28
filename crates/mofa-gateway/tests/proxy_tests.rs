@@ -38,8 +38,14 @@ fn test_local_llm_backend_new() {
 #[test]
 fn test_local_llm_backend_url_for() {
     let backend = LocalLLMBackend::default();
-    assert_eq!(backend.url_for("v1/models"), "http://localhost:8000/v1/models");
-    assert_eq!(backend.url_for("/v1/models"), "http://localhost:8000/v1/models");
+    assert_eq!(
+        backend.url_for("v1/models"),
+        "http://localhost:8000/v1/models"
+    );
+    assert_eq!(
+        backend.url_for("/v1/models"),
+        "http://localhost:8000/v1/models"
+    );
 }
 
 #[test]
@@ -54,7 +60,10 @@ fn test_local_llm_backend_to_proxy_backend() {
     let proxy_backend = backend.to_proxy_backend();
     assert_eq!(proxy_backend.name, "mofa-local-llm");
     assert_eq!(proxy_backend.base_url, "http://localhost:8000");
-    assert_eq!(proxy_backend.health_check_endpoint, Some("/health".to_string()));
+    assert_eq!(
+        proxy_backend.health_check_endpoint,
+        Some("/health".to_string())
+    );
 }
 
 #[test]
