@@ -102,3 +102,94 @@ impl ReportFormatter for TextFormatter {
         buf
     }
 }
+
+/// Renders a report as JUnit XML format.
+pub struct JunitFormatter;
+
+impl ReportFormatter for JunitFormatter {
+    fn format(&self, report: &TestReport) -> String {
+        let mut buf = String::new();
+        buf.push_str("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
+        buf.push_str(&format!(
+            "<testsuite name=\"{}\" tests=\"{}\" failures=\"{}\" skipped=\"{}\" time=\"{:.3}\" timestamp=\"{}\">\n",
+            report.suite_name,
+            report.total(), report.failed(), report.skipped(),
+            report.total_duration.as_secs_f64(),
+            report.timestamp
+        ));
+
+        for r in &report.results {
+            buf.push_str(&format!(
+                "  <testcase classname=\"{}\" name=\"{}\" time=\"{:.3}\">\n",
+                report.suite_name, r.name, r.duration.as_secs_f64()
+            ));
+
+            match r.status {
+                TestStatus::Passed => {}
+                TestStatus::Failed => {
+                    let err_msg = r.error.as_deref().unwrap_or("Test failed");
+                    let safe_msg = err_msg.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;").replace("'", "&apos;");
+                    buf.push_str(&format!("    <failure message=\"{}\">{}</failure>\n", safe_msg, safe_msg));
+                }
+                TestStatus::Skipped => {
+                    buf.push_str("    <skipped/>\n");
+                }
+            }
+
+            if !r.metadata.is_empty() {
+                buf.push_str("    <system-out><![CDATA[\n");
+                for (k, v) in &r.metadata {
+                    buf.push_str(&format!("{}: {}\n", k, v));
+                }
+                buf.push_str("    ]]></system-out>\n");
+            }
+            buf.push_str("  </testcase>\n");
+        }
+
+        buf.push_str("</testsuite>\n");
+        buf
+    }
+}
+
+/// Renders a report as Allure JSON format.
+pub struct AllureFormatter;
+
+impl ReportFormatter for AllureFormatter {
+    fn format(&self, report: &TestReport) -> String {
+        let results: Vec<serde_json::Value> = report
+            .results
+            .iter()
+            .map(|r| {
+                let status = match r.status {
+                    TestStatus::Passed => "passed",
+                    TestStatus::Failed => "failed",
+                    TestStatus::Skipped => "skipped",
+                };
+                
+                let mut obj = serde_json::json!({
+                    "name": r.name,
+                    "status": status,
+                    "statusDetails": {"message": r.error.clone().unwrap_or_default()},
+                    "start": report.timestamp, // Rough approx
+                    "stop": report.timestamp + r.duration.as_millis() as u64,
+                    "labels": [
+                        {"name": "suite", "value": report.suite_name}
+                    ]
+                });
+
+                if !r.metadata.is_empty() {
+                    let params: Vec<serde_json::Value> = r.metadata.iter().map(|(k, v)| {
+                        serde_json::json!({"name": k, "value": v})
+                    }).collect();
+                    obj["parameters"] = params;
+                }
+                
+                obj
+            })
+            .collect();
+            
+        // Usually allure writes multiple files, but for the formatter trait we can return a JSON array or list of objects
+        serde_json::to_string_pretty(&results).expect("allure serialization failed")
+    }
+}
+
