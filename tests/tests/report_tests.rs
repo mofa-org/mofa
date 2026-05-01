@@ -2,8 +2,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use mofa_testing::{
-    JsonFormatter, MockClock, ReportFormatter, TestCaseResult, TestReport, TestReportBuilder,
-    TestStatus, TextFormatter,
+    AllureFormatter, JsonFormatter, MockClock, ReportFormatter, TestCaseResult, TestReport,
+    TestReportBuilder, TestStatus, TextFormatter,
 };
 
 // ---------------------------------------------------------------------------
@@ -256,6 +256,30 @@ fn json_formatter_empty_report() {
     let parsed: serde_json::Value = serde_json::from_str(&output).expect("valid JSON");
     assert_eq!(parsed["summary"]["total"], 0);
     assert_eq!(parsed["results"].as_array().unwrap().len(), 0);
+}
+
+// ===========================================================================
+// AllureFormatter
+// ===========================================================================
+
+#[test]
+fn allure_formatter_emits_deterministic_json() {
+    let mut report = mixed_report();
+    report.results[0].metadata = vec![("env".into(), "ci".into())];
+
+    let output = AllureFormatter.format(&report);
+    let parsed: serde_json::Value = serde_json::from_str(&output).expect("valid JSON");
+    let results = parsed.as_array().expect("array of results");
+
+    assert_eq!(results.len(), 5);
+    assert_eq!(results[0]["uuid"], "mixed-0");
+    assert_eq!(results[0]["status"], "passed");
+    assert_eq!(results[0]["parameters"][0]["name"], "env");
+    assert_eq!(results[0]["parameters"][0]["value"], "ci");
+    assert_eq!(results[1]["status"], "failed");
+    assert_eq!(results[1]["status_details"]["message"], "boom");
+    assert_eq!(results[3]["status"], "skipped");
+    assert_eq!(results[4]["full_name"], "mixed::e");
 }
 
 #[test]
