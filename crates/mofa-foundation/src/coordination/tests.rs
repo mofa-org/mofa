@@ -106,6 +106,21 @@ mod tests {
         .unwrap()
     }
 
+    // Receive one message for a peer
+    async fn receive_peer(
+        bus: &AgentBus,
+        id: &str,
+    ) -> Result<AgentMessage, mofa_kernel::bus::BusError> {
+        let mut receiver = bus
+            .subscribe(
+                id,
+                CommunicationMode::PointToPoint("coordinator".to_string()),
+            )
+            .await
+            .unwrap();
+        receiver.recv().await
+    }
+
     #[tokio::test]
     async fn test_register_role() {
         assert!(true);
