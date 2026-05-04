@@ -65,19 +65,31 @@ impl Memory for InMemoryStorage {
     }
 
     async fn search(&self, query: &str, limit: usize) -> AgentResult<Vec<MemoryItem>> {
-        // 简单的关键词匹配搜索
-        // Simple keyword matching search
-        let query_lower = query.to_lowercase();
+        // Word-level keyword search: split the query into individual words and
+        // match items whose key or value text contains any of those words.
+        // Words shorter than 3 characters are skipped to avoid noise from
+        // stop-words like "a", "is", "of".
+        let keywords: Vec<String> = query
+            .split_whitespace()
+            .filter(|w| w.len() >= 3)
+            .map(|w| w.to_lowercase())
+            .collect();
+
+        let matches_query = |item: &&MemoryItem| -> bool {
+            if keywords.is_empty() {
+                return false;
+            }
+            let key_lc = item.key.to_lowercase();
+            let value_lc = item.value.as_text().unwrap_or("").to_lowercase();
+            keywords
+                .iter()
+                .any(|kw| key_lc.contains(kw.as_str()) || value_lc.contains(kw.as_str()))
+        };
+
         let mut results: Vec<MemoryItem> = self
             .data
             .values()
-            .filter(|item| {
-                if let Some(text) = item.value.as_text() {
-                    text.to_lowercase().contains(&query_lower)
-                } else {
-                    false
-                }
-            })
+            .filter(matches_query)
             .cloned()
             .collect();
 
