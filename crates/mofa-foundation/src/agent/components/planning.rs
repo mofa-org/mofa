@@ -773,15 +773,21 @@ mod tests {
             .await
             .expect("executor should succeed");
 
-        // The first captured request should be the planning call; its user
-        // message must contain the recalled memory text.
+        // Find the planning request by looking for the one whose user message
+        // contains the "Recalled memory:" section — this is more robust than
+        // assuming a fixed array index.
         let reqs = provider.captured_requests().await;
-        let plan_user_msg = reqs[0]
-            .messages
+        let plan_user_msg = reqs
             .iter()
-            .find(|m| matches!(m.role, crate::llm::Role::User))
-            .and_then(|m| m.text_content())
-            .expect("planning request must have a user message");
+            .find_map(|req| {
+                req.messages
+                    .iter()
+                    .find(|m| matches!(m.role, crate::llm::Role::User))
+                    .and_then(|m| m.text_content())
+                    .filter(|text| text.contains("Recalled memory:"))
+                    .map(|text| text.to_string())
+            })
+            .expect("planning request with 'Recalled memory:' section not found");
 
         assert!(
             plan_user_msg.contains("Rust ownership prevents data races"),
