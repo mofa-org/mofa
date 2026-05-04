@@ -251,7 +251,7 @@ jobs:
           ./scripts/release.sh "$VERSION" --skip-tests --skip-build
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: target/release-${{ steps.get_version.outputs.version }}/*
           generate_release_notes: true
