@@ -2,8 +2,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use mofa_testing::{
-    JsonFormatter, MockClock, ReportFormatter, TestCaseResult, TestReport, TestReportBuilder,
-    TestStatus, TextFormatter,
+    JsonFormatter, MarkdownFormatter, MockClock, ReportFormatter, TestCaseResult, TestReport,
+    TestReportBuilder, TestStatus, TextFormatter,
 };
 
 // ---------------------------------------------------------------------------
@@ -271,6 +271,58 @@ fn json_formatter_includes_metadata() {
     let output = JsonFormatter.format(&r);
     let parsed: serde_json::Value = serde_json::from_str(&output).unwrap();
     assert_eq!(parsed["results"][0]["metadata"]["key"], "val");
+}
+
+// ===========================================================================
+// MarkdownFormatter
+// ===========================================================================
+
+#[test]
+fn markdown_formatter_contains_summary_and_results_table() {
+    let r = mixed_report();
+    let output = MarkdownFormatter.format(&r);
+
+    assert!(output.contains("# Test Report: mixed"));
+    assert!(output.contains("## Summary"));
+    assert!(output.contains("| Total | Passed | Failed | Skipped | Pass Rate | Duration (ms) |"));
+    assert!(output.contains("| 5 | 2 | 2 | 1 | 40.0% | 110 |"));
+    assert!(output.contains("## Results"));
+    assert!(output.contains("| Status | Test Case | Duration (ms) | Error |"));
+    assert!(output.contains("| failed | b | 50 | boom |"));
+    assert!(output.contains("| skipped | d | 0 | - |"));
+}
+
+#[test]
+fn markdown_formatter_escapes_special_cells() {
+    let report = TestReport {
+        suite_name: "pipes".into(),
+        results: vec![make_result(
+            "test | case",
+            TestStatus::Failed,
+            12,
+            Some("line1\nline2 | detail"),
+        )],
+        total_duration: Duration::from_millis(12),
+        timestamp: 0,
+    };
+
+    let output = MarkdownFormatter.format(&report);
+    assert!(output.contains("test \\| case"));
+    assert!(output.contains("line1<br/>line2 \\| detail"));
+}
+
+#[test]
+fn markdown_formatter_empty_report_still_renders_tables() {
+    let r = TestReport {
+        suite_name: "empty".into(),
+        results: vec![],
+        total_duration: Duration::ZERO,
+        timestamp: 0,
+    };
+    let output = MarkdownFormatter.format(&r);
+    assert!(output.contains("# Test Report: empty"));
+    assert!(output.contains("| 0 | 0 | 0 | 0 | 100.0% | 0 |"));
+    assert!(output.contains("## Results"));
 }
 
 // ===========================================================================

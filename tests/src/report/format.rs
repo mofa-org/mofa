@@ -102,3 +102,56 @@ impl ReportFormatter for TextFormatter {
         buf
     }
 }
+
+/// Renders a report as a Markdown summary.
+pub struct MarkdownFormatter;
+
+impl ReportFormatter for MarkdownFormatter {
+    fn format(&self, report: &TestReport) -> String {
+        let mut buf = String::new();
+        buf.push_str(&format!("# Test Report: {}\n\n", report.suite_name));
+        buf.push_str("## Summary\n\n");
+        buf.push_str("| Total | Passed | Failed | Skipped | Pass Rate | Duration (ms) |\n");
+        buf.push_str("| --- | --- | --- | --- | --- | --- |\n");
+        buf.push_str(&format!(
+            "| {} | {} | {} | {} | {:.1}% | {} |\n\n",
+            report.total(),
+            report.passed(),
+            report.failed(),
+            report.skipped(),
+            report.pass_rate() * 100.0,
+            report.total_duration.as_millis()
+        ));
+
+        buf.push_str("## Results\n\n");
+        buf.push_str("| Status | Test Case | Duration (ms) | Error |\n");
+        buf.push_str("| --- | --- | --- | --- |\n");
+
+        for result in &report.results {
+            let status = match result.status {
+                TestStatus::Passed => "passed",
+                TestStatus::Failed => "failed",
+                TestStatus::Skipped => "skipped",
+            };
+            let error = result
+                .error
+                .as_deref()
+                .map(escape_markdown_cell)
+                .unwrap_or_else(|| "-".to_string());
+
+            buf.push_str(&format!(
+                "| {} | {} | {} | {} |\n",
+                status,
+                escape_markdown_cell(&result.name),
+                result.duration.as_millis(),
+                error
+            ));
+        }
+
+        buf
+    }
+}
+
+fn escape_markdown_cell(input: &str) -> String {
+    input.replace('|', "\\|").replace('\n', "<br/>")
+}
