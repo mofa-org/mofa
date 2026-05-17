@@ -1,0 +1,8 @@
+[package]
+name = "swarm_metrics_exporter"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+mofa-foundation = { path = "../../crates/mofa-foundation" }
