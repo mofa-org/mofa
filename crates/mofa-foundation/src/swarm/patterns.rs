@@ -82,9 +82,11 @@ impl CoordinationPattern {
         match self {
             Self::Sequential => Box::new(crate::swarm::SequentialScheduler::new()),
             Self::Parallel => Box::new(crate::swarm::ParallelScheduler::new()),
-            other => {
-                unimplemented!("Scheduler for `{other}` pattern is not yet implemented (Phase 2)")
-            }
+            Self::MapReduce => Box::new(crate::swarm::MapReduceScheduler::new()),
+            Self::Debate => Box::new(crate::swarm::DebateScheduler::new()),
+            Self::Consensus => Box::new(crate::swarm::ConsensusScheduler::new()),
+            Self::Routing => Box::new(crate::swarm::RoutingScheduler::new()),
+            Self::Supervision => Box::new(crate::swarm::SupervisionScheduler::new()),
         }
     }
 }
