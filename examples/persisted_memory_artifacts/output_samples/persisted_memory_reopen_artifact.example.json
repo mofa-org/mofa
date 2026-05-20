@@ -1,0 +1,7 @@
+{
+  "session_id": "00000000-0000-7000-8000-000000000002",
+  "history": [
+    "billing-session: I was charged twice for the same invoice.",
+    "billing-session: I checked invoice #INV-2049 and found a duplicate capture. I have initiated a refund and emailed confirmation."
+  ]
+}
