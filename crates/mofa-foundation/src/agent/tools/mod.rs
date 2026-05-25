@@ -9,6 +9,7 @@
 pub mod adapters;
 pub mod builtin;
 pub mod registry;
+pub mod sandbox;
 
 /// MCP (Model Context Protocol) 客户端实现
 /// MCP (Model Context Protocol) client implementation
@@ -24,3 +25,6 @@ pub mod mcp;
 pub use adapters::{BuiltinTools, ClosureTool, FunctionTool};
 pub use builtin::{DateTimeTool, FileReadTool, FileWriteTool, HttpTool, JsonParseTool, ShellTool};
 pub use registry::{ToolRegistry, ToolSearcher};
+pub use sandbox::{
+    ChildProcessCommand, ChildProcessSandbox, InProcessSandbox, NullSandbox, SandboxedTool,
+};
