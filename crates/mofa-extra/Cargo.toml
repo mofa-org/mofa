@@ -19,7 +19,7 @@ rhai-scripting = ["rhai", "regex"]
 
 [dependencies]
 # Rhai scripting engine
-rhai = { version = "1.20", features = ["sync", "serde"], optional = true }
+rhai = { version = "1.25", features = ["sync", "serde"], optional = true }
 
 # Serialization
 serde = { workspace = true }
