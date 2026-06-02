@@ -67,6 +67,7 @@ members = [
     "claw_demo",
     "swarm_orchestrator",
     "swarm_hitl_gate",
+    "swarm_admission_gate",
 ]
 
 [workspace.package]
