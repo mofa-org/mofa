@@ -4274,7 +4274,7 @@ dependencies = [
  "mofa-foundation",
  "tokio",
  "tracing",
- "tracing-subscriber 0.3.22",
+ "tracing-subscriber 0.3.23",
 ]
 
 [[package]]
@@ -4878,6 +4878,7 @@ dependencies = [
  "chrono",
  "mofa-foundation",
  "mofa-kernel",
+ "regex",
  "serde",
  "serde_json",
  "tokio",
@@ -5834,6 +5835,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b4596b6d070b27117e987119b4dac604f3c58cfb0b191112e24771b2faeac1a6"
 
 [[package]]
+name = "planning_agent"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "mofa-foundation",
+ "mofa-kernel",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "tracing-subscriber 0.3.23",
+]
+
+[[package]]
 name = "plugin_system"
 version = "0.1.0"
 dependencies = [
@@ -5971,7 +5985,7 @@ dependencies = [
  "opentelemetry_sdk",
  "tokio",
  "tracing",
- "tracing-subscriber 0.3.22",
+ "tracing-subscriber 0.3.23",
 ]
 
 [[package]]
@@ -7866,7 +7880,7 @@ dependencies = [
  "mofa-kernel",
  "tokio",
  "tracing",
- "tracing-subscriber 0.3.22",
+ "tracing-subscriber 0.3.23",
 ]
 
 [[package]]
@@ -7879,7 +7893,7 @@ dependencies = [
  "mofa-kernel",
  "tokio",
  "tracing",
- "tracing-subscriber 0.3.22",
+ "tracing-subscriber 0.3.23",
 ]
 
 [[package]]

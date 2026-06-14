@@ -18,6 +18,7 @@ pub mod context_compressor;
 pub mod coordinator;
 pub mod episodic_memory;
 pub mod memory;
+pub mod planning;
 pub mod reasoner;
 pub mod semantic_memory;
 pub mod tool;
@@ -87,6 +88,17 @@ pub use semantic_memory::{HashEmbedder, SemanticMemory};
 
 // Embedder trait from kernel (re-exported for convenience)
 pub use mofa_kernel::agent::components::memory::Embedder;
+
+// Planner trait and types from kernel (re-exported for convenience)
+pub use mofa_kernel::agent::components::planner::{
+    CompletedStep, ExecutionPlan, MemoryItemSnapshot, PlannedStep, Planner, PlanningRequest,
+};
+
+// Planning implementations (foundation layer)
+pub use planning::{
+    PlanningExecutionResult, PlanningExecutor, PlanningPhase, PlanningStepRecord, PromptPlanner,
+    StepEvaluation, StepExecutionRecord, StepExecutionStatus,
+};
 
 // Reasoner 实现
 // Reasoner implementations
