@@ -5,6 +5,7 @@
 //! Defines the pluggable component interfaces for the Agent
 
 pub mod context_compressor;
+pub mod coordination;
 pub mod coordinator;
 pub mod mcp;
 pub mod memory;
@@ -12,6 +13,11 @@ pub mod planner;
 pub mod reasoner;
 pub mod tool;
 
+pub use coordination::{
+    ConflictInfo, CoordinationError, CoordinationResult, GovernanceConfig, HandoffPacket,
+    MemoryObject, MemoryRef, MemoryScope, MemoryTier, ResolutionStrategy, RetryPolicy,
+    TaskDescription, TraceContext,
+};
 pub use context_compressor::{
     CompressionMetrics, CompressionResult, CompressionStrategy, ContextCompressor,
 };
