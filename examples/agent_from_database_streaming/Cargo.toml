@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+dotenvy.workspace = true
 mofa-sdk = { path = "../../crates/mofa-sdk", features = ["persistence-postgres"] }
 tokio.workspace = true
 futures.workspace = true

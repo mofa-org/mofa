@@ -5,6 +5,7 @@ edition.workspace = true
 publish = false
 
 [dependencies]
+dotenvy.workspace = true
 mofa-sdk = { path = "../../crates/mofa-sdk"}
 
 tokio.workspace = true

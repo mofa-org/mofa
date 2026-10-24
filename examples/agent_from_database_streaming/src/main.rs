@@ -90,6 +90,8 @@ use mofa_sdk::persistence::{AgentStore, SessionStore};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let _ = dotenvy::dotenv();
+
     // 初始化日志
     // Initialize logging
     tracing_subscriber::fmt()

@@ -4,6 +4,8 @@ use tracing::{info, Level};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let _ = dotenvy::dotenv();
+
     tracing_subscriber::fmt()
         .with_max_level(Level::INFO)
         .init();
