@@ -27,7 +27,9 @@ impl Default for RecursiveChunkConfig {
             separators: vec![
                 "\n\n".into(), // Paragraph
                 "\n".into(),   // Line
-                ". ".into(),   // Sentence
+                ". ".into(),   // Sentence (period)
+                "? ".into(),   // Sentence (question)
+                "! ".into(),   // Sentence (exclamation)
                 ", ".into(),   // Clause
                 " ".into(),    // Word
             ],
@@ -99,7 +101,7 @@ impl RecursiveChunker {
         }
 
         let separator = &self.config.separators[separator_idx];
-        let parts: Vec<&str> = text.split(separator.as_str()).collect();
+        let (parts, joiner) = split_with_separator(text, separator);
 
         // If the separator didn't actually split anything useful, try next
         if parts.len() <= 1 {
@@ -113,7 +115,7 @@ impl RecursiveChunker {
             let candidate = if current.is_empty() {
                 part.to_string()
             } else {
-                format!("{current}{separator}{part}")
+                format!("{current}{joiner}{part}")
             };
 
             if candidate.chars().count() <= self.config.chunk_size {
@@ -182,6 +184,53 @@ impl RecursiveChunker {
     }
 }
 
+/// Splits text using `separator` while preserving punctuation boundaries (Issue #1705).
+///
+/// If `separator` contains punctuation / non-whitespace characters (e.g. `". "`, `"? "`, `"! "`, `", "`),
+/// the punctuation prefix is kept and attached to the preceding slice.
+/// Trailing whitespace in the separator is discarded as the boundary delimiter and returned as the `joiner`.
+/// If `separator` is pure whitespace (e.g. `"\n\n"`, `"\n"`, `" "`), it is discarded during splitting
+/// and returned as the `joiner`.
+fn split_with_separator<'a, 's>(text: &'a str, separator: &'s str) -> (Vec<&'a str>, &'s str) {
+    if separator.is_empty() || text.is_empty() {
+        return (vec![text], "");
+    }
+
+    let punct_len = separator.trim_end_matches(char::is_whitespace).len();
+    let is_punctuation = punct_len > 0;
+
+    if is_punctuation {
+        let mut parts = Vec::new();
+        let mut last_end = 0;
+
+        for (match_idx, _) in text.match_indices(separator) {
+            let end_idx = match_idx + punct_len;
+            if end_idx > last_end {
+                let slice = text[last_end..end_idx].trim_start_matches(char::is_whitespace);
+                if !slice.is_empty() {
+                    parts.push(slice);
+                }
+            }
+            last_end = match_idx + separator.len();
+        }
+
+        if last_end < text.len() {
+            let remainder = text[last_end..].trim_start_matches(char::is_whitespace);
+            if !remainder.is_empty() {
+                parts.push(remainder);
+            }
+        }
+
+        (parts, &separator[punct_len..])
+    } else {
+        let parts: Vec<&str> = text
+            .split(separator)
+            .filter(|s| !s.is_empty())
+            .collect();
+        (parts, separator)
+    }
+}
+
 // =============================================================================
 // Tests
 // =============================================================================
@@ -226,6 +275,10 @@ mod tests {
         let text = "First sentence. Second sentence. Third sentence.";
         let chunks = chunker.chunk(text);
         assert!(chunks.len() >= 2);
+        // Ensure sentence boundaries retain punctuation
+        for chunk in &chunks {
+            assert!(chunk.ends_with('.'), "Expected chunk to retain period: {chunk}");
+        }
     }
 
     #[test]
@@ -283,6 +336,121 @@ mod tests {
         let config = RecursiveChunkConfig::default();
         assert_eq!(config.chunk_size, 1000);
         assert_eq!(config.chunk_overlap, 200);
-        assert_eq!(config.separators.len(), 5);
+        assert_eq!(config.separators.len(), 7);
+    }
+
+    // =========================================================================
+    // Issue #1705 Regression Tests: Text Boundary Truncation & Punctuation
+    // =========================================================================
+
+    #[test]
+    fn issue_1705_sentences_retain_all_punctuation_marks() {
+        // Prove that sentences ending in ., ?, and ! strictly retain their marks
+        let config = RecursiveChunkConfig::new(15, 0);
+        let chunker = RecursiveChunker::new(config);
+        let text = "What is Rust? It is safe! It is fast. Works.";
+        let chunks = chunker.chunk(text);
+
+        assert_eq!(chunks.len(), 4);
+        assert_eq!(chunks[0], "What is Rust?");
+        assert_eq!(chunks[1], "It is safe!");
+        assert_eq!(chunks[2], "It is fast.");
+        assert_eq!(chunks[3], "Works.");
+
+        // Verify ending punctuation invariant
+        assert!(chunks[0].ends_with('?'));
+        assert!(chunks[1].ends_with('!'));
+        assert!(chunks[2].ends_with('.'));
+        assert!(chunks[3].ends_with('.'));
+
+        for chunk in &chunks {
+            assert!(
+                chunk.chars().count() <= 15,
+                "Chunk exceeded size limit: {chunk}"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_1705_clauses_retain_commas() {
+        // Prove that clauses ending in , strictly retain their commas
+        let config = RecursiveChunkConfig::new(30, 0);
+        let chunker = RecursiveChunker::new(config);
+        let text = "When writing Rust, safety comes first, and speed follows.";
+        let chunks = chunker.chunk(text);
+
+        assert_eq!(chunks.len(), 3);
+        assert_eq!(chunks[0], "When writing Rust,");
+        assert_eq!(chunks[1], "safety comes first,");
+        assert_eq!(chunks[2], "and speed follows.");
+
+        // Verify comma retention
+        assert!(chunks[0].ends_with(','));
+        assert!(chunks[1].ends_with(','));
+        assert!(chunks[2].ends_with('.'));
+
+        for chunk in &chunks {
+            assert!(
+                chunk.chars().count() <= 30,
+                "Chunk exceeded size limit: {chunk}"
+            );
+        }
+    }
+
+    #[test]
+    fn issue_1705_strictly_respects_chunk_size_with_punctuation() {
+        // Exact boundary condition: chunk_size is 15 chars.
+        // Sentences with punctuation attached must not overflow the hard limit.
+        let config = RecursiveChunkConfig::new(15, 0);
+        let chunker = RecursiveChunker::new(config);
+        let text = "12345678901234. 12345678901234? 12345678901234!";
+        let chunks = chunker.chunk(text);
+
+        assert_eq!(chunks.len(), 3);
+        assert_eq!(chunks[0], "12345678901234.");
+        assert_eq!(chunks[1], "12345678901234?");
+        assert_eq!(chunks[2], "12345678901234!");
+
+        for chunk in &chunks {
+            assert_eq!(
+                chunk.chars().count(),
+                15,
+                "Expected chunk length to match exact boundary: {chunk}"
+            );
+            assert!(chunk.chars().count() <= 15);
+        }
+    }
+
+    #[test]
+    fn issue_1705_whitespace_discarded_while_punctuation_survives() {
+        // Prove that pure whitespace separators (\n\n) are discarded
+        // while sentence-ending punctuation (.) survives
+        let config = RecursiveChunkConfig::new(40, 0);
+        let chunker = RecursiveChunker::new(config);
+        let text = "Paragraph one content.\n\nParagraph two content.\n\nParagraph three content.";
+        let chunks = chunker.chunk(text);
+
+        assert_eq!(chunks.len(), 3);
+        assert_eq!(chunks[0], "Paragraph one content.");
+        assert_eq!(chunks[1], "Paragraph two content.");
+        assert_eq!(chunks[2], "Paragraph three content.");
+
+        for chunk in &chunks {
+            assert!(!chunk.contains('\n'), "Whitespace should be discarded: {chunk}");
+            assert!(chunk.ends_with('.'), "Punctuation should be preserved: {chunk}");
+        }
+    }
+
+    #[test]
+    fn issue_1705_merged_chunks_retain_intermediate_punctuation() {
+        // When multiple clauses or sentences fit into a single chunk,
+        // intermediate punctuation and spacing must be preserved naturally.
+        let config = RecursiveChunkConfig::new(60, 0);
+        let chunker = RecursiveChunker::new(config);
+        let text = "First clause, second clause. Third sentence.";
+        let chunks = chunker.chunk(text);
+
+        assert_eq!(chunks.len(), 1);
+        assert_eq!(chunks[0], "First clause, second clause. Third sentence.");
     }
 }
