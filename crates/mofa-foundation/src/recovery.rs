@@ -363,6 +363,35 @@ struct CircuitBreakerState {
     consecutive_failures: u32,
     consecutive_successes: u32,
     last_failure_time: Option<std::time::Instant>,
+    active_probes: u32,
+}
+
+/// RAII guard ensuring active probe counter in `CircuitBreakerState` is always
+/// decremented, even if the probe operation future is cancelled or dropped.
+struct ProbeGuard<'a> {
+    cb: &'a CircuitBreaker,
+    active: bool,
+}
+
+impl<'a> ProbeGuard<'a> {
+    fn new(cb: &'a CircuitBreaker) -> Self {
+        Self { cb, active: true }
+    }
+
+    fn defuse(&mut self) {
+        self.active = false;
+    }
+}
+
+impl<'a> Drop for ProbeGuard<'a> {
+    fn drop(&mut self) {
+        if self.active {
+            let mut guard = self.cb.state.lock().unwrap_or_else(|e| e.into_inner());
+            if guard.active_probes > 0 {
+                guard.active_probes -= 1;
+            }
+        }
+    }
 }
 
 impl CircuitBreaker {
@@ -375,6 +404,7 @@ impl CircuitBreaker {
                 consecutive_failures: 0,
                 consecutive_successes: 0,
                 last_failure_time: None,
+                active_probes: 0,
             }),
         }
     }
@@ -385,6 +415,12 @@ impl CircuitBreaker {
         guard.state
     }
 
+    /// Get the number of currently active in-flight probes during half-open state
+    pub fn active_probes(&self) -> u32 {
+        let guard = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        guard.active_probes
+    }
+
     /// Execute an operation through the circuit breaker
     pub async fn call<F, Fut, T>(&self, operation: F) -> GlobalResult<T>
     where
@@ -392,7 +428,7 @@ impl CircuitBreaker {
         Fut: Future<Output = GlobalResult<T>>,
     {
         // Check if we should allow the call
-        {
+        let is_probe = {
             let mut guard = self.state.lock().unwrap_or_else(|e| e.into_inner());
             match guard.state {
                 CircuitState::Open => {
@@ -401,60 +437,95 @@ impl CircuitBreaker {
                         if last_failure.elapsed() >= self.config.recovery_timeout {
                             guard.state = CircuitState::HalfOpen;
                             guard.consecutive_successes = 0;
-                            // Allow the call through (half-open test)
+                            guard.active_probes = 1;
+                            true
                         } else {
                             return Err(GlobalError::Runtime(format!(
                                 "Circuit breaker is open ({}s until recovery test)",
                                 (self.config.recovery_timeout - last_failure.elapsed()).as_secs()
                             )));
                         }
+                    } else {
+                        guard.state = CircuitState::HalfOpen;
+                        guard.consecutive_successes = 0;
+                        guard.active_probes = 1;
+                        true
                     }
                 }
-                CircuitState::Closed | CircuitState::HalfOpen => {
-                    // Allow the call
+                CircuitState::HalfOpen => {
+                    if guard.active_probes >= self.config.success_threshold {
+                        return Err(GlobalError::Runtime(
+                            "Circuit breaker is half-open: maximum concurrent probe requests reached"
+                                .to_string(),
+                        ));
+                    }
+                    guard.active_probes += 1;
+                    true
                 }
+                CircuitState::Closed => false,
             }
-        }
+        };
+
+        let mut probe_guard = if is_probe {
+            Some(ProbeGuard::new(self))
+        } else {
+            None
+        };
 
         // Execute the operation
         match operation().await {
             Ok(value) => {
-                self.record_success();
+                if let Some(ref mut pg) = probe_guard {
+                    pg.defuse();
+                }
+                self.record_success(is_probe);
                 Ok(value)
             }
             Err(err) => {
-                self.record_failure();
+                if let Some(ref mut pg) = probe_guard {
+                    pg.defuse();
+                }
+                self.record_failure(is_probe);
                 Err(err)
             }
         }
     }
 
-    fn record_success(&self) {
+    fn record_success(&self, is_probe: bool) {
         let mut guard = self.state.lock().unwrap_or_else(|e| e.into_inner());
         guard.consecutive_failures = 0;
         guard.consecutive_successes += 1;
+        if is_probe && guard.active_probes > 0 {
+            guard.active_probes -= 1;
+        }
 
         if guard.state == CircuitState::HalfOpen
             && guard.consecutive_successes >= self.config.success_threshold
         {
             guard.state = CircuitState::Closed;
             guard.consecutive_successes = 0;
+            guard.active_probes = 0;
         }
     }
 
-    fn record_failure(&self) {
+    fn record_failure(&self, is_probe: bool) {
         let mut guard = self.state.lock().unwrap_or_else(|e| e.into_inner());
         guard.consecutive_failures += 1;
         guard.consecutive_successes = 0;
+        if is_probe && guard.active_probes > 0 {
+            guard.active_probes -= 1;
+        }
         guard.last_failure_time = Some(std::time::Instant::now());
 
         if guard.state == CircuitState::Closed
             && guard.consecutive_failures >= self.config.failure_threshold
         {
             guard.state = CircuitState::Open;
+            guard.active_probes = 0;
         } else if guard.state == CircuitState::HalfOpen {
             // Any failure in half-open state immediately re-opens
             guard.state = CircuitState::Open;
+            guard.active_probes = 0;
         }
     }
 
@@ -464,6 +535,7 @@ impl CircuitBreaker {
         guard.state = CircuitState::Closed;
         guard.consecutive_failures = 0;
         guard.consecutive_successes = 0;
+        guard.active_probes = 0;
         guard.last_failure_time = None;
     }
 }
@@ -734,6 +806,176 @@ mod tests {
         assert_eq!(cb.state(), CircuitState::Open);
 
         cb.reset();
+        assert_eq!(cb.state(), CircuitState::Closed);
+    }
+
+    #[tokio::test]
+    async fn test_circuit_breaker_half_open_limits_concurrent_probes() {
+        let config = CircuitBreakerConfig {
+            failure_threshold: 1,
+            recovery_timeout: Duration::from_millis(50),
+            success_threshold: 1,
+        };
+        let cb = std::sync::Arc::new(CircuitBreaker::new(config));
+
+        // Trip the breaker to open
+        let _ = cb
+            .call(|| async { Err::<String, _>(GlobalError::llm("fail")) })
+            .await;
+        assert_eq!(cb.state(), CircuitState::Open);
+
+        // Wait for recovery timeout to elapse
+        tokio::time::sleep(Duration::from_millis(60)).await;
+
+        let (probe1_tx, probe1_rx) = tokio::sync::oneshot::channel::<()>();
+        let cb_clone = cb.clone();
+
+        // Launch probe 1 (holds open while waiting on channel)
+        let handle1 = tokio::spawn(async move {
+            cb_clone
+                .call(|| async {
+                    probe1_rx.await.unwrap();
+                    Ok::<_, GlobalError>("probe1_success".to_string())
+                })
+                .await
+        });
+
+        // Small yield so probe 1 transitions breaker to HalfOpen and claims the 1 probe slot
+        tokio::time::sleep(Duration::from_millis(10)).await;
+        assert_eq!(cb.state(), CircuitState::HalfOpen);
+        assert_eq!(cb.active_probes(), 1);
+
+        // Launch probe 2 while probe 1 is still in flight -> must be rejected immediately
+        let probe2_res = cb
+            .call(|| async { Ok::<_, GlobalError>("probe2".to_string()) })
+            .await;
+
+        assert!(probe2_res.is_err());
+        let err_msg = probe2_res.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("maximum concurrent probe requests reached"),
+            "Expected concurrent probe rejection, got: {err_msg}"
+        );
+
+        // Allow probe 1 to complete
+        probe1_tx.send(()).unwrap();
+        let probe1_res = handle1.await.unwrap();
+        assert!(probe1_res.is_ok());
+        assert_eq!(probe1_res.unwrap(), "probe1_success");
+
+        // Circuit should now be closed and active probes reset to 0
+        assert_eq!(cb.state(), CircuitState::Closed);
+        assert_eq!(cb.active_probes(), 0);
+
+        // Subsequent normal requests now pass through
+        let next_call = cb
+            .call(|| async { Ok::<_, GlobalError>("normal".to_string()) })
+            .await;
+        assert!(next_call.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_circuit_breaker_half_open_allows_multiple_probes_up_to_threshold() {
+        let config = CircuitBreakerConfig {
+            failure_threshold: 1,
+            recovery_timeout: Duration::from_millis(50),
+            success_threshold: 2,
+        };
+        let cb = std::sync::Arc::new(CircuitBreaker::new(config));
+
+        // Trip to open
+        let _ = cb
+            .call(|| async { Err::<String, _>(GlobalError::llm("fail")) })
+            .await;
+        assert_eq!(cb.state(), CircuitState::Open);
+
+        tokio::time::sleep(Duration::from_millis(60)).await;
+
+        let (tx1, rx1) = tokio::sync::oneshot::channel::<()>();
+        let (tx2, rx2) = tokio::sync::oneshot::channel::<()>();
+        let cb1 = cb.clone();
+        let cb2 = cb.clone();
+
+        // Launch probe 1
+        let h1 = tokio::spawn(async move {
+            cb1.call(|| async {
+                rx1.await.unwrap();
+                Ok::<_, GlobalError>("p1".to_string())
+            })
+            .await
+        });
+        tokio::time::sleep(Duration::from_millis(10)).await;
+        assert_eq!(cb.active_probes(), 1);
+
+        // Launch probe 2 (success_threshold is 2, so this should also be allowed)
+        let h2 = tokio::spawn(async move {
+            cb2.call(|| async {
+                rx2.await.unwrap();
+                Ok::<_, GlobalError>("p2".to_string())
+            })
+            .await
+        });
+        tokio::time::sleep(Duration::from_millis(10)).await;
+        assert_eq!(cb.active_probes(), 2);
+
+        // Launch probe 3 (exceeds threshold 2) -> must be rejected
+        let p3_res = cb
+            .call(|| async { Ok::<_, GlobalError>("p3".to_string()) })
+            .await;
+        assert!(p3_res.is_err());
+        assert!(p3_res.unwrap_err().to_string().contains("maximum concurrent probe requests reached"));
+
+        // Finish probe 1
+        tx1.send(()).unwrap();
+        assert!(h1.await.unwrap().is_ok());
+        // Circuit still half-open because only 1 of 2 required successes completed
+        assert_eq!(cb.state(), CircuitState::HalfOpen);
+        assert_eq!(cb.active_probes(), 1);
+
+        // Finish probe 2
+        tx2.send(()).unwrap();
+        assert!(h2.await.unwrap().is_ok());
+        // Circuit now closed
+        assert_eq!(cb.state(), CircuitState::Closed);
+        assert_eq!(cb.active_probes(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_circuit_breaker_half_open_probe_cancellation_decrements_counter() {
+        let config = CircuitBreakerConfig {
+            failure_threshold: 1,
+            recovery_timeout: Duration::from_millis(50),
+            success_threshold: 1,
+        };
+        let cb = CircuitBreaker::new(config);
+
+        // Trip to open
+        let _ = cb
+            .call(|| async { Err::<String, _>(GlobalError::llm("fail")) })
+            .await;
+        assert_eq!(cb.state(), CircuitState::Open);
+
+        tokio::time::sleep(Duration::from_millis(60)).await;
+
+        // Run a probe that times out and is cancelled
+        let timed_out = tokio::time::timeout(
+            Duration::from_millis(15),
+            cb.call(|| async {
+                tokio::time::sleep(Duration::from_millis(100)).await;
+                Ok::<_, GlobalError>("never".to_string())
+            }),
+        )
+        .await;
+
+        assert!(timed_out.is_err(), "Expected timeout");
+        // Due to ProbeGuard, active_probes should have safely dropped back to 0
+        assert_eq!(cb.active_probes(), 0);
+
+        // Next probe is NOT blocked by a leaked counter
+        let probe2 = cb
+            .call(|| async { Ok::<_, GlobalError>("recovered".to_string()) })
+            .await;
+        assert!(probe2.is_ok());
         assert_eq!(cb.state(), CircuitState::Closed);
     }
 
