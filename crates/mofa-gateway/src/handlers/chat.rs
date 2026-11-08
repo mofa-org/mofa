@@ -31,7 +31,7 @@ pub struct ChatRequest {
 }
 
 /// Response returned by the chat endpoint
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ChatResponse {
     /// ID of the agent that processed the request.
     pub agent_id: String,
@@ -41,6 +41,12 @@ pub struct ChatResponse {
     pub output: Value,
     /// Request processing time in milliseconds.
     pub duration_ms: u64,
+    /// Whether this response was served from the semantic cache.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cached: Option<bool>,
+    /// Cosine similarity score if served from cache.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cache_similarity: Option<f32>,
 }
 
 /// Extract client key from request headers for rate-limiting purposes
@@ -89,21 +95,58 @@ pub async fn chat(
 
     // Build input
     let input = match req.data {
-        Some(json_data) => AgentInput::json(json_data),
+        Some(ref json_data) => AgentInput::json(json_data.clone()),
         None => match req.message {
-            Some(msg) => AgentInput::text(msg),
+            Some(ref msg) => AgentInput::text(msg.clone()),
             None => AgentInput::Empty,
         },
     };
 
+    // Extract prompt candidate for semantic caching
+    let prompt_candidate = req.message.as_deref().or_else(|| {
+        req.data.as_ref().and_then(|d| match d {
+            Value::String(s) => Some(s.as_str()),
+            Value::Object(map) => map
+                .get("text")
+                .or_else(|| map.get("prompt"))
+                .and_then(|v| v.as_str()),
+            _ => None,
+        })
+    });
+
+    let start = std::time::Instant::now();
+    let session_id = req.session_id.unwrap_or_else(|| Uuid::new_v4().to_string());
+
+    // Check semantic cache before agent execution
+    if let (Some(cache), Some(prompt)) = (&state.semantic_cache, prompt_candidate) {
+        if cache.is_enabled() {
+            if let Some(hit) = cache.lookup(&id, prompt).await {
+                let duration_ms = start.elapsed().as_millis() as u64;
+                tracing::info!(
+                    agent_id = %id,
+                    similarity = hit.similarity,
+                    duration_ms = duration_ms,
+                    "semantic cache hit returned"
+                );
+                let response = ChatResponse {
+                    agent_id: id,
+                    session_id,
+                    output: hit.output,
+                    duration_ms,
+                    cached: Some(true),
+                    cache_similarity: Some(hit.similarity),
+                };
+                return Ok((StatusCode::OK, Json(response)));
+            }
+        }
+    }
+
     // Build execution context
     let execution_id = Uuid::new_v4().to_string();
-    let session_id = req.session_id.unwrap_or_else(|| Uuid::new_v4().to_string());
     let mut ctx = AgentContext::new(execution_id);
     ctx.session_id = Some(session_id.clone());
 
     // Execute
-    let start = std::time::Instant::now();
     let output = {
         let mut agent = agent_arc.write().await;
         agent
@@ -123,11 +166,28 @@ pub async fn chat(
     let output_value =
         serde_json::to_value(&output.content).unwrap_or_else(|_| json!(output.content.to_text()));
 
+    // Store in semantic cache on cache miss
+    if let (Some(cache), Some(prompt)) = (&state.semantic_cache, prompt_candidate) {
+        if cache.is_enabled() {
+            if let Err(e) = cache.insert(&id, prompt, output_value.clone()).await {
+                tracing::warn!(error = %e, "Failed to insert response into semantic cache");
+            }
+        }
+    }
+
+    let is_cache_active = state
+        .semantic_cache
+        .as_ref()
+        .map(|c| c.is_enabled())
+        .unwrap_or(false);
+
     let response = ChatResponse {
         agent_id: id,
         session_id,
         output: output_value,
         duration_ms,
+        cached: if is_cache_active { Some(false) } else { None },
+        cache_similarity: None,
     };
 
     Ok((StatusCode::OK, Json(response)))
@@ -136,5 +196,5 @@ pub async fn chat(
 /// Build the chat router sub-tree
 pub fn chat_router() -> axum::Router<Arc<AppState>> {
     use axum::routing::post;
-    axum::Router::new().route("/agents/{id}/chat", post(chat))
+    axum::Router::new().route("/agents/:id/chat", post(chat))
 }

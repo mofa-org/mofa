@@ -2,6 +2,7 @@
 
 use crate::inference_bridge::InferenceBridge;
 use crate::middleware::RateLimiter;
+use crate::middleware::semantic_cache::SemanticCache;
 use mofa_foundation::inference::OrchestratorConfig;
 use mofa_kernel::ObjectStore;
 use mofa_runtime::agent::registry::AgentRegistry;
@@ -16,6 +17,8 @@ pub struct AppState {
     pub rate_limiter: Arc<RateLimiter>,
     /// Inference bridge - connects to InferenceOrchestrator (optional)
     pub inference_bridge: Option<Arc<InferenceBridge>>,
+    /// Optional semantic cache for chat inference prompts
+    pub semantic_cache: Option<Arc<SemanticCache>>,
     /// Optional object store for file upload/download endpoints.
     ///
     /// Held as `Arc<dyn ObjectStore>` (the kernel trait) so that `AppState`
@@ -42,6 +45,7 @@ impl AppState {
             registry,
             rate_limiter,
             inference_bridge: None,
+            semantic_cache: None,
             s3: None,
             max_upload_bytes: None,
             #[cfg(feature = "socketio")]
@@ -60,11 +64,18 @@ impl AppState {
             registry,
             rate_limiter,
             inference_bridge: Some(Arc::new(bridge)),
+            semantic_cache: None,
             s3: None,
             max_upload_bytes: None,
             #[cfg(feature = "socketio")]
             socketio: None,
         }
+    }
+
+    /// Attach a semantic cache for chat requests.
+    pub fn with_semantic_cache(mut self, cache: Arc<SemanticCache>) -> Self {
+        self.semantic_cache = Some(cache);
+        self
     }
 
     /// Set the maximum allowed upload size in bytes.
