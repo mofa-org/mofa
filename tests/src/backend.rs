@@ -11,10 +11,97 @@ use std::sync::{Arc, RwLock};
 
 type ResponseSequences = Vec<(String, VecDeque<String>)>;
 
+/// Configurable pricing per 1,000 tokens for cost estimation.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct TokenPricingConfig {
+    /// Cost in USD per 1,000 input (prompt) tokens.
+    pub input_per_1k_tokens_usd: f64,
+    /// Cost in USD per 1,000 output (completion) tokens.
+    pub output_per_1k_tokens_usd: f64,
+}
+
+impl Default for TokenPricingConfig {
+    fn default() -> Self {
+        Self {
+            input_per_1k_tokens_usd: 0.0015,
+            output_per_1k_tokens_usd: 0.002,
+        }
+    }
+}
+
+impl TokenPricingConfig {
+    /// Create a new pricing configuration.
+    pub fn new(input_per_1k_tokens_usd: f64, output_per_1k_tokens_usd: f64) -> Self {
+        Self {
+            input_per_1k_tokens_usd,
+            output_per_1k_tokens_usd,
+        }
+    }
+
+    /// Calculate total cost in USD for a given number of prompt and completion tokens.
+    pub fn calculate_cost(&self, prompt_tokens: usize, completion_tokens: usize) -> f64 {
+        let input_cost = (prompt_tokens as f64 / 1000.0) * self.input_per_1k_tokens_usd;
+        let output_cost = (completion_tokens as f64 / 1000.0) * self.output_per_1k_tokens_usd;
+        input_cost + output_cost
+    }
+}
+
+/// Token usage and cost metrics for a single inference call.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct Usage {
+    /// Number of tokens in the prompt.
+    pub prompt_tokens: usize,
+    /// Number of tokens in the generated completion.
+    pub completion_tokens: usize,
+    /// Total tokens (`prompt_tokens + completion_tokens`).
+    pub total_tokens: usize,
+    /// Estimated cost in USD for this call.
+    pub cost_usd: f64,
+}
+
+impl Usage {
+    /// Create a new usage record.
+    pub fn new(prompt_tokens: usize, completion_tokens: usize, cost_usd: f64) -> Self {
+        Self {
+            prompt_tokens,
+            completion_tokens,
+            total_tokens: prompt_tokens + completion_tokens,
+            cost_usd,
+        }
+    }
+}
+
+/// Type alias for [`Usage`].
+pub type CallUsage = Usage;
+/// Type alias for [`Usage`].
+pub type UsageRecord = Usage;
+
+/// Aggregate token usage and total cost metrics across multiple inference calls.
+#[derive(Debug, Clone, PartialEq, Default, serde::Serialize, serde::Deserialize)]
+pub struct UsageTotals {
+    /// Sum of all prompt tokens across successful calls.
+    pub prompt_tokens: usize,
+    /// Sum of all completion tokens across successful calls.
+    pub completion_tokens: usize,
+    /// Sum of all total tokens across successful calls.
+    pub total_tokens: usize,
+    /// Cumulative cost in USD across successful calls.
+    pub cost_usd: f64,
+    /// Number of successful inference calls included in these totals.
+    pub call_count: usize,
+}
+
+/// Deterministic, lightweight token estimator based on whitespace tokenization.
+///
+/// Returns 0 for empty strings.
+pub fn estimate_tokens(text: &str) -> usize {
+    text.split_whitespace().count()
+}
+
 /// Deterministic mock implementation of [`ModelOrchestrator`].
 ///
 /// Supports first-match response rules, sequenced responses, failure injection,
-/// rate limiting, and call counting.
+/// rate limiting, token/cost accounting, and call counting.
 pub struct MockLLMBackend {
     responses: Arc<RwLock<Vec<(String, String)>>>,
     fallback: String,
@@ -27,6 +114,8 @@ pub struct MockLLMBackend {
     response_sequences: Arc<RwLock<ResponseSequences>>,
     call_count: Arc<AtomicUsize>,
     rate_limit: Arc<RwLock<Option<RateLimit>>>,
+    pricing: Arc<RwLock<TokenPricingConfig>>,
+    usage_history: Arc<RwLock<Vec<Usage>>>,
 }
 
 struct RateLimit {
@@ -55,6 +144,8 @@ impl MockLLMBackend {
             response_sequences: Arc::new(RwLock::new(Vec::new())),
             call_count: Arc::new(AtomicUsize::new(0)),
             rate_limit: Arc::new(RwLock::new(None)),
+            pricing: Arc::new(RwLock::new(TokenPricingConfig::default())),
+            usage_history: Arc::new(RwLock::new(Vec::new())),
         }
     }
 
@@ -121,6 +212,72 @@ impl MockLLMBackend {
     /// Reset the call counter to zero.
     pub fn reset_call_count(&self) {
         self.call_count.store(0, Ordering::Relaxed);
+    }
+
+    /// Configure token pricing used for cost calculation.
+    pub fn set_pricing(&self, pricing: TokenPricingConfig) {
+        *self.pricing.write().expect("lock poisoned") = pricing;
+    }
+
+    /// Builder method to configure token pricing on backend construction.
+    pub fn with_pricing(self, pricing: TokenPricingConfig) -> Self {
+        self.set_pricing(pricing);
+        self
+    }
+
+    /// Get a copy of the current pricing configuration.
+    pub fn pricing(&self) -> TokenPricingConfig {
+        self.pricing.read().expect("lock poisoned").clone()
+    }
+
+    /// Retrieve token usage from the most recent successful `infer()` call, if any.
+    pub fn last_usage(&self) -> Option<Usage> {
+        self.usage_history
+            .read()
+            .expect("lock poisoned")
+            .last()
+            .cloned()
+    }
+
+    /// Retrieve the complete history of usage records for all successful calls.
+    pub fn get_usage_history(&self) -> Vec<Usage> {
+        self.usage_history.read().expect("lock poisoned").clone()
+    }
+
+    /// Alias for [`get_usage_history`].
+    pub fn usage_history(&self) -> Vec<Usage> {
+        self.get_usage_history()
+    }
+
+    /// Compute aggregate token usage and cost totals across all successful calls.
+    pub fn get_usage_totals(&self) -> UsageTotals {
+        let history = self.usage_history.read().expect("lock poisoned");
+        let mut totals = UsageTotals::default();
+        totals.call_count = history.len();
+        for u in history.iter() {
+            totals.prompt_tokens += u.prompt_tokens;
+            totals.completion_tokens += u.completion_tokens;
+            totals.total_tokens += u.total_tokens;
+            totals.cost_usd += u.cost_usd;
+        }
+        totals
+    }
+
+    /// Alias for [`get_usage_totals`].
+    pub fn usage_totals(&self) -> UsageTotals {
+        self.get_usage_totals()
+    }
+
+    /// Clear all recorded usage history and reset totals to zero.
+    pub fn reset_usage(&self) {
+        self.usage_history.write().expect("lock poisoned").clear();
+    }
+
+    /// Reset all call count, rate limit, and token usage accounting state.
+    pub fn reset(&self) {
+        self.reset_call_count();
+        self.reset_usage();
+        self.reset_rate_limit();
     }
 
     /// Look up the response for a given prompt.
@@ -242,7 +399,18 @@ impl ModelOrchestrator for MockLLMBackend {
             }
         }
 
-        Ok(self.resolve(input))
+        let response = self.resolve(input);
+
+        // Record deterministic token and cost usage only for successful calls
+        let prompt_tokens = estimate_tokens(input);
+        let completion_tokens = estimate_tokens(&response);
+        let pricing = self.pricing.read().expect("lock poisoned").clone();
+        let cost_usd = pricing.calculate_cost(prompt_tokens, completion_tokens);
+
+        let usage = Usage::new(prompt_tokens, completion_tokens, cost_usd);
+        self.usage_history.write().expect("lock poisoned").push(usage);
+
+        Ok(response)
     }
 
     async fn route_by_type(&self, task: &ModelType) -> OrchestratorResult<String> {

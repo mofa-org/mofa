@@ -11,7 +11,10 @@ pub mod clock;
 pub mod report;
 pub mod tools;
 
-pub use backend::MockLLMBackend;
+pub use backend::{
+    estimate_tokens, CallUsage, MockLLMBackend, TokenPricingConfig, Usage, UsageRecord,
+    UsageTotals,
+};
 pub use bus::MockAgentBus;
 pub use clock::{Clock, MockClock, SystemClock};
 pub use report::{
