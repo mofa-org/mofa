@@ -28,11 +28,16 @@
 
 pub mod model_pool;
 pub mod orchestrator;
+pub mod preemptive_eviction;
 pub mod routing;
 pub mod types;
 
 // Re-export primary public API
 pub use crate::scheduler::AdmissionOutcome;
 pub use orchestrator::{InferenceOrchestrator, OrchestratorConfig};
+pub use preemptive_eviction::{
+    EvictionReport, HostMemorySampler, MemoryTelemetrySampler, MockMemorySampler,
+    PreemptiveEvictionConfig, PreemptiveMemoryMonitor,
+};
 pub use routing::{RoutingDecision, RoutingPolicy};
 pub use types::{InferenceRequest, InferenceResult, Precision, RequestPriority, RoutedBackend};

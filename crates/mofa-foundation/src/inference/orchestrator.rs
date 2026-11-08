@@ -29,7 +29,7 @@ use std::time::Duration;
 
 use crate::hardware::{HardwareCapability, detect_hardware};
 
-mod duration_secs {
+pub(crate) mod duration_secs {
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
     use std::time::Duration;
 
@@ -43,7 +43,13 @@ mod duration_secs {
     }
 }
 
+use std::sync::{Arc, Mutex};
+
 use super::model_pool::ModelPool;
+use super::preemptive_eviction::{
+    EvictionReport, HostMemorySampler, MemoryTelemetrySampler, PreemptiveEvictionConfig,
+    PreemptiveMemoryMonitor,
+};
 use super::routing::{self, RoutingDecision, RoutingPolicy};
 use super::types::{InferenceRequest, InferenceResult, RequestPriority, RoutedBackend};
 use crate::scheduler::AdmissionOutcome;
@@ -66,6 +72,9 @@ pub struct OrchestratorConfig {
     pub routing_policy: RoutingPolicy,
     /// The cloud provider to use for fallback (e.g., "openai")
     pub cloud_provider: String,
+    /// Preemptive memory telemetry and proactive eviction configuration
+    #[serde(default)]
+    pub preemptive_eviction: PreemptiveEvictionConfig,
 }
 
 impl Default for OrchestratorConfig {
@@ -78,6 +87,7 @@ impl Default for OrchestratorConfig {
             idle_timeout: Duration::from_secs(300),
             routing_policy: RoutingPolicy::default(),
             cloud_provider: "openai".to_string(),
+            preemptive_eviction: PreemptiveEvictionConfig::default(),
         }
     }
 }
@@ -89,14 +99,16 @@ impl Default for OrchestratorConfig {
 /// - Memory-aware admission control
 /// - Policy-driven routing (local vs cloud)
 /// - LRU model lifecycle management
+/// - Preemptive background memory telemetry monitoring & eviction
 /// - Automatic cloud failover
 ///
 /// Memory tracking is derived from `ModelPool` as the single source of truth.
 /// There is no separate `allocated_mb` counter — this prevents inconsistency.
 pub struct InferenceOrchestrator {
     config: OrchestratorConfig,
-    model_pool: ModelPool,
+    model_pool: Arc<Mutex<ModelPool>>,
     hardware: HardwareCapability,
+    memory_monitor: Option<PreemptiveMemoryMonitor>,
 }
 
 impl InferenceOrchestrator {
@@ -112,24 +124,83 @@ impl InferenceOrchestrator {
             config.memory_capacity_mb = (hardware.total_memory_bytes / 1_000_000) as usize;
         }
 
-        let model_pool = ModelPool::new(config.model_pool_capacity, config.idle_timeout);
+        let model_pool = Arc::new(Mutex::new(ModelPool::new(
+            config.model_pool_capacity,
+            config.idle_timeout,
+        )));
 
-        Self {
+        let mut orch = Self {
             config,
             model_pool,
             hardware,
+            memory_monitor: None,
+        };
+
+        if orch.config.preemptive_eviction.enabled && tokio::runtime::Handle::try_current().is_ok() {
+            orch.start_memory_monitor();
         }
+
+        orch
     }
 
     /// Create an orchestrator with explicit hardware capabilities (for testing).
     pub fn with_hardware(config: OrchestratorConfig, hardware: HardwareCapability) -> Self {
-        let model_pool = ModelPool::new(config.model_pool_capacity, config.idle_timeout);
+        let model_pool = Arc::new(Mutex::new(ModelPool::new(
+            config.model_pool_capacity,
+            config.idle_timeout,
+        )));
 
         Self {
             config,
             model_pool,
             hardware,
+            memory_monitor: None,
         }
+    }
+
+    /// Start the background memory telemetry monitoring loop using default host memory sampler.
+    pub fn start_memory_monitor(&mut self) {
+        self.start_memory_monitor_with_sampler(Arc::new(HostMemorySampler));
+    }
+
+    /// Start the background memory telemetry monitoring loop using a custom sampler (useful for tests).
+    pub fn start_memory_monitor_with_sampler(&mut self, sampler: Arc<dyn MemoryTelemetrySampler>) {
+        if self.memory_monitor.is_some() {
+            self.stop_memory_monitor();
+        }
+        self.memory_monitor = Some(PreemptiveMemoryMonitor::start(
+            self.config.preemptive_eviction.clone(),
+            Arc::clone(&self.model_pool),
+            sampler,
+        ));
+    }
+
+    /// Stop the background memory telemetry monitor, if running.
+    pub fn stop_memory_monitor(&mut self) {
+        if let Some(mut monitor) = self.memory_monitor.take() {
+            monitor.stop();
+        }
+    }
+
+    /// Returns true if the background memory monitor is actively running.
+    pub fn is_memory_monitor_running(&self) -> bool {
+        self.memory_monitor.is_some()
+    }
+
+    /// Perform an immediate proactive check-and-evict cycle using the given sampler.
+    pub fn check_and_evict_memory_with_sampler(&self, sampler: &dyn MemoryTelemetrySampler) -> EvictionReport {
+        let mut pool = self.model_pool.lock().unwrap();
+        PreemptiveMemoryMonitor::check_and_evict(&mut pool, &self.config.preemptive_eviction, sampler)
+    }
+
+    /// Perform an immediate proactive check-and-evict cycle using live host telemetry.
+    pub fn check_and_evict_memory(&self) -> EvictionReport {
+        self.check_and_evict_memory_with_sampler(&HostMemorySampler)
+    }
+
+    /// Returns a cloned Arc to the shared model pool.
+    pub fn model_pool(&self) -> Arc<Mutex<ModelPool>> {
+        Arc::clone(&self.model_pool)
     }
 
     /// The single entry point for inference.
@@ -142,7 +213,7 @@ impl InferenceOrchestrator {
     /// Real backend integration (MLX, OpenAI) will be wired in Phase 2.
     pub fn infer(&mut self, request: &InferenceRequest) -> InferenceResult {
         // Step 1: Evict idle models to free memory before admission check
-        self.model_pool.evict_idle();
+        self.model_pool.lock().unwrap().evict_idle();
 
         // Step 2: Evaluate admission based on current memory state
         // Memory is always derived from ModelPool (single source of truth)
@@ -160,17 +231,19 @@ impl InferenceOrchestrator {
         // Step 4: Execute based on routing decision
         match &decision {
             RoutingDecision::UseLocal { model_id } => {
+                let mut pool = self.model_pool.lock().unwrap();
                 // Load the model if not already loaded
-                if !self.model_pool.is_loaded(model_id) {
-                    self.model_pool.load(
+                if !pool.is_loaded(model_id) {
+                    pool.load(
                         model_id,
                         request.required_memory_mb,
                         request.preferred_precision,
                         request.priority,
                     );
                 } else {
-                    self.model_pool.touch(model_id);
+                    pool.touch(model_id);
                 }
+                drop(pool);
 
                 InferenceResult {
                     output: format!(
@@ -194,17 +267,19 @@ impl InferenceOrchestrator {
                         / request.preferred_precision.bytes_per_param()))
                 .ceil() as usize;
 
+                let mut pool = self.model_pool.lock().unwrap();
                 // Load the model at degraded precision
-                if !self.model_pool.is_loaded(model_id) {
-                    self.model_pool.load(
+                if !pool.is_loaded(model_id) {
+                    pool.load(
                         model_id,
                         degraded_memory_mb,
                         *degraded_precision,
                         request.priority,
                     );
                 } else {
-                    self.model_pool.touch(model_id);
+                    pool.touch(model_id);
                 }
+                drop(pool);
 
                 tracing::warn!(
                     model_id,
@@ -323,7 +398,7 @@ impl InferenceOrchestrator {
     ///
     /// Memory is always read from ModelPool — no separate counter to get out of sync.
     fn evaluate_admission(&self, request: &InferenceRequest) -> AdmissionOutcome {
-        let current_mb = self.model_pool.total_memory_mb();
+        let current_mb = self.model_pool.lock().unwrap().total_memory_mb();
         let projected_mb = current_mb + request.required_memory_mb;
         let capacity = self.config.memory_capacity_mb;
 
@@ -363,17 +438,17 @@ impl InferenceOrchestrator {
         if self.config.memory_capacity_mb == 0 {
             return 1.0;
         }
-        self.model_pool.total_memory_mb() as f64 / self.config.memory_capacity_mb as f64
+        self.model_pool.lock().unwrap().total_memory_mb() as f64 / self.config.memory_capacity_mb as f64
     }
 
     /// Get the number of currently loaded models.
     pub fn loaded_model_count(&self) -> usize {
-        self.model_pool.len()
+        self.model_pool.lock().unwrap().len()
     }
 
     /// Get the total allocated memory (in MB), derived from ModelPool.
     pub fn allocated_memory_mb(&self) -> usize {
-        self.model_pool.total_memory_mb()
+        self.model_pool.lock().unwrap().total_memory_mb()
     }
 
     /// Get a reference to the detected hardware capabilities.
@@ -388,7 +463,7 @@ impl InferenceOrchestrator {
 
     /// Manually unload a model from the pool, freeing its memory.
     pub fn unload_model(&mut self, model_id: &str) -> usize {
-        self.model_pool.unload(model_id)
+        self.model_pool.lock().unwrap().unload(model_id)
     }
 }
 
@@ -417,6 +492,7 @@ mod tests {
             idle_timeout: Duration::from_secs(300),
             routing_policy: RoutingPolicy::LocalFirstWithCloudFallback,
             cloud_provider: "openai".to_string(),
+            preemptive_eviction: PreemptiveEvictionConfig::default(),
         }
     }
 
@@ -542,6 +618,7 @@ mod tests {
             idle_timeout: Duration::from_secs(600),
             routing_policy: RoutingPolicy::CostOptimized,
             cloud_provider: "anthropic".to_string(),
+            preemptive_eviction: PreemptiveEvictionConfig::default(),
         };
         let json = serde_json::to_string(&config).unwrap();
         let back: OrchestratorConfig = serde_json::from_str(&json).unwrap();
@@ -703,5 +780,67 @@ mod tests {
             },
             "Low priority in defer band should fall back to cloud"
         );
+    }
+
+    #[test]
+    fn test_preemptive_eviction_triggered_by_telemetry() {
+        use crate::inference::preemptive_eviction::MockMemorySampler;
+
+        let mut config = test_config();
+        config.memory_capacity_mb = 10_000;
+        config.preemptive_eviction.critical_pressure_threshold = 0.90;
+        config.preemptive_eviction.target_pressure_threshold = 0.75;
+
+        let mut orch = InferenceOrchestrator::with_hardware(config, test_hardware());
+
+        let req1 = InferenceRequest::new("model-1", "test 1", 2000).with_priority(RequestPriority::Low);
+        let req2 = InferenceRequest::new("model-2", "test 2", 2000).with_priority(RequestPriority::High);
+        orch.infer(&req1);
+        orch.infer(&req2);
+        assert_eq!(orch.allocated_memory_mb(), 4000);
+
+        // Host memory spike: 10GB total, 500MB available -> 95% pressure > 90% threshold
+        let sampler = MockMemorySampler::new(10_000_000_000, 500_000_000);
+        let report = orch.check_and_evict_memory_with_sampler(&sampler);
+
+        assert!(report.triggered);
+        assert_eq!(report.priority_evicted, vec!["model-1".to_string()]);
+        assert_eq!(orch.allocated_memory_mb(), 2000);
+        assert_eq!(orch.loaded_model_count(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_background_memory_monitor_proactive_eviction() {
+        use crate::inference::preemptive_eviction::MockMemorySampler;
+
+        let mut config = test_config();
+        config.memory_capacity_mb = 10_000;
+        config.preemptive_eviction.enabled = true;
+        config.preemptive_eviction.poll_interval = Duration::from_millis(20);
+        config.preemptive_eviction.critical_pressure_threshold = 0.90;
+        config.preemptive_eviction.target_pressure_threshold = 0.70;
+
+        let mut orch = InferenceOrchestrator::with_hardware(config, test_hardware());
+
+        let req = InferenceRequest::new("auto-evict-model", "test", 3000).with_priority(RequestPriority::Low);
+        orch.infer(&req);
+        assert_eq!(orch.loaded_model_count(), 1);
+
+        // Start background monitor with mock sampler simulating high pressure
+        let sampler = Arc::new(MockMemorySampler::new(10_000_000_000, 500_000_000));
+        orch.start_memory_monitor_with_sampler(sampler);
+        assert!(orch.is_memory_monitor_running());
+
+        // Wait for background poll loop to trigger eviction without any incoming requests
+        tokio::time::sleep(Duration::from_millis(60)).await;
+
+        assert_eq!(
+            orch.loaded_model_count(),
+            0,
+            "Background monitor should proactively evict model independently of inference requests"
+        );
+
+        orch.stop_memory_monitor();
+        assert!(!orch.is_memory_monitor_running());
     }
 }

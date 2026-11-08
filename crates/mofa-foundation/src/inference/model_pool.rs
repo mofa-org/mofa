@@ -233,6 +233,29 @@ impl ModelPool {
         }
         evicted
     }
+
+    /// Proactively evicts models to satisfy a target memory limit in MB using multi-tiered priority order.
+    ///
+    /// 1. First evicts all models that have exceeded their idle timeout.
+    /// 2. If total memory remains above `target_mb`, evicts models in priority-weighted
+    ///    LRU order (lowest priority first; LRU within same priority) until memory is at
+    ///    or below `target_mb`.
+    ///
+    /// Returns a tuple of `(idle_evicted_ids, priority_evicted_ids)`.
+    pub fn evict_preemptive(&mut self, target_mb: usize) -> (Vec<String>, Vec<String>) {
+        let idle_evicted = self.evict_idle();
+        let mut priority_evicted = Vec::new();
+
+        while self.total_memory_mb() > target_mb && !self.loaded.is_empty() {
+            if let Some(id) = self.evict_lru_for_priority(RequestPriority::Low) {
+                priority_evicted.push(id);
+            } else {
+                break;
+            }
+        }
+
+        (idle_evicted, priority_evicted)
+    }
 }
 
 #[cfg(test)]
@@ -441,5 +464,48 @@ mod tests {
             "Priority should be upgraded on reload"
         );
         assert_eq!(pool.len(), 1, "No duplicate entry should be created");
+    }
+
+    #[test]
+    fn test_evict_preemptive_idle_first_then_priority() {
+        let mut pool = ModelPool::new(5, Duration::from_millis(50));
+
+        // Load 3 models totaling 6000 MB
+        pool.load("idle-model", 2000, Precision::F16, RequestPriority::High);
+        std::thread::sleep(Duration::from_millis(60)); // let idle-model expire
+
+        pool.load("low-model", 2000, Precision::Q4, RequestPriority::Low);
+        pool.load("crit-model", 2000, Precision::F16, RequestPriority::Critical);
+
+        assert_eq!(pool.total_memory_mb(), 6000);
+
+        // Preemptively evict to bring memory down to 2500 MB (target)
+        let (idle_evicted, priority_evicted) = pool.evict_preemptive(2500);
+
+        // idle-model should be evicted first via evict_idle
+        assert_eq!(idle_evicted, vec!["idle-model".to_string()]);
+
+        // After idle-model (2000 MB), memory is 4000 MB > 2500 MB target.
+        // Next to be evicted should be low-model (2000 MB) because it has lowest priority.
+        assert_eq!(priority_evicted, vec!["low-model".to_string()]);
+
+        // Remaining memory is 2000 MB (crit-model) <= 2500 MB target.
+        assert!(!pool.is_loaded("idle-model"));
+        assert!(!pool.is_loaded("low-model"));
+        assert!(pool.is_loaded("crit-model"));
+        assert_eq!(pool.total_memory_mb(), 2000);
+    }
+
+    #[test]
+    fn test_evict_preemptive_noop_when_below_target() {
+        let mut pool = ModelPool::new(5, Duration::from_secs(300));
+        pool.load("model-a", 1000, Precision::F16, RequestPriority::Normal);
+        pool.load("model-b", 1000, Precision::F16, RequestPriority::High);
+
+        // Total memory is 2000 MB, target is 3000 MB -> no eviction
+        let (idle_evicted, priority_evicted) = pool.evict_preemptive(3000);
+        assert!(idle_evicted.is_empty());
+        assert!(priority_evicted.is_empty());
+        assert_eq!(pool.len(), 2);
     }
 }
