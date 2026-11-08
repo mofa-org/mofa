@@ -1,20 +1,6 @@
 //! MoFA CLI - Command-line tool for building and managing AI agents
 
-mod cli;
-mod commands;
-mod config;
-mod context;
-mod output;
-mod plugin_catalog;
-mod render;
-mod state;
-mod store;
-mod tui;
-mod utils;
-mod widgets;
-
-mod error;
-pub use error::{CliError, CliResult, IntoCliReport};
+use mofa_cli::*;
 
 use clap::Parser;
 use cli::Cli;
