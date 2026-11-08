@@ -59,3 +59,58 @@ impl Default for ReviewPolicyEngine {
         Self::new(vec![])
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mofa_kernel::hitl::{
+        AuditValidationPolicy, AuditingData, ExecutionTrace, ReviewContext, RiskLevel,
+    };
+    use serde_json::json;
+
+    #[tokio::test]
+    async fn test_policy_engine_with_audit_validation_policy() {
+        let policy = Arc::new(AuditValidationPolicy::new(RiskLevel::High));
+        let engine = ReviewPolicyEngine::new(vec![policy]);
+
+        // 1. Critical risk transaction -> triggers review
+        let payload = json!({"amount": 100_000, "action": "vault_drain"});
+        let audit = AuditingData::new(
+            "treasury-bot",
+            "vault_drain",
+            "Emergency reserve movement",
+            "fintech",
+            &payload,
+        )
+        .with_risk_level(RiskLevel::Critical);
+
+        let trace = ExecutionTrace {
+            steps: Vec::new(),
+            duration_ms: 5,
+        };
+        let ctx = ReviewContext::new(trace, payload).with_auditing_data(audit);
+
+        let req = engine.should_request_review(&ctx).await.unwrap();
+        assert!(req.is_some());
+        let request = req.unwrap();
+        assert!(!engine.can_auto_approve(&request).await.unwrap());
+
+        // 2. Low risk transaction -> should not request review
+        let low_payload = json!({"status": "ping"});
+        let low_audit = AuditingData::new(
+            "health-bot",
+            "ping",
+            "Heartbeat check",
+            "system",
+            &low_payload,
+        )
+        .with_risk_level(RiskLevel::Low);
+
+        let low_trace = ExecutionTrace {
+            steps: Vec::new(),
+            duration_ms: 1,
+        };
+        let low_ctx = ReviewContext::new(low_trace, low_payload).with_auditing_data(low_audit);
+        assert!(engine.should_request_review(&low_ctx).await.unwrap().is_none());
+    }
+}

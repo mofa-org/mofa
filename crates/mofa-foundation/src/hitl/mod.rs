@@ -27,6 +27,7 @@ pub use policy_engine::ReviewPolicyEngine;
 pub use rate_limiter::RateLimiter;
 pub use store::{InMemoryReviewStore, ReviewStore, ReviewStoreError};
 pub use webhook::{WebhookConfig, WebhookDelivery};
+pub use mofa_kernel::hitl::{AuditingData, AuditValidationPolicy, RiskLevel};
 
 #[cfg(feature = "http-api")]
 pub use api::{
