@@ -28,6 +28,12 @@ pub enum ReviewAuditEventType {
     Escalated,
     /// Review delegated
     Delegated,
+    /// Cryptographic security seal was verified successfully
+    SecuritySealVerified,
+    /// Cryptographic security seal verification failed (tampered payload or invalid seal)
+    SecuritySealTampered,
+    /// Standardized audit action logged
+    AuditLogged,
 }
 
 /// Review audit event
@@ -114,6 +120,40 @@ impl ReviewAuditEvent {
         self.user_agent = Some(ua.into());
         self
     }
+
+    /// Create an audit event linked to an `AuditingData` security seal.
+    pub fn from_auditing_data(
+        review_id: impl Into<String>,
+        event_type: ReviewAuditEventType,
+        auditing: &crate::hitl::context::AuditingData,
+    ) -> Self {
+        let mut event = Self::new(review_id, event_type, Some(auditing.actor.clone()));
+        event.timestamp_ms = auditing.timestamp_ms;
+        event.data.insert(
+            "security_seal".to_string(),
+            serde_json::Value::String(auditing.security_seal.clone()),
+        );
+        event.data.insert(
+            "intent".to_string(),
+            serde_json::Value::String(auditing.intent.clone()),
+        );
+        event.data.insert(
+            "action".to_string(),
+            serde_json::Value::String(auditing.action.clone()),
+        );
+        event.data.insert(
+            "domain".to_string(),
+            serde_json::Value::String(auditing.domain.clone()),
+        );
+        event.data.insert(
+            "risk_level".to_string(),
+            serde_json::to_value(&auditing.risk_level).unwrap_or_default(),
+        );
+        for (k, v) in &auditing.metadata {
+            event.data.insert(format!("audit_meta_{}", k), v.clone());
+        }
+        event
+    }
 }
 
 /// Audit log query filter
@@ -137,4 +177,49 @@ pub struct AuditLogQuery {
     pub limit: Option<u64>,
     /// Offset for pagination
     pub offset: Option<u64>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::hitl::context::{AuditingData, RiskLevel};
+    use serde_json::json;
+
+    #[test]
+    fn test_review_audit_event_from_auditing_data() {
+        let payload = json!({"order_id": "ORD-1234"});
+        let audit = AuditingData::new(
+            "operator-jane",
+            "cancel_order",
+            "Customer requested cancellation",
+            "ecommerce",
+            &payload,
+        )
+        .with_risk_level(RiskLevel::Medium)
+        .with_metadata("reason_code", json!("CUSTOMER_MIND_CHANGED"));
+
+        let event = ReviewAuditEvent::from_auditing_data(
+            "rev-567",
+            ReviewAuditEventType::SecuritySealVerified,
+            &audit,
+        );
+
+        assert_eq!(event.review_id, "rev-567");
+        assert_eq!(event.event_type, ReviewAuditEventType::SecuritySealVerified);
+        assert_eq!(event.actor.unwrap(), "operator-jane");
+        assert_eq!(event.data.get("action").unwrap(), "cancel_order");
+        assert_eq!(event.data.get("domain").unwrap(), "ecommerce");
+        assert_eq!(
+            event.data.get("intent").unwrap(),
+            "Customer requested cancellation"
+        );
+        assert_eq!(
+            event.data.get("security_seal").unwrap(),
+            &serde_json::Value::String(audit.security_seal.clone())
+        );
+        assert_eq!(
+            event.data.get("audit_meta_reason_code").unwrap(),
+            "CUSTOMER_MIND_CHANGED"
+        );
+    }
 }

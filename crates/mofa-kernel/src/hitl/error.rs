@@ -46,6 +46,15 @@ pub enum HitlError {
 
     #[error("Tenant access denied: {tenant_id}")]
     TenantAccessDenied { tenant_id: String },
+
+    #[error("Audit validation failed: {reason}")]
+    AuditValidationFailed { reason: String },
+
+    #[error("Security seal verification failed: expected {expected}, computed {computed}")]
+    SecuritySealMismatch {
+        expected: String,
+        computed: String,
+    },
 }
 
 /// Errors that can occur in the review store
