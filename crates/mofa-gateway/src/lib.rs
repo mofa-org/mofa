@@ -107,5 +107,9 @@ pub use control_plane::{ControlPlane, ControlPlaneConfig};
 pub use error::{ControlPlaneError, GatewayError, GatewayResult};
 pub use gateway::{Gateway, GatewayConfig};
 pub use inference_bridge::{ChatCompletionRequest, ChatCompletionResponse, InferenceBridge};
+pub use middleware::semantic_cache::{
+    CacheHit, CacheStats, CachedItem, LlmPromptEmbedder, MockPromptEmbedder, PromptEmbedder,
+    SemanticCache, SemanticCacheConfig, cosine_similarity,
+};
 pub use server::{GatewayServer, ServerConfig};
 pub use types::*;
