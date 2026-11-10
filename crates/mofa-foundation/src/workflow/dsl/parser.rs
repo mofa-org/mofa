@@ -66,8 +66,8 @@ impl WorkflowDslParser {
         definition: WorkflowDefinition,
         agent_registry: &HashMap<String, Arc<LLMAgent>>,
     ) -> DslResult<crate::workflow::WorkflowGraph> {
-        // Validate definition
-        Self::validate(&definition)?;
+        // Validate definition with runtime agent registry
+        Self::validate_definition(&definition, Some(agent_registry))?;
 
         // Build workflow
         let mut builder = WorkflowBuilder::new(&definition.metadata.id, &definition.metadata.name)
@@ -90,8 +90,11 @@ impl WorkflowDslParser {
         Ok(builder.build())
     }
 
-    /// Validate workflow definition
-    fn validate(definition: &WorkflowDefinition) -> DslResult<()> {
+    /// Validate workflow definition against definition agents and optional runtime agent registry
+    pub fn validate_definition(
+        definition: &WorkflowDefinition,
+        agent_registry: Option<&HashMap<String, Arc<LLMAgent>>>,
+    ) -> DslResult<()> {
         // Check for required nodes
         let node_ids: Vec<&str> = definition.nodes.iter().map(|n| n.id()).collect();
 
@@ -140,7 +143,12 @@ impl WorkflowDslParser {
             if let NodeDefinition::LlmAgent { agent, .. } = node {
                 match agent {
                     AgentRef::Registry { agent_id } => {
-                        if !definition.agents.contains_key(agent_id) {
+                        let exists_in_definition = definition.agents.contains_key(agent_id);
+                        let exists_in_registry = agent_registry
+                            .map(|reg| reg.contains_key(agent_id))
+                            .unwrap_or(false);
+
+                        if !exists_in_definition && !exists_in_registry {
                             return Err(DslError::AgentNotFound(agent_id.clone()));
                         }
                     }
@@ -152,6 +160,11 @@ impl WorkflowDslParser {
         }
 
         Ok(())
+    }
+
+    /// Validate workflow definition
+    pub fn validate(definition: &WorkflowDefinition) -> DslResult<()> {
+        Self::validate_definition(definition, None)
     }
 
     /// Add a node to the workflow builder
@@ -271,5 +284,101 @@ impl WorkflowDslParser {
         }
 
         Ok(builder)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::llm::{LLMAgentBuilder, MockLLMProvider};
+    use crate::workflow::dsl::schema::{EdgeDefinition, WorkflowMetadata};
+
+    fn make_test_definition(agent_id: &str) -> WorkflowDefinition {
+        WorkflowDefinition {
+            metadata: WorkflowMetadata {
+                id: "wf-1".to_string(),
+                name: "Test Workflow".to_string(),
+                description: "Test".to_string(),
+                version: Some("1.0.0".to_string()),
+                author: None,
+                tags: vec![],
+            },
+            config: Default::default(),
+            agents: HashMap::new(), // Not in definition!
+            nodes: vec![
+                NodeDefinition::Start {
+                    id: "start".to_string(),
+                    name: Some("Start".to_string()),
+                },
+                NodeDefinition::LlmAgent {
+                    id: "agent_node".to_string(),
+                    name: "Agent Node".to_string(),
+                    agent: AgentRef::Registry {
+                        agent_id: agent_id.to_string(),
+                    },
+                    prompt_template: None,
+                    config: Default::default(),
+                },
+                NodeDefinition::End {
+                    id: "end".to_string(),
+                    name: Some("End".to_string()),
+                },
+            ],
+            edges: vec![
+                EdgeDefinition {
+                    from: "start".to_string(),
+                    to: "agent_node".to_string(),
+                    condition: None,
+                    label: None,
+                },
+                EdgeDefinition {
+                    from: "agent_node".to_string(),
+                    to: "end".to_string(),
+                    condition: None,
+                    label: None,
+                },
+            ],
+        }
+    }
+
+    #[test]
+    fn test_validate_rejects_missing_registry_agent() {
+        let definition = make_test_definition("missing_agent");
+        // Neither in definition nor in registry
+        let err = WorkflowDslParser::validate(&definition).unwrap_err();
+        match err {
+            DslError::AgentNotFound(id) => assert_eq!(id, "missing_agent"),
+            other => panic!("expected AgentNotFound, got {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_build_with_runtime_agent_registry() {
+        let definition = make_test_definition("runtime_agent");
+
+        let provider = Arc::new(MockLLMProvider::new("test-mock"));
+        let agent = Arc::new(
+            LLMAgentBuilder::new()
+                .with_id("runtime_agent")
+                .with_name("Runtime Agent")
+                .with_provider(provider)
+                .build(),
+        );
+
+        let mut registry = HashMap::new();
+        registry.insert("runtime_agent".to_string(), agent);
+
+        // Standalone validate without registry should fail
+        assert!(WorkflowDslParser::validate(&definition).is_err());
+
+        // Validate with runtime registry should pass
+        assert!(WorkflowDslParser::validate_definition(&definition, Some(&registry)).is_ok());
+
+        // Build with runtime agent registry should succeed
+        let graph = WorkflowDslParser::build_with_agents(definition, &registry)
+            .await
+            .expect("should build workflow graph successfully with runtime agent registry");
+
+        assert_eq!(graph.node_count(), 3);
     }
 }
