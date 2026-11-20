@@ -42,18 +42,71 @@
  <img src="https://img.shields.io/badge/扩展-无限-orange?style=for-the-badge" />
  <img src="https://img.shields.io/badge/语言-多端-yellow?style=for-the-badge" />
  <img src="https://img.shields.io/badge/运行时-可编程-green?style=for-the-badge" />
+ <img src="https://img.shields.io/badge/企业级-计费链路-blue?style=for-the-badge" />
 </p>
 
 ## 概述
-MoFA (Modular Framework for Agents) 不是又一个智能体框架。
-它是第一个实现"一次编写，多语言共享"的生产级智能体框架，专注于**极致性能、无限扩展性和运行时可编程性**。
+MoFA (Modular Framework for Agents) 是企业级 LLM 基础设施。
+企业基于 MoFA 提供 Agent 能力（业务 AI 集成），MoFA 承载底层完整链路：**Agent 运行时 → Token 计量与审计 → Credits → 计费 → 充值** —— 它不是又一个智能体框架，也不是 token 中转站。
+
+它也是第一个实现"一次编写，多语言共享"的生产级智能体框架，专注于**极致性能、无限扩展性和运行时可编程性**。
 通过革命性的架构设计，独创**双层插件系统**（编译时插件 + 运行时插件），实现了业界罕见的"性能与灵活性"完美平衡。
 
 MoFA的突破：</br>
+✅ 企业级 LLM 基础设施：Agent、Token 审计、Credits、计费、充值完整链路 </br>
 ✅ Rust内核 + UniFFI：极致性能 + 多语言原生调用 </br>
 ✅ 双层插件：编译时高性能 + 运行时零部署修改 </br>
 ✅ 微内核架构：模块化，易扩展</br>
 ✅ 云原生：天生支持分布式和边缘计算</br>
+
+## 企业级 LLM 基础设施
+
+MoFA 面向向最终用户提供 Agent 能力的企业 —— 业务 AI 集成即产品。
+企业无需拼装"智能体框架 + 计量层 + 计费系统 + 支付渠道"，以 MoFA 一套基础设施承载完整链路：
+
+```
+终端用户请求
+    │
+    ▼
+Agent 运行时（Agent / 工作流 / 工具）
+    │  每次 LLM 调用
+    ▼
+Token 计量与审计（按用户 / 按租户）
+    │
+    ▼
+平台计价（数据库配置各模型 Token 原价）
+    │
+    ▼
+Credits 折算（折算规则可配置，余额实时扣减）
+    │
+    ▼
+套餐计费 / 账单
+    │  余额不足时触发
+    ▼
+充值 / 支付通道 ──▶ 余额恢复，用户继续使用
+```
+
+**当前代码库已具备：**
+
+- 每次 LLM 调用的 Token 记录持久化到 PostgreSQL / MySQL / SQLite，含 `user_id` / `tenant_id` 归属与成本明细
+- 模型定价注册表（各模型 Token 原价）与成本汇总看板（`/costs/summary`）
+- 会话 / 每日预算控制，每次 LLM 调用实时校验额度
+- Prometheus Token 指标与 OpenAI 兼容网关 API
+
+**路线图规划中（见[企业级能力](#企业级能力)）**：持久化租户账本、Credits 余额、套餐计费与账单、充值通道。
+
+### MoFA 与 Token 中转站的区别
+
+Token 中转站转售上游 API 额度；MoFA 是业务产品运行其上的基础设施：
+
+| 维度 | MoFA 基础设施 | Token 中转站 |
+|---|---|---|
+| **定位** | 业务 AI 基础设施 | API 额度转售 |
+| **Agent 能力** | 完整智能体框架、工作流、双层插件 | 仅请求转发 |
+| **计量粒度** | 按调用、按用户/租户，可审计 | 总量额度计数 |
+| **变现模式** | 面向终端用户的 Credits、套餐、计费与充值 | 面向开发者的预付额度 |
+| **扩展性** | 运行时可编程（Rhai + Rust/WASM 插件） | 无 |
+| **部署形态** | 自托管、云原生、边缘就绪 | 仅 SaaS |
 
 ## 为什么选择MoFA？
 ### **性能优势**
@@ -262,6 +315,14 @@ MoFA 集成了 [Rhai](https://github.com/rhaiscript/rhai) 嵌入式脚本语言�
 - [ ] 多智能体协作标准协议
 - [ ] 跨平台移动端支持
 - [ ] 向智能体操作系统演进
+
+### 企业级能力
+- [ ] 多租户用户体系与认证（用户/租户实体、按用户 API Key、网关鉴权）
+- [ ] 持久化用量→成本账本（预算/配额状态落库、按租户归集）
+- [ ] Token 审计与报表（按租户/用户审计查询、管理 API、看板视图）
+- [ ] Credits 体系（数据库配置 Token 原价→Credits 折算规则、余额账户、调用实时扣减）
+- [ ] 套餐计费与账单（Credits 套餐、账单/对账、租户成本分摊）
+- [ ] 充值与支付通道（充值流程、余额流水）
 
 ## 快速开始
 

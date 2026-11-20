@@ -48,11 +48,13 @@
  <img src="https://img.shields.io/badge/Extensibility-Unlimited-orange?style=for-the-badge" />
  <img src="https://img.shields.io/badge/Languages-Multi_platform-yellow?style=for-the-badge" />
  <img src="https://img.shields.io/badge/Runtime-Programmable-green?style=for-the-badge" />
+ <img src="https://img.shields.io/badge/Enterprise-Billing_Pipeline-blue?style=for-the-badge" />
 </p>
 
 ## 📋 Table of Contents
 
 - [Overview](#overview)
+- [Enterprise-Grade LLM Infrastructure](#enterprise-grade-llm-infrastructure)
 - [Why MoFA?](#why-mofa)
 - [Core Architecture](#core-architecture)
 - [Core Features](#core-features)
@@ -66,15 +68,56 @@
 - [License](#license)
 
 ## Overview
-MoFA (Modular Framework for Agents) is not just another entry in the crowded agent framework landscape.
-It is the first production-grade framework to achieve **"write once, run everywhere"** across languages, built for **extreme performance, boundless extensibility, and runtime programmability**.
+MoFA (Modular Framework for Agents) is enterprise-grade LLM infrastructure.
+Enterprises use MoFA to deliver agent capabilities for business AI integration, while MoFA runs the complete chain underneath: **agent runtime → token metering & audit → credits → billing → recharge** — not just another agent framework, and not a token relay.
+
+It is also the first production-grade framework to achieve **"write once, run everywhere"** across languages, built for **extreme performance, boundless extensibility, and runtime programmability**.
 Through its revolutionary microkernel architecture and innovative **dual-layer plugin system** (compile-time + runtime), MoFA strikes the elusive balance between raw performance and dynamic flexibility.
 
 What Sets MoFA Apart:</br>
+✅ **Enterprise LLM Infrastructure**: The complete chain — agents, token audit, credits, billing & recharge</br>
 ✅ **Rust Core + UniFFI**: Blazing performance with native multi-language interoperability</br>
 ✅ **Dual-Layer Plugins**: Zero-cost compile-time extensions meet hot-swappable runtime scripts</br>
 ✅ **Microkernel Architecture**: Clean separation of concerns, effortless to extend</br>
 ✅ **Cloud-Native by Design**: First-class support for distributed and edge deployments</br>
+
+## Enterprise-Grade LLM Infrastructure
+
+MoFA targets enterprises that deliver agent capabilities to their own users — business AI integration as a product.
+Rather than stitching together an agent framework, a metering layer, a billing system, and a payment provider, an enterprise runs MoFA as the single piece of infrastructure that owns the whole chain:
+
+```mermaid
+flowchart LR
+    U["End Users"] -->|requests| A["Agent Runtime<br>agents · workflows · tools"]
+    A -->|every LLM call| M["Token Metering & Audit<br>per user / per tenant"]
+    M --> P["Platform Pricing<br>token price configured in DB"]
+    P --> C["Credits & Balance<br>conversion + real-time deduction"]
+    C --> B["Plans & Billing"]
+    R["Recharge & Payment"] --> U
+    B -.->|top-up| R
+```
+
+**Already in the codebase:**
+
+- Per-call token accounting persisted to PostgreSQL / MySQL / SQLite, with `user_id` / `tenant_id` attribution and full cost breakdown
+- Model pricing registry (per-model token prices) with a cost summary dashboard (`/costs/summary`)
+- Session / daily budget enforcement and quota control on every LLM call
+- Prometheus token metrics and an OpenAI-compatible gateway API
+
+**Planned in the [Enterprise Track](#enterprise-track)**: durable per-tenant ledgers, credits balances, plans & invoicing, and recharge channels.
+
+### MoFA vs Token Relay Stations
+
+A token relay station resells upstream API quotas. MoFA is the infrastructure your product is built on:
+
+| Dimension | MoFA Infrastructure | Token Relay Station |
+|---|---|---|
+| **Positioning** | Business AI infrastructure | API quota reseller |
+| **Agent capabilities** | Full agent framework, workflows, dual-layer plugins | Request forwarding only |
+| **Metering** | Per-call, per-user / per-tenant, auditable | Aggregate quota counting |
+| **Monetization** | Credits, plans, billing & recharge for end users | Prepaid quota for developers |
+| **Extensibility** | Runtime-programmable (Rhai + Rust/WASM plugins) | None |
+| **Deployment** | Self-hosted, cloud-native, edge-ready | SaaS only |
 
 ## Why MoFA?
 
@@ -236,12 +279,12 @@ MoFA adopts a **layered microkernel architecture** with `mofa-kernel` at its cor
 - **Session Management**: Persistent agent session storage
 - **Memory System**: Stateful agent memory management
 
-### 6. Monitoring & Observability
+### 7. Monitoring & Observability
 - **Dashboard**: Built-in web dashboard with real-time metrics
 - **Metrics System**: Prometheus-compatible metrics system
 - **Tracing Framework**: Distributed tracing system
 
-### 7. Rhai Script Engine
+### 8. Rhai Script Engine
 
 MoFA integrates the [Rhai](https://github.com/rhaiscript/rhai) embedded scripting language, providing **runtime programmability** without recompilation.
 
@@ -295,6 +338,14 @@ MoFA integrates the [Rhai](https://github.com/rhaiscript/rhai) embedded scriptin
 - [ ] Multi-agent collaboration standard protocol
 - [ ] Cross-platform mobile support
 - [ ] Evolve into agent operating system
+
+### Enterprise Track
+- [ ] Multi-tenant user system & authentication (user/tenant entities, per-user API keys, gateway auth)
+- [ ] Durable usage→cost ledger (persistent budgets & quotas, tenant attribution)
+- [ ] Token audit & reporting (per-tenant/per-user queries, admin APIs, dashboard views)
+- [ ] Credits system (DB-configured token pricing → credits conversion, balance accounts, real-time deduction)
+- [ ] Plans, billing & invoicing (credit packages, statements, tenant cost allocation)
+- [ ] Recharge & payment channels (top-up flow, balance transaction history)
 
 ## Quick Start
 
