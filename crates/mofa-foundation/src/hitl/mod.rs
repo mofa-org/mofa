@@ -22,6 +22,7 @@ pub use analytics::{ReviewAnalytics, ReviewMetrics, ReviewerMetrics, TimeSeriesP
 pub use audit::{AuditStore, AuditStoreError, InMemoryAuditStore};
 pub use error::FoundationHitlError;
 pub use manager::{ReviewManager, ReviewManagerConfig};
+pub use mofa_kernel::hitl::{AuditValidationPolicy, AuditingData, RiskLevel};
 pub use notifier::{NotificationChannel, ReviewNotifier};
 pub use policy_engine::ReviewPolicyEngine;
 pub use rate_limiter::RateLimiter;
