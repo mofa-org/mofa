@@ -5,7 +5,7 @@
 //!   - `mofa_kernel::budget::{BudgetConfig, BudgetStatus, BudgetError}`
 //!
 //! This module provides the runtime implementations:
-//!   - [`InMemoryPricingRegistry`] — built-in prices for major providers
+//!   - [`InMemoryPricingRegistry`] — list prices from `llm_prices`, plus your own overrides
 //!   - [`BudgetEnforcer`] — async, per-agent budget enforcement
 
 mod budget;
