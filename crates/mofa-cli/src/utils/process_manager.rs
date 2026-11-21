@@ -124,9 +124,21 @@ impl AgentProcessManager {
     ///
     /// # Arguments
     /// * `pid` - Process ID to terminate
-    /// * `force` - If true, use SIGKILL; if false, try SIGTERM first
+    /// * `force` - If true, terminate immediately (SIGKILL on Unix, `taskkill /F`
+    ///   on Windows); if false, try a graceful stop first (SIGTERM on Unix; on
+    ///   Windows `taskkill` posts WM_CLOSE and escalates to `taskkill /F` if the
+    ///   process has not exited after a short grace period)
     pub async fn stop_agent_by_pid(&self, pid: u32, force: bool) -> Result<()> {
         debug!("Stopping agent with PID: {} (force: {})", pid, force);
+
+        // Stopping a process that is not running is an error on every
+        // platform (mirrors ESRCH from kill(2) on Unix).
+        if !self.is_running(pid) {
+            return Err(CliError::StateError(format!(
+                "Process {} is not running",
+                pid
+            )));
+        }
 
         #[cfg(unix)]
         {
@@ -159,13 +171,44 @@ impl AgentProcessManager {
         {
             use std::process::Command;
 
-            // On Windows, use taskkill command
+            // Graceful `taskkill` (without /F) only posts WM_CLOSE to the
+            // process's top-level windows, so it cannot stop windowless
+            // console processes ("can only be terminated forcefully").
+            // Treat graceful stop as best-effort: try WM_CLOSE first, wait
+            // briefly for exit, then escalate to /F so the stop still lands.
+            if !force {
+                let _ = Command::new("taskkill")
+                    .args(windows_taskkill_args(pid, false))
+                    .status();
+
+                const GRACE_POLL_INTERVAL_MS: u64 = 100;
+                const GRACE_WINDOW_MS: u64 = 2_000;
+                for _ in 0..(GRACE_WINDOW_MS / GRACE_POLL_INTERVAL_MS) {
+                    if !self.is_running(pid) {
+                        info!("Process {} exited gracefully", pid);
+                        return Ok(());
+                    }
+                    tokio::time::sleep(std::time::Duration::from_millis(GRACE_POLL_INTERVAL_MS))
+                        .await;
+                }
+
+                warn!(
+                    "Process {} still running {}ms after graceful taskkill; escalating to /F",
+                    pid, GRACE_WINDOW_MS
+                );
+            }
+
             let status = Command::new("taskkill")
-                .args(windows_taskkill_args(pid, force))
+                .args(windows_taskkill_args(pid, true))
                 .status()?;
 
             if status.success() {
                 info!("Successfully terminated process {}", pid);
+                Ok(())
+            } else if !self.is_running(pid) {
+                // The process exited on its own in the meantime; the stop
+                // request is still satisfied.
+                info!("Process {} exited during termination", pid);
                 Ok(())
             } else {
                 Err(CliError::StateError(format!(
