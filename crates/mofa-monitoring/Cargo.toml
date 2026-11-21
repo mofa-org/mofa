@@ -58,7 +58,7 @@ opentelemetry-otlp = { workspace = true, optional = true, features = [
 ] }
 
 # Static file embedding
-rust-embed = { version = "8.0", features = ["compression"] }
+rust-embed = { version = "8.0" }
 mime_guess = "2.0"
 
 # Local dependencies
