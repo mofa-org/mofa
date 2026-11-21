@@ -7,15 +7,14 @@ use tracing::{info, warn};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let _ = dotenvy::dotenv();
+
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .with_target(false)
         .init();
 
     info!("Starting Cloud Voice Integration Demo");
-
-    // Load .env if present (good for OPENAI_API_KEY)
-    let _ = dotenvy::dotenv();
 
     if std::env::var("OPENAI_API_KEY").is_err() {
         warn!("OPENAI_API_KEY is not set. The demo will likely fail.");

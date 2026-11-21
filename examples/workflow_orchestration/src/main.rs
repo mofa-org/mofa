@@ -157,6 +157,8 @@ mod prompts {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let _ = dotenvy::dotenv();
+
     // 设置日志
     // Setup logs
     tracing_subscriber::fmt()

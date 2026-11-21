@@ -35,6 +35,8 @@ use tracing::{info, Level};
 
 #[tokio::main]
 async fn main() -> LLMResult<()> {
+    let _ = dotenvy::dotenv();
+
     // 初始化日志
     // Initialize logging
     tracing_subscriber::fmt()

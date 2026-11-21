@@ -5,6 +5,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+dotenvy.workspace = true
 mofa-sdk = { path = "../../crates/mofa-sdk", features = ["persistence-postgres"] }
 tokio = { version = "1.37", features = ["full"] }
 futures = "0.3.30"

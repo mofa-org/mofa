@@ -40,6 +40,8 @@ use uuid::Uuid;
 
 #[tokio::main]
 async fn main() -> LLMResult<()> {
+    let _ = dotenvy::dotenv();
+
     tracing_subscriber::fmt()
         .with_max_level(Level::INFO)
         .init();

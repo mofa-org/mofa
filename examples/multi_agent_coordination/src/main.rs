@@ -797,6 +797,8 @@ Panic: called `Result::unwrap()` on an `Err` value: ParseIntError { kind: Invali
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let _ = dotenvy::dotenv();
+
     // 初始化日志
     // Initialize logging
     tracing_subscriber::fmt()

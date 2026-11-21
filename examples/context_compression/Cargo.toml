@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+dotenvy.workspace = true
 mofa-foundation = { path = "../../crates/mofa-foundation" }
 mofa-kernel = { path = "../../crates/mofa-kernel" }
 

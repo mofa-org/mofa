@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+dotenvy.workspace = true
 async-trait.workspace = true
 chrono = "0.4"
 regex = "1"

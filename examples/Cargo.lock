@@ -86,6 +86,7 @@ dependencies = [
 name = "agent_from_database_streaming"
 version = "0.1.0"
 dependencies = [
+ "dotenvy",
  "futures",
  "mofa-sdk",
  "tokio",
@@ -112,6 +113,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "chrono",
+ "dotenvy",
  "futures",
  "mofa-sdk",
  "notify",
@@ -1180,6 +1182,7 @@ checksum = "613afe47fcd5fac7ccf1db93babcb082c5994d996f20b8b159f2ad1658eb5724"
 name = "chat_stream"
 version = "0.1.0"
 dependencies = [
+ "dotenvy",
  "mofa-sdk",
  "tokio",
  "tokio-stream",
@@ -1527,6 +1530,7 @@ checksum = "7c74b8349d32d297c9134b8c88677813a227df8f779daa29bfc29c183fe3dca6"
 name = "context_compression"
 version = "0.1.0"
 dependencies = [
+ "dotenvy",
  "mofa-foundation",
  "mofa-kernel",
  "tempfile",
@@ -4573,6 +4577,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "chrono",
+ "dotenvy",
  "mofa-sdk",
  "regex",
  "serde",
@@ -5896,6 +5901,7 @@ name = "react_agent"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "dotenvy",
  "mofa-sdk",
  "serde_json",
  "tokio",
@@ -5977,6 +5983,7 @@ name = "reflection_agent"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "dotenvy",
  "mofa-sdk",
  "serde_json",
  "tokio",
@@ -7208,6 +7215,7 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 name = "streaming_manual_persistence"
 version = "0.1.0"
 dependencies = [
+ "dotenvy",
  "futures",
  "mofa-sdk",
  "tokio",
@@ -7221,6 +7229,7 @@ name = "streaming_persistence"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "dotenvy",
  "futures",
  "mofa-sdk",
  "tokio",
@@ -9603,6 +9612,7 @@ dependencies = [
 name = "workflow_dsl"
 version = "0.1.0"
 dependencies = [
+ "dotenvy",
  "mofa-sdk",
  "tokio",
  "tracing",
@@ -9613,6 +9623,7 @@ dependencies = [
 name = "workflow_orchestration"
 version = "0.1.0"
 dependencies = [
+ "dotenvy",
  "mofa-sdk",
  "serde_json",
  "tokio",
