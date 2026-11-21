@@ -34,7 +34,7 @@ pub fn run(config: &std::path::Path, dry_run: bool) -> Result<(), CliError> {
 fn run_dry_run(config: &std::path::Path) -> Result<(), CliError> {
     use mofa_foundation::workflow::dsl::WorkflowDslParser;
     use mofa_foundation::workflow::validator::WorkflowValidator;
-    use mofa_foundation::workflow::{WorkflowGraph, WorkflowNode, EdgeConfig};
+    use mofa_foundation::workflow::{EdgeConfig, WorkflowGraph, WorkflowNode};
 
     println!(
         "{} Dry-run: validating workflow {}",
@@ -43,17 +43,13 @@ fn run_dry_run(config: &std::path::Path) -> Result<(), CliError> {
     );
 
     // 1. Parse the DSL file
-    let definition = WorkflowDslParser::from_file(config).map_err(|e| {
-        CliError::Other(format!("Failed to parse workflow file: {}", e))
-    })?;
+    let definition = WorkflowDslParser::from_file(config)
+        .map_err(|e| CliError::Other(format!("Failed to parse workflow file: {}", e)))?;
 
     // 2. Build a lightweight WorkflowGraph from the definition
     //    We construct the graph manually from the parsed definition
     //    without requiring an agent registry (dry-run doesn't need real agents).
-    let mut graph = WorkflowGraph::new(
-        &definition.metadata.id,
-        &definition.metadata.name,
-    );
+    let mut graph = WorkflowGraph::new(&definition.metadata.id, &definition.metadata.name);
 
     for node_def in &definition.nodes {
         use mofa_foundation::workflow::dsl::NodeDefinition;
@@ -65,31 +61,55 @@ fn run_dry_run(config: &std::path::Path) -> Result<(), CliError> {
                 graph.add_node(WorkflowNode::end(id));
             }
             NodeDefinition::Task { id, name, .. } => {
-                graph.add_node(WorkflowNode::task(id, name, |_ctx, input| async move { Ok(input) }));
+                graph.add_node(WorkflowNode::task(id, name, |_ctx, input| async move {
+                    Ok(input)
+                }));
             }
             NodeDefinition::LlmAgent { id, name, .. } => {
-                graph.add_node(WorkflowNode::task(id, name, |_ctx, input| async move { Ok(input) }));
+                graph.add_node(WorkflowNode::task(id, name, |_ctx, input| async move {
+                    Ok(input)
+                }));
             }
             NodeDefinition::Condition { id, name, .. } => {
-                graph.add_node(WorkflowNode::task(id, name, |_ctx, input| async move { Ok(input) }));
+                graph.add_node(WorkflowNode::task(id, name, |_ctx, input| async move {
+                    Ok(input)
+                }));
             }
             NodeDefinition::Parallel { id, name, .. } => {
-                graph.add_node(WorkflowNode::task(id, name, |_ctx, input| async move { Ok(input) }));
+                graph.add_node(WorkflowNode::task(id, name, |_ctx, input| async move {
+                    Ok(input)
+                }));
             }
-            NodeDefinition::Join { id, name, wait_for, .. } => {
+            NodeDefinition::Join {
+                id, name, wait_for, ..
+            } => {
                 let refs: Vec<&str> = wait_for.iter().map(|s| s.as_str()).collect();
                 graph.add_node(WorkflowNode::join(id, name, refs));
             }
             NodeDefinition::Loop { id, name, .. } => {
-                graph.add_node(WorkflowNode::task(id, name, |_ctx, input| async move { Ok(input) }));
+                graph.add_node(WorkflowNode::task(id, name, |_ctx, input| async move {
+                    Ok(input)
+                }));
             }
             NodeDefinition::Transform { id, name, .. } => {
-                graph.add_node(WorkflowNode::task(id, name, |_ctx, input| async move { Ok(input) }));
+                graph.add_node(WorkflowNode::task(id, name, |_ctx, input| async move {
+                    Ok(input)
+                }));
             }
-            NodeDefinition::SubWorkflow { id, name, workflow_id, .. } => {
+            NodeDefinition::SubWorkflow {
+                id,
+                name,
+                workflow_id,
+                ..
+            } => {
                 graph.add_node(WorkflowNode::sub_workflow(id, name, workflow_id));
             }
-            NodeDefinition::Wait { id, name, event_type, .. } => {
+            NodeDefinition::Wait {
+                id,
+                name,
+                event_type,
+                ..
+            } => {
                 graph.add_node(WorkflowNode::wait(id, name, event_type));
             }
         }
@@ -111,19 +131,31 @@ fn run_dry_run(config: &std::path::Path) -> Result<(), CliError> {
     println!();
     println!(
         "  {} Graph structure: {} nodes, {} edges",
-        if report.stats.start_nodes > 0 { "✓".green().to_string() } else { "✗".red().to_string() },
+        if report.stats.start_nodes > 0 {
+            "✓".green().to_string()
+        } else {
+            "✗".red().to_string()
+        },
         report.stats.total_nodes,
         report.stats.total_edges,
     );
 
     println!(
         "  {} Start node present",
-        if report.stats.start_nodes > 0 { "✓".green().to_string() } else { "✗".red().to_string() },
+        if report.stats.start_nodes > 0 {
+            "✓".green().to_string()
+        } else {
+            "✗".red().to_string()
+        },
     );
 
     println!(
         "  {} End node(s) present",
-        if report.stats.end_nodes > 0 { "✓".green().to_string() } else { "✗".red().to_string() },
+        if report.stats.end_nodes > 0 {
+            "✓".green().to_string()
+        } else {
+            "✗".red().to_string()
+        },
     );
 
     let has_cycle_error = report.issues.iter().any(|i| {
@@ -131,7 +163,11 @@ fn run_dry_run(config: &std::path::Path) -> Result<(), CliError> {
     });
     println!(
         "  {} No unintentional cycles",
-        if !has_cycle_error { "✓".green().to_string() } else { "✗".red().to_string() },
+        if !has_cycle_error {
+            "✓".green().to_string()
+        } else {
+            "✗".red().to_string()
+        },
     );
 
     // Print individual issues

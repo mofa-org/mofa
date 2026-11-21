@@ -45,7 +45,7 @@ pub struct GraphStats {
 }
 
 /// The final report produced by examining a workflow graph
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ValidationReport {
     pub issues: Vec<ValidationIssue>,
     pub stats: GraphStats,
@@ -68,7 +68,9 @@ impl ValidationReport {
     }
 
     pub fn warnings(&self) -> impl Iterator<Item = &ValidationIssue> {
-        self.issues.iter().filter(|i| i.severity == Severity::Warning)
+        self.issues
+            .iter()
+            .filter(|i| i.severity == Severity::Warning)
     }
 }
 
@@ -86,7 +88,7 @@ impl WorkflowValidator {
         // 1. Structural Validation
         Self::validate_structure(graph, &mut report);
 
-        // 2. Connectivity Validation  
+        // 2. Connectivity Validation
         Self::validate_connectivity(graph, &mut report);
 
         // 3. Cycle Detection in Normal loops
@@ -105,27 +107,25 @@ impl WorkflowValidator {
         report.stats.end_nodes = end_nodes.len();
 
         if start_node.is_none() {
-            report.issues.push(ValidationIssue::error(
-                None,
-                "Workflow has no Start node.",
-            ));
+            report
+                .issues
+                .push(ValidationIssue::error(None, "Workflow has no Start node."));
         }
 
         if end_nodes.is_empty() {
-            report.issues.push(ValidationIssue::error(
-                None,
-                "Workflow has no End node.",
-            ));
+            report
+                .issues
+                .push(ValidationIssue::error(None, "Workflow has no End node."));
         }
-        
+
         // Ensure starting point has no incoming edges
-        if let Some(start) = start_node {
-            if !graph.get_incoming_edges(start).is_empty() {
-                report.issues.push(ValidationIssue::warning(
-                    Some(start.to_string()),
-                    "Start node should typically not have incoming edges.",
-                ));
-            }
+        if let Some(start) = start_node
+            && !graph.get_incoming_edges(start).is_empty()
+        {
+            report.issues.push(ValidationIssue::warning(
+                Some(start.to_string()),
+                "Start node should typically not have incoming edges.",
+            ));
         }
     }
 
@@ -206,8 +206,12 @@ mod tests {
         let mut graph = WorkflowGraph::new("g1", "Unreachable Node");
         graph.add_node(WorkflowNode::start("start"));
         graph.add_node(WorkflowNode::end("end"));
-        graph.add_node(WorkflowNode::task("task", "Task", |_ctx, input| async move { Ok(input) }));
-        
+        graph.add_node(WorkflowNode::task(
+            "task",
+            "Task",
+            |_ctx, input| async move { Ok(input) },
+        ));
+
         graph.connect("start", "end");
         // "task" is left floating
 

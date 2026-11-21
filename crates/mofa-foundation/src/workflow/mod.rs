@@ -84,4 +84,4 @@ pub use session_recorder::{
 pub use state::*;
 pub use state_graph::{CompiledGraphImpl, StateGraphImpl};
 pub use telemetry::{ChannelTelemetryEmitter, RecordingTelemetryEmitter};
-pub use validator::{ValidationReport, WorkflowValidator, ValidationIssue, Severity};
+pub use validator::{Severity, ValidationIssue, ValidationReport, WorkflowValidator};

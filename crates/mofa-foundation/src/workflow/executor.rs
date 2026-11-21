@@ -237,7 +237,10 @@ impl WorkflowExecutor {
 
     /// 验证工作流 (Dry Run)
     /// Validate workflow statically without running
-    pub async fn validate(&self, graph: &WorkflowGraph) -> Result<(), crate::workflow::validator::ValidationReport> {
+    pub async fn validate(
+        &self,
+        graph: &WorkflowGraph,
+    ) -> Result<(), crate::workflow::validator::ValidationReport> {
         let report = crate::workflow::validator::WorkflowValidator::validate(graph);
         if report.is_valid() {
             Ok(())
