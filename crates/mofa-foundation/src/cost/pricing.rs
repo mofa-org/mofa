@@ -3,68 +3,58 @@
 use mofa_kernel::pricing::{ModelPricing, ProviderPricingRegistry};
 use std::collections::HashMap;
 
-/// In-memory pricing registry with built-in prices for major providers.
-/// Key format: `"provider/model"` (e.g. `"openai/gpt-4o"`)
+/// In-memory pricing registry.
+///
+/// Prices set with [`InMemoryPricingRegistry::set_pricing`] always win. Everything else is
+/// priced from [`llm_prices`], a table of provider list prices in which every row cites the
+/// provider's pricing page and the date it was checked. `ModelPricing` is USD per 1,000
+/// tokens, so the per-1M list prices are divided by 1,000 here.
+///
+/// Key format for overrides: `"provider/model"` (e.g. `"openai/gpt-4o"`)
 #[derive(Debug, Clone)]
 pub struct InMemoryPricingRegistry {
     prices: HashMap<String, ModelPricing>,
+    list_prices: bool,
+}
+
+/// Provider names MoFA uses, mapped to the names `llm_prices` expects.
+fn list_price_provider(provider: &str) -> &str {
+    match provider {
+        "gemini" | "google" => "google",
+        "claude" => "anthropic",
+        other => other,
+    }
+}
+
+/// The provider's list price, converted from USD per 1M tokens to USD per 1K tokens.
+fn list_price(provider: &str, model: &str) -> Option<ModelPricing> {
+    let p = llm_prices::lookup_provider(list_price_provider(provider), model)?;
+    let input = p.input?;
+    // Embedding rows have no output price; they produce no output tokens.
+    let output = p.output.unwrap_or(0.0);
+    Some(ModelPricing::new(input / 1000.0, output / 1000.0))
 }
 
 impl InMemoryPricingRegistry {
-    /// Build a registry pre-populated with prices for OpenAI, Anthropic, Gemini, and Ollama.
+    /// Build a registry that prices OpenAI, Anthropic, Gemini, DeepSeek, Mistral, xAI and the
+    /// other providers in `llm_prices` at list price, and Ollama / local models at zero.
     pub fn with_defaults() -> Self {
         let mut prices = HashMap::new();
-
-        // OpenAI (USD per 1K tokens)
-        prices.insert("openai/gpt-4o".into(), ModelPricing::new(2.50, 10.00));
-        prices.insert("openai/gpt-4o-mini".into(), ModelPricing::new(0.15, 0.60));
-        prices.insert("openai/gpt-4-turbo".into(), ModelPricing::new(10.00, 30.00));
-        prices.insert("openai/gpt-3.5-turbo".into(), ModelPricing::new(0.50, 1.50));
-        prices.insert("openai/o1".into(), ModelPricing::new(15.00, 60.00));
-        prices.insert("openai/o1-mini".into(), ModelPricing::new(3.00, 12.00));
-
-        // Anthropic
-        prices.insert(
-            "anthropic/claude-3.5-sonnet".into(),
-            ModelPricing::new(3.00, 15.00),
-        );
-        prices.insert(
-            "anthropic/claude-3-haiku".into(),
-            ModelPricing::new(0.25, 1.25),
-        );
-        prices.insert(
-            "anthropic/claude-3-opus".into(),
-            ModelPricing::new(15.00, 75.00),
-        );
-        prices.insert(
-            "anthropic/claude-3.5-haiku".into(),
-            ModelPricing::new(1.00, 5.00),
-        );
-
-        // Google Gemini
-        prices.insert(
-            "gemini/gemini-1.5-pro".into(),
-            ModelPricing::new(1.25, 5.00),
-        );
-        prices.insert(
-            "gemini/gemini-1.5-flash".into(),
-            ModelPricing::new(0.075, 0.30),
-        );
-        prices.insert(
-            "gemini/gemini-2.0-flash".into(),
-            ModelPricing::new(0.10, 0.40),
-        );
 
         // Local / Ollama (free)
         prices.insert("ollama/any".into(), ModelPricing::free());
 
-        Self { prices }
+        Self {
+            prices,
+            list_prices: true,
+        }
     }
 
     /// Build an empty registry (no pre-loaded prices).
     pub fn empty() -> Self {
         Self {
             prices: HashMap::new(),
+            list_prices: false,
         }
     }
 
@@ -113,11 +103,18 @@ impl InMemoryPricingRegistry {
 
 impl ProviderPricingRegistry for InMemoryPricingRegistry {
     fn get_pricing(&self, provider: &str, model: &str) -> Option<ModelPricing> {
-        self.fuzzy_lookup(provider, model).cloned()
+        if let Some(pricing) = self.fuzzy_lookup(provider, model) {
+            return Some(pricing.clone());
+        }
+        if self.list_prices {
+            return list_price(&provider.to_lowercase(), model);
+        }
+        None
     }
 
     fn list_models(&self) -> Vec<(String, String)> {
-        self.prices
+        let mut models: Vec<(String, String)> = self
+            .prices
             .keys()
             .filter_map(|key| {
                 let parts: Vec<&str> = key.splitn(2, '/').collect();
@@ -127,7 +124,16 @@ impl ProviderPricingRegistry for InMemoryPricingRegistry {
                     None
                 }
             })
-            .collect()
+            .collect();
+        if self.list_prices {
+            models.extend(
+                llm_prices::all()
+                    .iter()
+                    .filter(|p| p.status == "listed" && p.input.is_some())
+                    .map(|p| (p.provider.to_string(), p.model.to_string())),
+            );
+        }
+        models
     }
 }
 
@@ -141,7 +147,60 @@ mod tests {
         let pricing = registry.get_pricing("openai", "gpt-4o");
         assert!(pricing.is_some());
         let p = pricing.unwrap();
-        assert!((p.input_cost_per_1k_tokens - 2.50).abs() < 0.001);
+        // $2.50 per 1M input tokens is $0.0025 per 1K.
+        assert!((p.input_cost_per_1k_tokens - 0.0025).abs() < 1e-12);
+        assert!((p.output_cost_per_1k_tokens - 0.010).abs() < 1e-12);
+    }
+
+    #[test]
+    fn test_registry_costs_are_per_1k_tokens() {
+        // 1M input + 1M output tokens on gpt-4o is $2.50 + $10.00 at list price.
+        let registry = InMemoryPricingRegistry::with_defaults();
+        let p = registry.get_pricing("openai", "gpt-4o").unwrap();
+        let cost = p.calculate_cost(1_000_000, 1_000_000);
+        assert!((cost - 12.50).abs() < 1e-9, "{cost}");
+    }
+
+    #[test]
+    fn test_registry_prices_current_models() {
+        let registry = InMemoryPricingRegistry::with_defaults();
+        for (provider, model) in [
+            ("openai", "gpt-5"),
+            ("openai", "gpt-4.1-mini"),
+            ("anthropic", "claude-sonnet-4-6"),
+            ("anthropic", "claude-opus-4-5-20251101"),
+            ("gemini", "gemini-2.5-pro"),
+            ("gemini", "gemini-2.5-flash"),
+        ] {
+            let p = registry.get_pricing(provider, model);
+            assert!(p.is_some(), "{provider}/{model} has no price");
+            assert!(p.unwrap().input_cost_per_1k_tokens > 0.0);
+        }
+    }
+
+    #[test]
+    fn test_registry_dated_id_uses_base_price() {
+        let registry = InMemoryPricingRegistry::with_defaults();
+        let dated = registry
+            .get_pricing("anthropic", "claude-3-5-haiku-20241022")
+            .unwrap();
+        // Claude Haiku 3.5 lists at $0.80 / $4 per 1M tokens.
+        assert!((dated.input_cost_per_1k_tokens - 0.0008).abs() < 1e-12);
+        assert!((dated.output_cost_per_1k_tokens - 0.004).abs() < 1e-12);
+    }
+
+    #[test]
+    fn test_override_beats_list_price() {
+        let mut registry = InMemoryPricingRegistry::with_defaults();
+        registry.set_pricing("openai", "gpt-4o", ModelPricing::new(0.001, 0.002));
+        let p = registry.get_pricing("openai", "gpt-4o").unwrap();
+        assert!((p.input_cost_per_1k_tokens - 0.001).abs() < 1e-12);
+    }
+
+    #[test]
+    fn test_empty_registry_has_no_list_prices() {
+        let registry = InMemoryPricingRegistry::empty();
+        assert!(registry.get_pricing("openai", "gpt-4o").is_none());
     }
 
     #[test]
@@ -180,10 +239,10 @@ mod tests {
     fn test_registry_anthropic_claude() {
         let registry = InMemoryPricingRegistry::with_defaults();
         let p = registry
-            .get_pricing("anthropic", "claude-3.5-sonnet")
+            .get_pricing("anthropic", "claude-sonnet-4-5")
             .unwrap();
-        assert!((p.input_cost_per_1k_tokens - 3.00).abs() < 0.001);
-        assert!((p.output_cost_per_1k_tokens - 15.00).abs() < 0.001);
+        assert!((p.input_cost_per_1k_tokens - 0.003).abs() < 1e-12);
+        assert!((p.output_cost_per_1k_tokens - 0.015).abs() < 1e-12);
     }
 
     #[test]

@@ -50,6 +50,7 @@ scheduler-telemetry = ["dep:metrics"]
 
 [dependencies]
 # Workspace dependencies
+llm-prices.workspace = true
 async-trait.workspace = true
 serde.workspace = true
 serde_json.workspace = true
