@@ -15,8 +15,6 @@ publish = true
 
 [features]
 default = []
-# Enable dora-rs runtime support (distributed dataflow)
-dora = ["mofa-runtime/dora"]
 # Enable persistence support
 persistence-postgres = ["mofa-foundation/persistence-postgres", "sqlx"]
 persistence-mysql = ["mofa-foundation/persistence-mysql", "sqlx"]

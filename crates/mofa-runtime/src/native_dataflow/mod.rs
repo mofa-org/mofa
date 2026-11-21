@@ -1,15 +1,7 @@
-//! Native mofa-rs dataflow runtime — no Dora-rs dependency required.
+//! Native mofa-rs dataflow runtime.
 //!
-//! This module provides the same dataflow primitives as the `dora_adapter`
-//! module but built entirely on mofa-runtime's own tokio channels and agent
-//! infrastructure:
-//!
-//! | Concept | This module | Dora equivalent |
-//! |---------|-------------|-----------------|
-//! | Dataflow graph | [`NativeDataflow`] | `DoraDataflow` |
-//! | Agent node | [`NativeNode`] | `DoraAgentNode` |
-//! | Communication channel | [`NativeChannel`] | `DoraChannel` |
-//! | Runtime | [`NativeRuntime`] | `DoraRuntime` |
+//! This module provides dataflow primitives built entirely on mofa-runtime's
+//! own tokio channels and agent infrastructure:
 //!
 //! # Getting started
 //!

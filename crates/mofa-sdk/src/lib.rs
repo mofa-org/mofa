@@ -21,8 +21,6 @@
 //!
 //! # Features
 //!
-//! - `dora` - Enable dora-rs runtime support for distributed dataflow
-//!
 //! For FFI bindings (Python, Kotlin, Swift, Java), use the `mofa-ffi` crate.
 //!
 //! # Quick Start
@@ -186,8 +184,7 @@ pub mod kernel {
 /// # Main Components
 ///
 /// - `AgentBuilder`: Builder pattern for constructing agents
-/// - `SimpleRuntime`: Multi-agent coordination (non-dora)
-/// - `AgentRuntime`: Dora-rs integration (with `dora` feature)
+/// - `SimpleRuntime`: Multi-agent coordination
 ///
 /// # Example
 ///
@@ -201,8 +198,7 @@ pub mod runtime {
     // Agent builder
     pub use mofa_runtime::AgentBuilder;
 
-    // Simple runtime (non-dora mode only)
-    #[cfg(not(feature = "dora"))]
+    // Simple runtime
     pub use mofa_runtime::SimpleRuntime;
 
     // Agent registry (runtime implementation)
@@ -219,10 +215,6 @@ pub mod runtime {
     pub mod rag {
         pub use mofa_runtime::rag::*;
     }
-
-    // Dora runtime (only available with dora feature)
-    #[cfg(feature = "dora")]
-    pub use mofa_runtime::{AgentRuntime, MoFARuntime};
 }
 
 // =============================================================================
@@ -454,9 +446,7 @@ pub mod prelude {
         AgentCapabilities, AgentCapabilitiesBuilder, AgentContext, AgentError, AgentInput,
         AgentMetadata, AgentOutput, AgentResult, AgentState, MoFAAgent,
     };
-    #[cfg(not(feature = "dora"))]
-    pub use crate::runtime::SimpleRuntime;
-    pub use crate::runtime::{AgentBuilder, AgentRunner, run_agents};
+    pub use crate::runtime::{AgentBuilder, AgentRunner, run_agents, SimpleRuntime};
     pub use async_trait::async_trait;
 }
 
@@ -967,46 +957,6 @@ pub mod messaging {
     //! ```
 
     pub use mofa_foundation::messaging::*;
-}
-
-// =============================================================================
-// Dora-rs runtime support (enabled with `dora` feature)
-// =============================================================================
-
-#[cfg(feature = "dora")]
-pub mod dora {
-    //! Dora-rs adapter for distributed dataflow runtime
-    //!
-    //! This module provides MoFA framework integration with dora-rs, including:
-    //! - DoraNode wrapper: Agent lifecycle management
-    //! - DoraOperator wrapper: Plugin capability abstraction
-    //! - DoraDataflow wrapper: Multi-agent collaborative dataflow
-    //! - DoraChannel wrapper: Cross-agent communication channel
-    //! - DoraRuntime wrapper: Complete runtime support (embedded/distributed)
-    //!
-    //! # Example
-    //!
-    //! ```rust,ignore
-    //! use mofa_sdk::dora::{DoraRuntime, RuntimeConfig, run_dataflow};
-    //!
-    //! #[tokio::main]
-    //! async fn main() -> eyre::Result<()> {
-    //!     // Quick run with helper function
-    //!     let result = run_dataflow("dataflow.yml").await?;
-    //!     info!("Dataflow {} completed", result.uuid);
-    //!
-    //!     // Or use the builder pattern
-    //!     let mut runtime = DoraRuntime::embedded("dataflow.yml");
-    //!     let result = runtime.run().await?;
-    //!     Ok(())
-    //! }
-    //! ```
-
-    // Re-export dora adapter types
-    pub use mofa_runtime::dora_adapter::*;
-
-    // Re-export dora-specific runtime types from mofa_runtime root
-    pub use mofa_runtime::{AgentBuilder, AgentRuntime, MoFARuntime};
 }
 
 // =============================================================================

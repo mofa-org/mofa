@@ -74,7 +74,6 @@ pub fn merge_configs(
         let base_runtime = base.runtime.get_or_insert(super::RuntimeConfig {
             max_concurrent_tasks: None,
             default_timeout_secs: None,
-            dora_enabled: None,
             persistence: None,
         });
 
@@ -83,9 +82,6 @@ pub fn merge_configs(
         }
         if override_runtime.default_timeout_secs.is_some() {
             base_runtime.default_timeout_secs = override_runtime.default_timeout_secs;
-        }
-        if override_runtime.dora_enabled.is_some() {
-            base_runtime.dora_enabled = override_runtime.dora_enabled;
         }
         if override_runtime.persistence.is_some() {
             base_runtime.persistence = override_runtime.persistence;

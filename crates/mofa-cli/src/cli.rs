@@ -75,21 +75,6 @@ pub enum Commands {
         /// Agent configuration file
         #[arg(short, long, default_value = "agent.yml")]
         config: PathBuf,
-
-        /// Enable dora runtime
-        #[arg(long)]
-        dora: bool,
-    },
-
-    /// Run a dora dataflow
-    #[cfg(feature = "dora")]
-    Dataflow {
-        /// Dataflow YAML file
-        file: PathBuf,
-
-        /// Use uv for Python nodes
-        #[arg(long)]
-        uv: bool,
     },
 
     /// Generate project files
@@ -210,13 +195,6 @@ pub enum GenerateCommands {
     Config {
         /// Output file
         #[arg(short, long, default_value = "agent.yml")]
-        output: PathBuf,
-    },
-
-    /// Generate dataflow configuration
-    Dataflow {
-        /// Output file
-        #[arg(short, long, default_value = "dataflow.yml")]
         output: PathBuf,
     },
 }

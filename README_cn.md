@@ -57,7 +57,7 @@ MoFA的突破：</br>
 ✅ Rust内核 + UniFFI：极致性能 + 多语言原生调用 </br>
 ✅ 双层插件：编译时高性能 + 运行时零部署修改 </br>
 ✅ 微内核架构：模块化，易扩展</br>
-✅ 云原生：天生支持分布式和边缘计算</br>
+✅ 云原生：天生支持分布式部署</br>
 
 ## 企业级 LLM 基础设施
 
@@ -134,12 +134,6 @@ Token 中转站转售上游 API 额度；MoFA 是业务产品运行其上的基�
 - **编译时插件**: 极致性能，原生集成
 - **运行时插件**: 动态加载，即时生效
 - 支持插件热加载和版本管理
-
-### **分布式数据流 (Dora)**
-
-- 支持Dora-rs分布式运行时
-- 跨进程/跨机器Agent通信
-- 适合边缘计算场景
 
 ### **Actor并发模型 (Ractor)**
 
@@ -301,7 +295,6 @@ MoFA 集成了 [Rhai](https://github.com/rhaiscript/rhai) 嵌入式脚本语言�
 ## 路线图
 
 ### 短期目标
-- [ ] Dora-rs运行时支持，用于分布式数据流
 - [ ] 完整的分布式追踪实现
 - [ ] Python绑定生成
 - [ ] 更多LLM提供商集成
@@ -311,7 +304,6 @@ MoFA 集成了 [Rhai](https://github.com/rhaiscript/rhai) 嵌入式脚本语言�
 - [ ] 云原生部署支持
 - [ ] 高级智能体协调算法
 - [ ] 智能体平台
-- [ ] 跨进程/跨机器分布式Agent协作
 - [ ] 多智能体协作标准协议
 - [ ] 跨平台移动端支持
 - [ ] 向智能体操作系统演进
@@ -339,7 +331,7 @@ mofa-sdk = "0.1.0"
   ---
 1. 多智能体协同工作场景
 
-运行时提供消息总线（SimpleMessageBus/DoraChannel）和智能体注册系统，支持智能体之间的：
+运行时提供消息总线（SimpleMessageBus）和智能体注册系统，支持智能体之间的：
 - 点对点通信（send_to_agent）
 - 广播消息（broadcast）
 - 主题订阅发布（publish_to_topic/subscribe_topic）
@@ -358,17 +350,7 @@ mofa-sdk = "0.1.0"
 适合构建需要响应外部事件或定时器的应用（如实时对话系统、事件响应机器人）。
 
   ---
-3. 分布式智能体系统
-
-当启用 dora 特性时，运行时提供Dora 适配器（DoraAgentNode/DoraDataflow），支持：
-- 分布式节点部署
-- 跨节点智能体通信
-- 数据流管理
-
-适合需要大规模部署、低延迟通信的生产级场景。
-
-  ---
-4. 结构化智能体构建
+3. 结构化智能体构建
 
 运行时提供AgentBuilder 流式 API，简化智能体的：
 - 配置管理
@@ -379,7 +361,7 @@ mofa-sdk = "0.1.0"
 适合需要快速构建标准化智能体的场景，尤其是需要统一管理多个智能体配置时。
 
   ---
-5. 生产级应用
+4. 生产级应用
 
 运行时提供完善的：
 - 健康检查与状态管理
@@ -455,7 +437,6 @@ MoFA站在巨人的肩膀上：
 - [Rhai](https://rhai.rs/) - 强大的嵌入式脚本引擎
 - [Tokio](https://tokio.rs/) - 异步运行时基石
 - [Ractor](https://github.com/slawlor/ractor) - Actor模型并发框架
-- [Dora](https://github.com/dora-rs/dora) - 分布式数据流运行时
 - [Wasmtime](https://wasmtime.dev/) - WebAssembly运行时
 
 ## 支持

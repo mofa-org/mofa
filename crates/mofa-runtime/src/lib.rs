@@ -14,8 +14,7 @@ pub mod error_conversions;
 //
 // Main Components:
 // - AgentBuilder: Builder pattern for constructing agents
-// - SimpleRuntime: Multi-agent coordination (non-dora mode)
-// - AgentRuntime: Dora-rs integration (with `dora` feature)
+// - SimpleRuntime: Multi-agent coordination
 // - run_agents: Simplified agent execution helper
 //
 // =============================================================================
@@ -30,11 +29,7 @@ pub mod retry;
 pub mod runner;
 pub mod security;
 
-// Dora adapter module (only compiled when dora feature is enabled)
-#[cfg(feature = "dora")]
-pub mod dora_adapter;
-
-// Native dataflow module — always compiled, zero Dora dependency
+// Native dataflow module
 pub mod native_dataflow;
 
 // =============================================================================
@@ -76,19 +71,6 @@ use mofa_plugins::AgentPlugin as PluginAgent;
 // External dependencies
 use std::collections::HashMap;
 use std::time::Duration;
-
-// Dora feature dependencies
-#[cfg(feature = "dora")]
-use crate::dora_adapter::{
-    ChannelConfig, DataflowConfig, DoraAgentNode, DoraChannel, DoraDataflow, DoraError,
-    DoraNodeConfig, DoraResult, MessageEnvelope,
-};
-#[cfg(feature = "dora")]
-use ::tracing::{debug, info};
-#[cfg(feature = "dora")]
-use std::sync::Arc;
-#[cfg(feature = "dora")]
-use tokio::sync::RwLock;
 
 // Private import for internal use
 use mofa_kernel::message::StreamType;
@@ -229,57 +211,8 @@ impl AgentBuilder {
         }
     }
 
-    /// 构建 DoraNodeConfig
-    /// Builds DoraNodeConfig
-    #[cfg(feature = "dora")]
-    pub fn build_node_config(&self) -> DoraNodeConfig {
-        DoraNodeConfig {
-            node_id: self.agent_id.clone(),
-            name: self.name.clone(),
-            inputs: self.inputs.clone(),
-            outputs: self.outputs.clone(),
-            event_buffer_size: self.max_concurrent_tasks * 10,
-            default_timeout: self.default_timeout,
-            custom_config: self.node_config.clone(),
-        }
-    }
-
-    /// 使用提供的 MoFAAgent 实现构建运行时
-    /// Builds runtime with provided MoFAAgent implementation
-    #[cfg(feature = "dora")]
-    pub async fn with_agent<A: MoFAAgent>(self, agent: A) -> DoraResult<AgentRuntime<A>> {
-        let node_config = self.build_node_config();
-        let metadata = self.build_metadata();
-        let config = self.build_config();
-
-        let node = DoraAgentNode::new(node_config);
-        let interrupt = node.interrupt().clone();
-
-        let context = mofa_kernel::agent::AgentContext::new(self.agent_id.clone());
-
-        Ok(AgentRuntime {
-            agent,
-            node: Arc::new(node),
-            metadata,
-            config,
-            interrupt,
-            plugins: self.plugins,
-            context,
-        })
-    }
-
-    /// 构建并启动智能体（需要提供 MoFAAgent 实现）
-    /// Builds and starts the agent (requires MoFAAgent implementation)
-    #[cfg(feature = "dora")]
-    pub async fn build_and_start<A: MoFAAgent>(self, agent: A) -> DoraResult<AgentRuntime<A>> {
-        let runtime: AgentRuntime<A> = self.with_agent(agent).await?;
-        runtime.start().await?;
-        Ok(runtime)
-    }
-
-    /// 使用提供的 MoFAAgent 实现构建简单运行时（非 dora 模式）
-    /// Builds simple runtime with MoFAAgent implementation (non-dora mode)
-    #[cfg(not(feature = "dora"))]
+    /// 使用提供的 MoFAAgent 实现构建简单运行时
+    /// Builds simple runtime with MoFAAgent implementation
     pub async fn with_agent<A: MoFAAgent>(self, agent: A) -> GlobalResult<SimpleAgentRuntime<A>> {
         let metadata = self.build_metadata();
         let config = self.build_config();
@@ -307,9 +240,8 @@ impl AgentBuilder {
         })
     }
 
-    /// 构建并启动智能体（非 dora 模式）
-    /// Builds and starts the agent (non-dora mode)
-    #[cfg(not(feature = "dora"))]
+    /// 构建并启动智能体
+    /// Builds and starts the agent
     pub async fn build_and_start<A: MoFAAgent>(
         self,
         agent: A,
@@ -320,180 +252,13 @@ impl AgentBuilder {
     }
 }
 
-/// 智能体运行时
-/// Agent Runtime
-#[cfg(feature = "dora")]
-pub struct AgentRuntime<A: MoFAAgent> {
-    agent: A,
-    node: Arc<DoraAgentNode>,
-    metadata: AgentMetadata,
-    config: AgentConfig,
-    interrupt: AgentInterrupt,
-    plugins: Vec<Box<dyn AgentPlugin>>,
-    context: mofa_kernel::agent::AgentContext,
-}
-
-#[cfg(feature = "dora")]
-impl<A: MoFAAgent> AgentRuntime<A> {
-    /// 获取智能体引用
-    /// Gets agent reference
-    pub fn agent(&self) -> &A {
-        &self.agent
-    }
-
-    /// 获取可变智能体引用
-    /// Gets mutable agent reference
-    pub fn agent_mut(&mut self) -> &mut A {
-        &mut self.agent
-    }
-
-    /// 获取节点
-    /// Gets node reference
-    pub fn node(&self) -> &Arc<DoraAgentNode> {
-        &self.node
-    }
-
-    /// 获取元数据
-    /// Gets metadata reference
-    pub fn metadata(&self) -> &AgentMetadata {
-        &self.metadata
-    }
-
-    /// 获取配置
-    /// Gets configuration reference
-    pub fn config(&self) -> &AgentConfig {
-        &self.config
-    }
-
-    /// 获取中断句柄
-    /// Gets interrupt handle
-    pub fn interrupt(&self) -> &AgentInterrupt {
-        &self.interrupt
-    }
-
-    /// 初始化插件
-    /// Initializes plugins
-    pub async fn init_plugins(&mut self) -> DoraResult<()> {
-        for plugin in &mut self.plugins {
-            plugin
-                .init_plugin()
-                .await
-                .map_err(|e| DoraError::OperatorError(e.to_string()))?;
-        }
-        Ok(())
-    }
-
-    /// 启动运行时
-    /// Starts the runtime
-    pub async fn start(&self) -> DoraResult<()> {
-        self.node.init().await?;
-        info!("AgentRuntime {} started", self.metadata.id);
-        Ok(())
-    }
-
-    /// 运行事件循环
-    /// Runs the event loop
-    pub async fn run_event_loop(&mut self) -> DoraResult<()> {
-        // 使用已存储的 CoreAgentContext 初始化智能体
-        // Initialize agent with the stored CoreAgentContext
-        self.agent
-            .initialize(&self.context)
-            .await
-            .map_err(|e| DoraError::Internal(e.to_string()))?;
-
-        // 初始化插件
-        // Initialize plugins
-        self.init_plugins().await?;
-
-        let event_loop = self.node.create_event_loop();
-
-        loop {
-            // 检查中断
-            // Check for interrupts
-            if event_loop.should_interrupt() {
-                debug!("Interrupt signal received for {}", self.metadata.id);
-                self.interrupt.reset();
-            }
-
-            // 获取下一个事件
-            // Get the next event
-            match event_loop.next_event().await {
-                Some(AgentEvent::Shutdown) => {
-                    info!("Received shutdown event");
-                    break;
-                }
-                Some(event) => {
-                    // 处理事件前检查中断
-                    // Check for interrupts before processing event
-                    if self.interrupt.check() {
-                        debug!("Interrupt signal received for {}", self.metadata.id);
-                        self.interrupt.reset();
-                    }
-
-                    // 将事件转换为输入并使用 execute
-                    // Convert event to input and call execute
-                    use mofa_kernel::agent::types::AgentInput;
-                    use mofa_kernel::message::TaskRequest;
-
-                    let input = match event.clone() {
-                        AgentEvent::TaskReceived(task) => AgentInput::text(task.content),
-                        AgentEvent::Custom(data, _) => AgentInput::text(data),
-                        _ => AgentInput::text(format!("{:?}", event)),
-                    };
-
-                    self.agent
-                        .execute(input, &self.context)
-                        .await
-                        .map_err(|e| DoraError::Internal(e.to_string()))?;
-                }
-                None => {
-                    // 无事件，继续等待
-                    // No events, continue waiting
-                    tokio::time::sleep(Duration::from_millis(10)).await;
-                }
-            }
-        }
-
-        // 关闭智能体
-        // Shut down the agent
-        self.agent
-            .shutdown()
-            .await
-            .map_err(|e| DoraError::Internal(e.to_string()))?;
-
-        Ok(())
-    }
-
-    /// 停止运行时
-    /// Stops the runtime
-    pub async fn stop(&self) -> DoraResult<()> {
-        self.interrupt.trigger();
-        self.node.stop().await?;
-        info!("AgentRuntime {} stopped", self.metadata.id);
-        Ok(())
-    }
-
-    /// 发送消息到输出
-    /// Sends message to output
-    pub async fn send_output(&self, output_id: &str, message: &AgentMessage) -> DoraResult<()> {
-        self.node.send_message(output_id, message).await
-    }
-
-    /// 注入事件
-    /// Injects an event
-    pub async fn inject_event(&self, event: AgentEvent) -> DoraResult<()> {
-        self.node.inject_event(event).await
-    }
-}
-
 // ============================================================================
-// 非 dora 运行时实现 - SimpleAgentRuntime
-// Non-dora runtime implementation - SimpleAgentRuntime
+// 简单运行时实现 - SimpleAgentRuntime
+// Simple runtime implementation - SimpleAgentRuntime
 // ============================================================================
 
-/// 简单智能体运行时 - 不依赖 dora-rs 的轻量级运行时
-/// Simple Agent Runtime - Lightweight runtime not dependent on dora-rs
-#[cfg(not(feature = "dora"))]
+/// 简单智能体运行时 - 轻量级智能体运行时
+/// Simple Agent Runtime - Lightweight agent runtime
 pub struct SimpleAgentRuntime<A: MoFAAgent> {
     agent: A,
     metadata: AgentMetadata,
@@ -513,7 +278,6 @@ pub struct SimpleAgentRuntime<A: MoFAAgent> {
     security_service: Option<std::sync::Arc<security::SecurityService>>,
 }
 
-#[cfg(not(feature = "dora"))]
 impl<A: MoFAAgent> SimpleAgentRuntime<A> {
     /// 获取智能体引用
     /// Gets agent reference
@@ -769,9 +533,8 @@ impl<A: MoFAAgent> SimpleAgentRuntime<A> {
 // Simple Multi-Agent Runtime - SimpleRuntime
 // ============================================================================
 
-/// 简单运行时 - 管理多个智能体的协同运行（非 dora 版本）
-/// Simple Runtime - Manages collaborative operation of multiple agents (non-dora version)
-#[cfg(not(feature = "dora"))]
+/// 简单运行时 - 管理多个智能体的协同运行
+/// Simple Runtime - Manages collaborative operation of multiple agents
 pub struct SimpleRuntime {
     agents: std::sync::Arc<tokio::sync::RwLock<HashMap<String, SimpleAgentInfo>>>,
     agent_roles: std::sync::Arc<tokio::sync::RwLock<HashMap<String, String>>>,
@@ -780,7 +543,6 @@ pub struct SimpleRuntime {
 
 /// 智能体信息
 /// Agent Information
-#[cfg(not(feature = "dora"))]
 pub struct SimpleAgentInfo {
     pub metadata: AgentMetadata,
     pub config: AgentConfig,
@@ -789,7 +551,6 @@ pub struct SimpleAgentInfo {
 
 /// 流状态信息
 /// Stream Status Information
-#[cfg(not(feature = "dora"))]
 #[derive(Debug, Clone)]
 pub struct StreamInfo {
     pub stream_id: String,
@@ -802,7 +563,6 @@ pub struct StreamInfo {
 
 /// 简单消息总线
 /// Simple Message Bus
-#[cfg(not(feature = "dora"))]
 pub struct SimpleMessageBus {
     subscribers: tokio::sync::RwLock<HashMap<String, Vec<tokio::sync::mpsc::Sender<AgentEvent>>>>,
     topic_subscribers: tokio::sync::RwLock<HashMap<String, Vec<String>>>,
@@ -811,7 +571,6 @@ pub struct SimpleMessageBus {
     streams: tokio::sync::RwLock<HashMap<String, StreamInfo>>,
 }
 
-#[cfg(not(feature = "dora"))]
 impl SimpleMessageBus {
     /// 创建新的消息总线
     pub fn new() -> Self {
@@ -1154,14 +913,12 @@ impl SimpleMessageBus {
     }
 }
 
-#[cfg(not(feature = "dora"))]
 impl Default for SimpleMessageBus {
     fn default() -> Self {
         Self::new()
     }
 }
 
-#[cfg(not(feature = "dora"))]
 impl SimpleRuntime {
     /// 创建新的简单运行时
     /// Create a new simple runtime
@@ -1358,14 +1115,13 @@ impl SimpleRuntime {
     }
 }
 
-#[cfg(not(feature = "dora"))]
 impl Default for SimpleRuntime {
     fn default() -> Self {
         Self::new()
     }
 }
 
-#[cfg(all(test, not(feature = "dora")))]
+#[cfg(test)]
 mod tests {
     use super::SimpleMessageBus;
     use mofa_kernel::message::{AgentEvent, StreamType};
@@ -1445,202 +1201,7 @@ mod tests {
     }
 }
 
-/// 智能体节点存储类型
-/// Storage type for agent nodes
-#[cfg(feature = "dora")]
-type AgentNodeMap = HashMap<String, Arc<DoraAgentNode>>;
-
-/// MoFA 运行时 - 管理多个智能体的协同运行
-/// MoFA Runtime - Manages collaborative operation of multiple agents
-#[cfg(feature = "dora")]
-pub struct MoFARuntime {
-    dataflow: Option<DoraDataflow>,
-    channel: Arc<DoraChannel>,
-    agents: Arc<RwLock<AgentNodeMap>>,
-    agent_roles: Arc<RwLock<HashMap<String, String>>>,
-}
-
-#[cfg(feature = "dora")]
-impl MoFARuntime {
-    /// 创建新的运行时
-    /// Create new runtime
-    pub async fn new() -> Self {
-        let channel_config = ChannelConfig::default();
-        Self {
-            dataflow: None,
-            channel: Arc::new(DoraChannel::new(channel_config)),
-            agents: Arc::new(RwLock::new(HashMap::new())),
-            agent_roles: Arc::new(RwLock::new(HashMap::new())),
-        }
-    }
-
-    /// 使用 Dataflow 配置创建运行时
-    /// Create runtime with Dataflow configuration
-    pub async fn with_dataflow(dataflow_config: DataflowConfig) -> Self {
-        let dataflow = DoraDataflow::new(dataflow_config);
-        let channel_config = ChannelConfig::default();
-        Self {
-            dataflow: Some(dataflow),
-            channel: Arc::new(DoraChannel::new(channel_config)),
-            agents: Arc::new(RwLock::new(HashMap::new())),
-            agent_roles: Arc::new(RwLock::new(HashMap::new())),
-        }
-    }
-
-    /// 注册智能体节点
-    /// Register agent node
-    pub async fn register_agent(&self, node: DoraAgentNode, role: &str) -> DoraResult<()> {
-        let agent_id = node.config().node_id.clone();
-
-        // 注册到通道
-        // Register to channel
-        self.channel.register_agent(&agent_id).await?;
-
-        // 添加到 dataflow（如果存在）
-        // Add to dataflow (if it exists)
-        if let Some(ref dataflow) = self.dataflow {
-            dataflow.add_node(node).await?;
-        } else {
-            let mut agents: tokio::sync::RwLockWriteGuard<'_, AgentNodeMap> =
-                self.agents.write().await;
-            agents.insert(agent_id.clone(), Arc::new(node));
-        }
-
-        // 记录角色
-        // Record role
-        let mut roles = self.agent_roles.write().await;
-        roles.insert(agent_id.clone(), role.to_string());
-
-        info!("Agent {} registered with role {}", agent_id, role);
-        Ok(())
-    }
-
-    /// 连接两个智能体
-    /// Connect two agents
-    pub async fn connect_agents(
-        &self,
-        source_id: &str,
-        source_output: &str,
-        target_id: &str,
-        target_input: &str,
-    ) -> DoraResult<()> {
-        if let Some(ref dataflow) = self.dataflow {
-            dataflow
-                .connect(source_id, source_output, target_id, target_input)
-                .await?;
-        }
-        Ok(())
-    }
-
-    /// 获取通道
-    /// Get channel
-    pub fn channel(&self) -> &Arc<DoraChannel> {
-        &self.channel
-    }
-
-    /// 获取指定角色的智能体列表
-    /// Get agent list by specific role
-    pub async fn get_agents_by_role(&self, role: &str) -> Vec<String> {
-        let roles = self.agent_roles.read().await;
-        roles
-            .iter()
-            .filter(|(_, r)| *r == role)
-            .map(|(id, _)| id.clone())
-            .collect()
-    }
-
-    /// 发送消息给指定智能体
-    /// Send message to specific agent
-    pub async fn send_to_agent(
-        &self,
-        sender_id: &str,
-        receiver_id: &str,
-        message: &AgentMessage,
-    ) -> DoraResult<()> {
-        let envelope = MessageEnvelope::from_agent_message(sender_id, message)?.to(receiver_id);
-        self.channel.send_p2p(envelope).await
-    }
-
-    /// 广播消息给所有智能体
-    /// Broadcast message to all agents
-    pub async fn broadcast(&self, sender_id: &str, message: &AgentMessage) -> DoraResult<()> {
-        let envelope = MessageEnvelope::from_agent_message(sender_id, message)?;
-        self.channel.broadcast(envelope).await
-    }
-
-    /// 发布到主题
-    /// Publish to topic
-    pub async fn publish_to_topic(
-        &self,
-        sender_id: &str,
-        topic: &str,
-        message: &AgentMessage,
-    ) -> DoraResult<()> {
-        let envelope = MessageEnvelope::from_agent_message(sender_id, message)?.with_topic(topic);
-        self.channel.publish(envelope).await
-    }
-
-    /// 订阅主题
-    /// Subscribe to topic
-    pub async fn subscribe_topic(&self, agent_id: &str, topic: &str) -> DoraResult<()> {
-        self.channel.subscribe(agent_id, topic).await
-    }
-
-    /// 构建并启动运行时
-    /// Build and start runtime
-    pub async fn build_and_start(&self) -> DoraResult<()> {
-        if let Some(ref dataflow) = self.dataflow {
-            dataflow.build().await?;
-            dataflow.start().await?;
-        } else {
-            // 初始化所有独立注册的智能体
-            // Initialize all independently registered agents
-            let agents: tokio::sync::RwLockReadGuard<'_, AgentNodeMap> = self.agents.read().await;
-            for (id, node) in agents.iter() {
-                node.init().await?;
-                debug!("Agent {} initialized", id);
-            }
-        }
-        info!("MoFARuntime started");
-        Ok(())
-    }
-
-    /// 停止运行时
-    /// Stop runtime
-    pub async fn stop(&self) -> DoraResult<()> {
-        if let Some(ref dataflow) = self.dataflow {
-            dataflow.stop().await?;
-        } else {
-            let agents: tokio::sync::RwLockReadGuard<'_, AgentNodeMap> = self.agents.read().await;
-            for node in agents.values() {
-                node.stop().await?;
-            }
-        }
-        info!("MoFARuntime stopped");
-        Ok(())
-    }
-
-    /// 暂停运行时
-    /// Pause runtime
-    pub async fn pause(&self) -> DoraResult<()> {
-        if let Some(ref dataflow) = self.dataflow {
-            dataflow.pause().await?;
-        }
-        Ok(())
-    }
-
-    /// 恢复运行时
-    /// Resume runtime
-    pub async fn resume(&self) -> DoraResult<()> {
-        if let Some(ref dataflow) = self.dataflow {
-            dataflow.resume().await?;
-        }
-        Ok(())
-    }
-}
-
 #[cfg(test)]
-#[cfg(not(feature = "dora"))]
 mod test_agent_context {
     use crate::builder::AgentBuilder;
     use async_trait::async_trait;
@@ -1700,7 +1261,7 @@ mod test_agent_context {
 
     #[tokio::test]
     async fn test_agent_context_persistence() {
-        // Create an agent with the simple runtime (non-dora)
+        // Create an agent with the simple runtime
         let builder = AgentBuilder::new("test-persistence-agent", "Test Agent");
 
         let mut runtime = builder
@@ -1752,7 +1313,6 @@ mod test_agent_context {
 
 // Additional message-bus tests
 #[cfg(test)]
-#[cfg(not(feature = "dora"))]
 mod test_message_bus {
     use super::*;
     use mofa_kernel::message::AgentEvent;

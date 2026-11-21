@@ -32,34 +32,6 @@ outputs:
     Ok(())
 }
 
-/// Generate dataflow configuration
-pub fn run_dataflow(output: &std::path::Path) -> Result<(), CliError> {
-    println!("{} Generating dataflow: {}", "→".green(), output.display());
-
-    let dataflow = r#"# MoFA Dataflow Configuration
-nodes:
-  - id: agent-1
-    operator:
-      python: agents/agent.py
-    inputs:
-      task_input: source/output
-    outputs:
-      - task_output
-
-  - id: agent-2
-    operator:
-      python: agents/worker.py
-    inputs:
-      task_input: agent-1/task_output
-    outputs:
-      - result
-"#;
-
-    std::fs::write(output, dataflow)?;
-    println!("{} Dataflow generated!", "✓".green());
-    Ok(())
-}
-
 /// Execute the `mofa info` command
 pub fn run_info() {
     println!();
@@ -70,7 +42,6 @@ pub fn run_info() {
     println!();
     println!("  Features:");
     println!("    • Build AI agents with Rust");
-    println!("    • Distributed dataflow with dora-rs");
     println!("    • Cross-language bindings (Python, Kotlin, Swift)");
     println!();
     println!("  Commands:");

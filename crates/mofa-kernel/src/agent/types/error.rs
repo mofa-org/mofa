@@ -78,10 +78,6 @@ pub enum GlobalError {
     #[error("Rhai error: {0}")]
     Rhai(String),
 
-    /// Dora adapter error
-    #[error("Dora error: {0}")]
-    Dora(String),
-
     /// Message graph error
     #[error("MessageGraph error: {0}")]
     MessageGraph(String),
@@ -140,11 +136,6 @@ impl GlobalError {
         Self::Rhai(msg.into())
     }
 
-    /// Create Dora error
-    pub fn dora(msg: impl Into<String>) -> Self {
-        Self::Dora(msg.into())
-    }
-
     /// Create message graph error
     pub fn message_graph(msg: impl Into<String>) -> Self {
         Self::MessageGraph(msg.into())
@@ -158,7 +149,7 @@ impl GlobalError {
             Self::Agent(_) => ErrorCategory::Agent,
             Self::LLM(_) => ErrorCategory::LLM,
             Self::Plugin(_) | Self::Wasm(_) | Self::Rhai(_) => ErrorCategory::Plugin,
-            Self::Runtime(_) | Self::Dora(_) => ErrorCategory::Runtime,
+            Self::Runtime(_) => ErrorCategory::Runtime,
             Self::Io(_) => ErrorCategory::Io,
             Self::Serialization(_) => ErrorCategory::Serialization,
             Self::Config(_) => ErrorCategory::Config,
@@ -176,7 +167,6 @@ impl GlobalError {
             Self::Agent(AgentError::ConfigError(_)) | Self::Config(_) => ErrorSeverity::Error,
             Self::Runtime(_) | Self::Io(_) | Self::LLM(_) => ErrorSeverity::Retryable,
             Self::Plugin(_) | Self::Wasm(_) | Self::Rhai(_) => ErrorSeverity::Retryable,
-            Self::Dora(_) => ErrorSeverity::Retryable,
             _ => ErrorSeverity::Error,
         }
     }
@@ -247,7 +237,7 @@ pub enum ErrorCategory {
     LLM,
     /// Plugin related errors (WASM, Rhai, etc.)
     Plugin,
-    /// Runtime errors (Dora, message bus, etc.)
+    /// Runtime errors (message bus, etc.)
     Runtime,
     /// IO errors
     Io,
@@ -561,10 +551,6 @@ mod tests {
             ErrorCategory::Plugin
         );
         assert_eq!(
-            GlobalError::dora("node init failed").category(),
-            ErrorCategory::Runtime
-        );
-        assert_eq!(
             GlobalError::message_graph("invalid edge").category(),
             ErrorCategory::MessageGraph
         );
@@ -576,7 +562,6 @@ mod tests {
         assert!(GlobalError::plugin("temporary failure").is_retryable());
         assert!(GlobalError::runtime("network error").is_retryable());
         assert!(GlobalError::wasm("timeout").is_retryable());
-        assert!(GlobalError::dora("connection lost").is_retryable());
     }
 
     #[test]

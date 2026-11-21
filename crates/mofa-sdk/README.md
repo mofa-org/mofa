@@ -43,9 +43,6 @@ mofa-sdk = "0.1"
 ### Optional Features
 
 ```toml
-# With dora-rs runtime support (distributed dataflow)
-mofa-sdk = { version = "0.1", features = ["dora"] }
-
 # With persistence support (database backends)
 mofa-sdk = { version = "0.1", features = ["persistence-sqlite"] }
 mofa-sdk = { version = "0.1", features = ["persistence-postgres"] }
@@ -184,20 +181,6 @@ async fn main() -> anyhow::Result<()> {
 }
 ```
 
-### With Dora Runtime
-
-```rust
-use mofa_sdk::dora::{DoraRuntime, run_dataflow};
-
-#[tokio::main]
-async fn main() -> eyre::Result<()> {
-    // Quick run a dataflow
-    let result = run_dataflow("dataflow.yml").await?;
-    info!("Dataflow {} completed", result.uuid);
-    Ok(())
-}
-```
-
 ## Cross-Language Bindings
 
 For Python, Kotlin, Swift, Java, and Go bindings, use the **[mofa-ffi](../mofa-ffi)** crate:
@@ -213,7 +196,6 @@ See [mofa-ffi/README.md](../mofa-ffi/README.md) for detailed usage instructions.
 
 | Feature | Description |
 |---------|-------------|
-| `dora` | Enable dora-rs runtime for distributed dataflow |
 | `persistence-postgres` | PostgreSQL persistence backend |
 | `persistence-mysql` | MySQL persistence backend |
 | `persistence-sqlite` | SQLite persistence backend |

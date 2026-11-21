@@ -1,4 +1,4 @@
-//! Native dataflow example — no Dora-rs dependency.
+//! Native dataflow example.
 //!
 //! This example builds a two-node pipeline:
 //!

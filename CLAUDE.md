@@ -11,7 +11,6 @@ MoFA (Modular Framework for Agents) is a production-grade AI agent framework bui
 - Dual-layer plugins: compile-time (Rust/WASM) for performance + runtime (Rhai scripts) for flexibility
 - Multi-agent coordination patterns (chain, parallel, debate, supervision, MapReduce, routing, aggregation)
 - Secretary agent mode for human-in-the-loop workflows
-- Distributed dataflow support via Dora-rs (optional)
 - Actor-based concurrency using Ractor
 
 ## Common Commands
@@ -125,7 +124,6 @@ Human-in-the-loop workflow management with 5 phases:
 The workspace uses feature flags extensively:
 - `uniffi`: Cross-language bindings (Python, Java, Swift, Kotlin, Go)
 - `openai`: OpenAI provider support
-- `dora`: Dora-rs distributed runtime support
 - `persistence-*`: Database backend selection (postgres, mysql, sqlite)
 - `python`: Native Python bindings via PyO3
 

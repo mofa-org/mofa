@@ -2,7 +2,7 @@
 name = "native_dataflow"
 version.workspace = true
 edition.workspace = true
-description = "Demonstrates mofa-runtime native dataflow without Dora-rs"
+description = "Demonstrates mofa-runtime native dataflow"
 
 [dependencies]
 mofa-runtime = { path = "../../crates/mofa-runtime" }

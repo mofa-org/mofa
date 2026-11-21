@@ -93,7 +93,6 @@ tempfile = "3"
 
 [features]
 default = []
-dora = ["mofa-sdk/dora"]
 db = ["dep:sqlx"]
 qdrant = ["mofa-foundation/qdrant"]
 

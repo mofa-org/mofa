@@ -17,7 +17,6 @@ mofa-runtime = "0.1"
 - Health check system
 - State management
 - Configuration management
-- Distributed dataflow support via Dora-rs (optional)
 - Tokio async runtime support
 
 ## Roadmap

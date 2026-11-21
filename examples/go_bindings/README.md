@@ -86,7 +86,6 @@ func main() {
 | Function | Description |
 |----------|-------------|
 | `GetVersion()` | Get SDK version string |
-| `IsDoraAvailable()` | Check if Dora runtime is enabled |
 | `NewLlmAgentBuilder()` | Create a new LLMAgentBuilder |
 
 ## LLMAgentBuilder Methods

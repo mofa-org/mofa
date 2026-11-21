@@ -79,7 +79,6 @@ public class Example {
 | Function | Description |
 |----------|-------------|
 | `UniFFI.INSTANCE.getVersion()` | Get SDK version string |
-| `UniFFI.INSTANCE.isDoraAvailable()` | Check if Dora runtime is enabled |
 | `UniFFI.INSTANCE.newLlmAgentBuilder()` | Create a new LLMAgentBuilder |
 
 ## LLMAgentBuilder Methods

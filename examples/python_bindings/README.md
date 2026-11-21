@@ -71,7 +71,6 @@ End-to-end test that exercises sessions, tools, version info, and error handling
 | Function | Description |
 |---|---|
 | `get_version()` | Get SDK version string |
-| `is_dora_available()` | Check if Dora runtime is compiled in |
 | `new_llm_agent_builder()` | Create a new LLMAgentBuilder |
 
 ### LLMAgentBuilder

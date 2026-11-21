@@ -25,7 +25,6 @@ MoFA uses feature flags to control which functionality is included in your build
 
 | Feature | Description |
 |---------|-------------|
-| `dora` | Dora-rs distributed runtime |
 | `rhai` | Rhai scripting engine |
 | `wasm` | WASM plugin support |
 
@@ -84,7 +83,6 @@ No optional features - always minimal core.
 
 | Feature | Description |
 |---------|-------------|
-| `dora` | Dora-rs integration |
 | `monitoring` | Built-in monitoring |
 
 ### mofa-ffi

@@ -225,10 +225,6 @@ async fn streaming_rag_pipeline() -> Result<(), Box<dyn std::error::Error>> {
          from Python, Java, Swift, Kotlin, and Go applications. This allows teams to leverage \
          MoFA's performance benefits while integrating with existing codebases in other languages.",
 
-        "Distributed dataflow support in MoFA is provided through optional Dora-rs integration, \
-         enabling agents to participate in distributed processing pipelines with automatic \
-         serialization, routing, and fault tolerance across multiple nodes.",
-
         "MoFA's persistence layer supports PostgreSQL, MySQL, and SQLite backends with async \
          database drivers, providing ACID transactions, connection pooling, and migration support \
          for storing agent state, conversation history, and application data.",

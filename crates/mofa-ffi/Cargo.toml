@@ -21,8 +21,6 @@ uniffi = ["dep:uniffi", "dep:thiserror", "dep:error-stack"]
 python = ["dep:pyo3", "dep:pyo3-async-runtimes"]
 # Enable all FFI bindings
 all = ["uniffi", "python"]
-# Forward dora feature from mofa-sdk
-dora = ["mofa-sdk/dora"]
 # Forward persistence features from mofa-sdk
 persistence-postgres = ["mofa-sdk/persistence-postgres"]
 persistence-mysql = ["mofa-sdk/persistence-mysql"]

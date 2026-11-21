@@ -42,7 +42,6 @@ Multi-agent coordination patterns.
 
 | Flag | Description |
 |------|-------------|
-| `dora` | Dora-rs distributed runtime |
 | `monitoring` | Built-in monitoring |
 
 ## See Also

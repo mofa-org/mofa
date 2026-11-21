@@ -79,7 +79,7 @@ What Sets MoFA Apart:</br>
 ✅ **Rust Core + UniFFI**: Blazing performance with native multi-language interoperability</br>
 ✅ **Dual-Layer Plugins**: Zero-cost compile-time extensions meet hot-swappable runtime scripts</br>
 ✅ **Microkernel Architecture**: Clean separation of concerns, effortless to extend</br>
-✅ **Cloud-Native by Design**: First-class support for distributed and edge deployments</br>
+✅ **Cloud-Native by Design**: First-class support for distributed deployments</br>
 
 ## Enterprise-Grade LLM Infrastructure
 
@@ -145,12 +145,6 @@ A token relay station resells upstream API quotas. MoFA is the infrastructure yo
 - **Compile-time plugins**: Extreme performance, native integration
 - **Runtime plugins**: Dynamic loading, instant effect
 - Support plugin hot loading and version management
-
-### **Distributed by Nature**
-
-- Built on Dora-rs for distributed dataflow
-- Seamless cross-process, cross-machine agent communication
-- Edge computing ready
 
 ### **Actor-Model Concurrency**
 
@@ -324,7 +318,6 @@ MoFA integrates the [Rhai](https://github.com/rhaiscript/rhai) embedded scriptin
 ## Roadmap
 
 ### Short-term Goals
-- [ ] Dora-rs runtime support for distributed dataflow
 - [ ] Complete distributed tracing implementation
 - [ ] Python binding generation
 - [ ] More LLM provider integrations
@@ -334,7 +327,6 @@ MoFA integrates the [Rhai](https://github.com/rhaiscript/rhai) embedded scriptin
 - [ ] Cloud-native deployment support
 - [ ] Advanced agent coordination algorithms
 - [ ] Agent platform
-- [ ] Cross-process/cross-machine distributed agent collaboration
 - [ ] Multi-agent collaboration standard protocol
 - [ ] Cross-platform mobile support
 - [ ] Evolve into agent operating system
@@ -365,7 +357,7 @@ The runtime mode is most suitable for scenarios that require building complete a
   ---
 1. Multi-agent collaboration scenarios
 
-The runtime provides a message bus (SimpleMessageBus/DoraChannel) and agent registration system, supporting communication between agents:
+The runtime provides a message bus (SimpleMessageBus) and agent registration system, supporting communication between agents:
 - Point-to-point communication (send_to_agent)
 - Broadcast messages (broadcast)
 - Topic pub/sub (publish_to_topic/subscribe_topic)
@@ -384,17 +376,7 @@ The runtime has a built-in event loop (run_with_receiver/run_event_loop) and int
 Suitable for building applications that need to respond to external events or timers (such as real-time dialogue systems, event response robots).
 
   ---
-3. Distributed agent systems
-
-When the dora feature is enabled, the runtime provides Dora adapters (DoraAgentNode/DoraDataflow), supporting:
-- Distributed node deployment
-- Cross-node agent communication
-- Data flow management
-
-Suitable for production scenarios requiring large-scale deployment and low-latency communication.
-
-  ---
-4. Structured agent building
+3. Structured agent building
 
 The runtime provides AgentBuilder fluent API, simplifying agent:
 - Configuration management
@@ -405,7 +387,7 @@ The runtime provides AgentBuilder fluent API, simplifying agent:
 Suitable for scenarios where you need to quickly build standardized agents, especially when you need to uniformly manage multiple agent configurations.
 
   ---
-5. Production-grade applications
+4. Production-grade applications
 
 The runtime provides comprehensive:
 - Health checks and state management
@@ -499,7 +481,6 @@ We ❤️ first-time contributors! Check out our [`good-first-issue`](https://gi
 | [makepad-chart](https://github.com/mofa-org/makepad-chart) | GPU-accelerated chart widgets for Makepad | ✅ Active |
 | [makepad-flow](https://github.com/mofa-org/makepad-flow) | Flow chart widget for visual workflow editing | ✅ Active |
 | [makepad-d3](https://github.com/mofa-org/makepad-d3) | D3-style data visualization for Makepad | ✅ Active |
-| [dora](https://github.com/mofa-org/dora) | Distributed dataflow middleware (fork of dora-rs) | ✅ Active |
 
 ## 🎓 GSoC 2026
 
@@ -525,7 +506,6 @@ MoFA stands on the shoulders of giants:
 - [Rhai](https://rhai.rs/) - Powerful embedded scripting engine
 - [Tokio](https://tokio.rs/) - Async runtime cornerstone
 - [Ractor](https://github.com/slawlor/ractor) - Actor model concurrency framework
-- [Dora](https://github.com/dora-rs/dora) - Distributed dataflow runtime
 - [Wasmtime](https://wasmtime.dev/) - WebAssembly runtime
 
 ## Support

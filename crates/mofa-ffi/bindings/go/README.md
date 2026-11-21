@@ -254,9 +254,6 @@ func main() {
     version := mofa.GetVersion()
     fmt.Printf("MoFA SDK version: %s\n", version)
 
-    // Check if Dora-rs is available
-    hasDora := mofa.IsDoraAvailable()
-    fmt.Printf("Dora-rs available: %t\n", hasDora)
 }
 ```
 

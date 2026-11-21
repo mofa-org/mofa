@@ -351,7 +351,6 @@ mod tests {
             runtime: Some(super::super::RuntimeConfig {
                 max_concurrent_tasks: Some(10),
                 default_timeout_secs: Some(60),
-                dora_enabled: None,
                 persistence: None,
             }),
             node_config: std::collections::HashMap::new(),

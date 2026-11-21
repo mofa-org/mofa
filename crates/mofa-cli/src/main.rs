@@ -119,21 +119,13 @@ async fn run_command(cli: Cli) -> CliResult<()> {
             commands::build::run(release, features.as_deref())?;
         }
 
-        Some(Commands::Run { config, dora }) => {
-            commands::run::run(&config, dora)?;
-        }
-
-        #[cfg(feature = "dora")]
-        Some(Commands::Dataflow { file, uv }) => {
-            commands::run::run_dataflow(&file, uv)?;
+        Some(Commands::Run { config }) => {
+            commands::run::run(&config)?;
         }
 
         Some(Commands::Generate { what }) => match what {
             cli::GenerateCommands::Config { output } => {
                 commands::generate::run_config(&output)?;
-            }
-            cli::GenerateCommands::Dataflow { output } => {
-                commands::generate::run_dataflow(&output)?;
             }
         },
 

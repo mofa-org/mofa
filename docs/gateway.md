@@ -87,10 +87,9 @@ At runtime you can choose:
 **This is an ADDITION, not a replacement.** The control plane and gateway layer:
 - **Extends** the existing microkernel architecture (`mofa-kernel`)
 - **Sits on top** of the existing runtime (`mofa-runtime`)
-- **Complements** the existing Dora-rs distributed dataflow
 - **Adds** framework-level coordination (vs. application-level)
 
-**Current MoFA Architecture** (Single-node or basic distributed):
+**Current MoFA Architecture** (Single-node or gateway cluster):
 ```
 Business Layer → Runtime Plugins → Compile-time Plugins → Microkernel
 ```

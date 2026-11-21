@@ -1,8 +1,7 @@
 //! Native agent node for dataflow execution.
 //!
 //! `NativeNode` wraps the mofa-runtime's own tokio channels and interrupt
-//! mechanism to provide agent lifecycle management without any Dora-rs
-//! dependency.
+//! mechanism to provide agent lifecycle management.
 
 use crate::interrupt::AgentInterrupt;
 use crate::native_dataflow::error::{DataflowError, DataflowResult};

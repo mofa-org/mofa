@@ -147,17 +147,6 @@ response = agent.ask("Hello from Python!")
 
 See `crates/mofa-ffi/` and `examples/python_bindings/`.
 
-### Dora Distributed Dataflow
-Run agents as nodes in a distributed dataflow graph:
-
-```rust
-use mofa_sdk::dora::{DoraRuntime, run_dataflow};
-
-let result = run_dataflow("dataflow.yml").await?;
-```
-
-See the `dora` feature flag and `crates/mofa-runtime/src/dora/`.
-
 ### TTS (Text-to-Speech)
 Give your agents a voice with the Kokoro TTS integration:
 

@@ -17,9 +17,6 @@ From the workspace root:
 ```bash
 # From workspace root
 cargo install --path crates/mofa-cli
-
-# With features
-cargo install --path crates/mofa-cli --features dora
 ```
 
 Or from the crate directory:
@@ -66,9 +63,6 @@ mofa build
 
 # Release build
 mofa build --release
-
-# With features
-mofa build --features dora
 ```
 
 ### Run
@@ -79,18 +73,6 @@ mofa run
 
 # Run with specific config
 mofa run --config my-agent.yml
-
-# Run with dora runtime
-mofa run --dora
-```
-
-### Run Dataflow (with dora feature)
-
-```bash
-mofa dataflow dataflow.yml
-
-# Use uv for Python nodes
-mofa dataflow dataflow.yml --uv
 ```
 
 ### Generate Files
@@ -140,9 +122,7 @@ cd my-python-agent && pip install -r requirements.txt && python main.py
 | `init` | Initialize MoFA in an existing project |
 | `build` | Build the agent project |
 | `run` | Run the agent |
-| `dataflow` | Run a dora dataflow (requires `dora` feature) |
 | `generate config` | Generate agent configuration |
-| `generate dataflow` | Generate dataflow configuration |
 | `info` | Show information about MoFA |
 | `doctor` | Diagnose project and environment readiness |
 

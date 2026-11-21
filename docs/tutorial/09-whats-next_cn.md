@@ -147,17 +147,6 @@ response = agent.ask("来自 Python 的问候！")
 
 参见 `crates/mofa-ffi/` 和 `examples/python_bindings/`。
 
-### Dora 分布式数据流
-将智能体作为分布式数据流图中的节点运行：
-
-```rust
-use mofa_sdk::dora::{DoraRuntime, run_dataflow};
-
-let result = run_dataflow("dataflow.yml").await?;
-```
-
-参见 `dora` feature flag 和 `crates/mofa-runtime/src/dora/`。
-
 ### TTS（文字转语音）
 通过 Kokoro TTS 集成让你的智能体拥有声音：
 

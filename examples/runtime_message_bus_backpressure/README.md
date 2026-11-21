@@ -9,7 +9,7 @@ This example demonstrates that `SimpleMessageBus` remains responsive under backp
 3. Incident routing is topic-scoped in a practical multi-team scenario.
 4. Duplicate `subscribe_topic` calls are idempotent (no duplicated deliveries).
 
-These are practical user-facing checks for the non-Dora runtime path.
+These are practical user-facing checks for the SimpleMessageBus runtime path.
 
 ## Run
 

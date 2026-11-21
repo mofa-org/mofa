@@ -35,7 +35,6 @@ runner.shutdown().await?;
 
 | Flag | Description |
 |------|-------------|
-| `dora` | Dora-rs distributed runtime |
 | `monitoring` | Built-in monitoring |
 
 ## See Also

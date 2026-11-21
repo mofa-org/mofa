@@ -23,7 +23,6 @@ sys.path.insert(0, bindings_path)
 
 from mofa import (
     get_version,
-    is_dora_available,
     SessionManager,
     Session,
     ToolRegistry,
@@ -53,9 +52,6 @@ print("\n--- Version & Features ---")
 version = get_version()
 check("get_version returns non-empty string", len(version) > 0)
 check("version looks like semver", "." in version)
-
-dora = is_dora_available()
-check("is_dora_available returns bool", isinstance(dora, bool))
 
 # ----------------------------------------------------------------
 # 2. Session management

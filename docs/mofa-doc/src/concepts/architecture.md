@@ -58,8 +58,7 @@ MoFA strictly follows these microkernel design principles:
 │  Core components:                                                        │
 │  - AgentBuilder: Builder pattern                                         │
 │  - AgentRunner: Executor                                                 │
-│  - SimpleRuntime: Multi-agent coordination (non-dora mode)               │
-│  - AgentRuntime: Dora-rs integration (optional)                          │
+│  - SimpleRuntime: Multi-agent coordination                               │
 │  - Message bus and event routing                                         │
 └─────────────────────────────────────────────────────────────────────────┘
                                   ↓

@@ -71,8 +71,6 @@ pub struct RuntimeConfig {
     pub max_concurrent_tasks: Option<usize>,
     /// Default timeout in seconds
     pub default_timeout_secs: Option<u64>,
-    /// Enable Dora runtime
-    pub dora_enabled: Option<bool>,
     /// Persistence configuration
     pub persistence: Option<PersistenceConfig>,
 }

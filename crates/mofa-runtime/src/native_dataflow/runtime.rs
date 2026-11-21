@@ -1,8 +1,7 @@
 //! Native in-process runtime for dataflow execution.
 //!
 //! [`NativeRuntime`] ties together one or more [`NativeDataflow`]s and a
-//! shared [`NativeChannel`], providing a single start/stop surface without
-//! any Dora-rs dependency.
+//! shared [`NativeChannel`], providing a single start/stop surface.
 //!
 //! # Example
 //!

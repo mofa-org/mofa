@@ -197,9 +197,6 @@ import org.mofa.*;
 String version = MoFa.getVersion();
 System.out.println("MoFA SDK version: " + version);
 
-// Check if Dora-rs is available
-boolean hasDora = MoFa.isDoraAvailable();
-System.out.println("Dora-rs available: " + hasDora);
 ```
 
 ## Requirements

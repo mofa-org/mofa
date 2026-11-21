@@ -284,11 +284,6 @@ pub(crate) fn get_version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
 }
 
-/// Check if Dora runtime support is available
-pub(crate) fn is_dora_available() -> bool {
-    cfg!(feature = "dora")
-}
-
 /// Create a new LLM Agent Builder
 pub(crate) fn new_llm_agent_builder() -> Result<std::sync::Arc<LLMAgentBuilder>, MoFaError> {
     LLMAgentBuilder::create()

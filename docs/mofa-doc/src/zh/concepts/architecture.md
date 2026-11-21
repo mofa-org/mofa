@@ -70,8 +70,7 @@ MoFA 严格遵循以下微内核架构设计原则：
 │  核心组件：                                                              │
 │  - AgentBuilder: 构建器模式                                             │
 │  - AgentRunner: 执行器                                                  │
-│  - SimpleRuntime: 多 Agent 协调 (非 dora 模式)                           │
-│  - AgentRuntime: Dora-rs 集成 (可选)                                    │
+│  - SimpleRuntime: 多 Agent 协调                                       │
 │  - 消息总线和事件路由                                                   │
 │                                                                          │
 │  职责：                                                                  │

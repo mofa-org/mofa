@@ -25,7 +25,6 @@ MoFA 使用功能标志来控制构建中包含哪些功能。
 
 | 功能 | 描述 |
 |---------|-------------|
-| `dora` | Dora-rs 分布式运行时 |
 | `rhai` | Rhai 脚本引擎 |
 | `wasm` | WASM 插件支持 |
 
@@ -84,7 +83,6 @@ mofa-sdk = { version = "0.1", features = [
 
 | 功能 | 描述 |
 |---------|-------------|
-| `dora` | Dora-rs 集成 |
 | `monitoring` | 内置监控 |
 
 ### mofa-ffi

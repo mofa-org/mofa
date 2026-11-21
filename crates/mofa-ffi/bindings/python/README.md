@@ -179,15 +179,12 @@ for msg in history:
 ## Utility Functions
 
 ```python
-from mofa import get_version, is_dora_available
+from mofa import get_version
 
 # Get SDK version
 version = get_version()
 print(f"MoFA SDK version: {version}")
 
-# Check if Dora-rs is available
-has_dora = is_dora_available()
-print(f"Dora-rs available: {has_dora}")
 ```
 
 ## Requirements

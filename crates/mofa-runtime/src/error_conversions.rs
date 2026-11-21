@@ -7,17 +7,6 @@
 use mofa_kernel::agent::types::error::GlobalError;
 
 // ============================================================================
-// DoraError → GlobalError (only when dora feature is enabled)
-// ============================================================================
-
-#[cfg(feature = "dora")]
-impl From<crate::dora_adapter::DoraError> for GlobalError {
-    fn from(err: crate::dora_adapter::DoraError) -> Self {
-        GlobalError::Dora(err.to_string())
-    }
-}
-
-// ============================================================================
 // Runtime ConfigError → GlobalError
 // ============================================================================
 

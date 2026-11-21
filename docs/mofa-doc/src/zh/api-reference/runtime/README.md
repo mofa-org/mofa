@@ -42,7 +42,6 @@ runner.shutdown().await?;
 
 | 标志 | 描述 |
 |------|-------------|
-| `dora` | Dora-rs 分布式运行时 |
 | `monitoring` | 内置监控 |
 
 ## 另见

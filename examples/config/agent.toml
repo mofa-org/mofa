@@ -35,6 +35,5 @@ enabled = false
 max_concurrent_tasks = 10
 default_timeout_secs = 30
 
-# Dora-specific configuration (optional)
 inputs = ["user_input", "context_data"]
 outputs = ["response", "action_taken"]
