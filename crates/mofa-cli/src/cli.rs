@@ -75,6 +75,10 @@ pub enum Commands {
         /// Agent configuration file
         #[arg(short, long, default_value = "agent.yml")]
         config: PathBuf,
+
+        /// Validate workflow without executing (dry run)
+        #[arg(long)]
+        dry_run: bool,
     },
 
     /// Generate project files

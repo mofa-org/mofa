@@ -105,8 +105,8 @@ async fn run_command(cli: Cli) -> CliResult<()> {
             commands::build::run(release, features.as_deref())?;
         }
 
-        Some(Commands::Run { config }) => {
-            commands::run::run(&config)?;
+        Some(Commands::Run { config, dry_run }) => {
+            commands::run::run(&config, dry_run)?;
         }
 
         Some(Commands::Generate { what }) => match what {
