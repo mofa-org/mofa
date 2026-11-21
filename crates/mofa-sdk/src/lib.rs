@@ -357,10 +357,6 @@ pub mod plugins {
 
     pub use mofa_kernel::PluginPriority;
 
-    // Re-export KokoroTTSWrapper when kokoro feature is enabled
-    #[cfg(feature = "kokoro")]
-    pub use mofa_plugins::KokoroTTS;
-
     // Hot reload utilities
     pub mod hot_reload {
         pub use mofa_plugins::hot_reload::*;

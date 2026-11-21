@@ -160,7 +160,7 @@ let agent = Arc::new(
     .with_provider(Arc::new(openai_from_env()?))
     .with_system_prompt("You are a friendly AI assistant.")
     .with_temperature(0.7)
-    .with_plugin(TTSPlugin::with_engine("tts", kokoro_engine, Some("zf_088")))
+    .with_plugin(TTSPlugin::with_engine("tts", tts_engine, Some("zf_088")))
     .build();
 );
 ```

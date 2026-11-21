@@ -376,10 +376,6 @@ pub use tts::{
     play_audio_async,
 };
 
-// Re-export KokoroTTSWrapper when kokoro feature is enabled
-#[cfg(feature = "kokoro")]
-pub use tts::kokoro_wrapper::KokoroTTS;
-
 /// 工具定义
 /// Tool definition
 #[derive(Debug, Clone, Serialize, Deserialize)]

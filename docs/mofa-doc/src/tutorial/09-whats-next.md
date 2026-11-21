@@ -148,7 +148,7 @@ response = agent.ask("Hello from Python!")
 See `crates/mofa-ffi/` and `examples/python_bindings/`.
 
 ### TTS (Text-to-Speech)
-Give your agents a voice with the Kokoro TTS integration:
+Give your agents a voice with the TTS plugin integration:
 
 ```rust
 let agent = LLMAgentBuilder::new()

@@ -200,7 +200,6 @@ See [mofa-ffi/README.md](../mofa-ffi/README.md) for detailed usage instructions.
 | `persistence-mysql` | MySQL persistence backend |
 | `persistence-sqlite` | SQLite persistence backend |
 | `monitoring` | Enable monitoring and observability |
-| `kokoro` | Enable Kokoro TTS support |
 
 ## Configuration File Format (agent.yml)
 

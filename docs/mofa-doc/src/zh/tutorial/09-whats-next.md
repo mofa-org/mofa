@@ -148,7 +148,7 @@ response = agent.ask("来自 Python 的问候！")
 参见 `crates/mofa-ffi/` 和 `examples/python_bindings/`。
 
 ### TTS（文字转语音）
-通过 Kokoro TTS 集成让你的智能体拥有声音：
+通过 TTS 插件集成让你的智能体拥有声音：
 
 ```rust
 let agent = LLMAgentBuilder::new()

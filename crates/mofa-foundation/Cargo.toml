@@ -27,8 +27,6 @@ persistence-all = [
     "persistence-mysql",
     "persistence-sqlite",
 ]
-# Enable Kokoro TTS support
-kokoro = ["mofa-plugins/kokoro"]
 # Enable MCP (Model Context Protocol) client support
 mcp = ["dep:rmcp"]
 # Enable Qdrant vector database support

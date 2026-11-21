@@ -67,7 +67,7 @@ impl TTSEngine for OpenAITTS {
             voice
         );
 
-        // Define default model if "v1.1" (from kokoro config) is used
+        // Define default model if a version string (e.g. "v1.1") is used
         let model = if self.config.model_version.starts_with('v') {
             "tts-1"
         } else {

@@ -55,22 +55,23 @@ The gateway is designed to be **simple by default**, with distributed features a
   - Command: `cargo build --package mofa-gateway --no-default-features`
   - Behavior: all gateway and control plane code is compiled, but you choose at runtime whether to start a `ControlPlane` or just a `Gateway`.
 
+- **Storage**: persistent Raft storage uses [redb](https://crates.io/crates/redb), a pure-Rust embedded key-value store, and is always compiled in (no feature flag or C++ toolchain required).
+
 - **Optional Cargo features**:
-  - `rocksdb`: enable persistent Raft storage using RocksDB (otherwise an in-memory fallback is used).
   - `monitoring`: enable OpenTelemetry-based tracing (`opentelemetry`, `opentelemetry_sdk`, `tracing-opentelemetry`).
   - `socketio`: enable real-time Socket.IO bridge that forwards `AgentBus` broadcasts to connected clients. Also emits file upload progress events (`file_upload_started`, `file_upload_completed`, `file_upload_failed`).
   - `s3`: enable AWS S3 / MinIO file storage endpoints (`/api/v1/files/**`) with automatic MIME-type detection.
-  - `full`: convenience feature that enables `rocksdb`, `monitoring`, `socketio`, and `s3`.
+  - `full`: convenience feature that enables `monitoring`, `socketio`, and `s3`.
 
 Typical build profiles:
 
 - **Simple gateway only (no extra deps)**:
   - `cargo build --package mofa-gateway --no-default-features`
 - **Gateway + persistent Raft storage**:
-  - `cargo build --package mofa-gateway --no-default-features --features rocksdb`
+  - `cargo build --package mofa-gateway --no-default-features` (redb storage is always included)
 - **Gateway + S3 file storage + Socket.IO real-time bridge**:
   - `cargo build --package mofa-gateway --features socketio,s3`
-- **Gateway + storage + tracing (full)**:
+- **Gateway + tracing (full)**:
   - `cargo build --package mofa-gateway --no-default-features --features full`
 
 At runtime you can choose:

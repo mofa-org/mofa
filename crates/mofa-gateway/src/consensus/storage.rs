@@ -5,25 +5,30 @@
 //! - Voted for (candidate that received vote in current term)
 //! - Log entries
 //!
-//! Uses RocksDB for efficient, embedded storage.
+//! Uses [redb](https://crates.io/crates/redb) — a pure-Rust embedded
+//! key-value store — for efficient storage without external C/C++ dependencies.
 //!
 //! # Implementation Status
 //!
-//! **Complete** - Persistent storage with RocksDB and in-memory fallback implemented
+//! **Complete** - Persistent storage backed by redb with an in-memory test helper
 
 use crate::error::{ConsensusError, ConsensusResult};
 use crate::types::{LogEntry, LogIndex, NodeId, Term};
+use redb::{Database, ReadableDatabase, ReadableTable, TableDefinition};
 use std::path::Path;
 
-// RocksDB is optional - use cfg feature gate
-#[cfg(feature = "rocksdb")]
-use rocksdb::{DB, Options};
+/// Single table holding all Raft persistent state.
+const RAFT_TABLE: TableDefinition<&str, &[u8]> = TableDefinition::new("raft_state");
+
+/// Convert any redb error into a [`ConsensusError::Storage`].
+fn storage_err<E: std::fmt::Display>(e: E) -> ConsensusError {
+    ConsensusError::Storage(format!("redb error: {}", e))
+}
 
 /// Persistent storage for Raft state.
-#[cfg(feature = "rocksdb")]
 pub struct RaftStorage {
-    db: DB,
-    /// Optional temporary directory backing this RocksDB instance (tests).
+    db: Database,
+    /// Optional temporary directory backing this database (tests).
     ///
     /// When `RaftStorage` is created via `RaftStorage::new()` for tests, we
     /// hold on to the `TempDir` so that the directory outlives the database
@@ -32,14 +37,6 @@ pub struct RaftStorage {
     _temp_dir: Option<tempfile::TempDir>,
 }
 
-/// Persistent storage for Raft state (in-memory fallback).
-#[cfg(not(feature = "rocksdb"))]
-pub struct RaftStorage {
-    // In-memory storage for testing
-    _data: std::collections::HashMap<String, Vec<u8>>,
-}
-
-#[cfg(feature = "rocksdb")]
 impl Default for RaftStorage {
     fn default() -> Self {
         Self::new()
@@ -47,23 +44,19 @@ impl Default for RaftStorage {
 }
 
 impl RaftStorage {
-    /// Create a new Raft storage instance for testing.
+    /// Create a new Raft storage instance backed by a temporary directory.
     ///
-    /// When the `rocksdb` feature is enabled, this opens a RocksDB-backed
-    /// storage in a temporary directory. When `rocksdb` is disabled, this
-    /// creates an in-memory storage.
-    #[cfg(feature = "rocksdb")]
+    /// Mostly useful for tests; production code should use [`RaftStorage::open`]
+    /// with a persistent path.
     pub fn new() -> Self {
-        // Use a temporary directory for RocksDB-backed tests.
-        // TempDir cleans up on drop, but we keep the path alive for the DB.
         let tmp_dir = tempfile::TempDir::new()
             .expect("failed to create temporary directory for RaftStorage tests");
         let path = tmp_dir.path().to_path_buf();
 
         // Keep the TempDir alive inside RaftStorage so the directory outlives
-        // the DB for the duration of the test process, and is cleaned up when
-        // the storage is dropped.
-        let storage = Self::open(path).expect("failed to open RocksDB-backed RaftStorage");
+        // the database for the duration of the test process, and is cleaned up
+        // when the storage is dropped.
+        let storage = Self::open(path).expect("failed to open redb-backed RaftStorage");
         Self {
             db: storage.db,
             #[cfg(test)]
@@ -72,14 +65,30 @@ impl RaftStorage {
     }
 
     /// Open or create a Raft storage at the given path.
-    #[cfg(feature = "rocksdb")]
+    ///
+    /// The path may be either a directory (a `raft.redb` database file is
+    /// created inside it) or the path of the database file itself. Missing
+    /// parent directories are created automatically.
     pub fn open<P: AsRef<Path>>(path: P) -> ConsensusResult<Self> {
-        let mut opts = Options::default();
-        opts.create_if_missing(true);
-        opts.create_missing_column_families(true);
+        let path = path.as_ref();
+        let db_path = if path.is_dir() {
+            path.join("raft.redb")
+        } else {
+            path.to_path_buf()
+        };
+        if let Some(parent) = db_path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| ConsensusError::Storage(format!("io error: {}", e)))?;
+        }
 
-        let db = DB::open(&opts, path)
-            .map_err(|e| ConsensusError::Storage(format!("RocksDB error: {}", e)))?;
+        let db = Database::create(db_path).map_err(storage_err)?;
+
+        // Ensure the table exists before any read occurs.
+        let write_txn = db.begin_write().map_err(storage_err)?;
+        {
+            let _table = write_txn.open_table(RAFT_TABLE).map_err(storage_err)?;
+        }
+        write_txn.commit().map_err(storage_err)?;
 
         Ok(Self {
             db,
@@ -88,198 +97,129 @@ impl RaftStorage {
         })
     }
 
-    /// Open or create a Raft storage (in-memory fallback).
-    #[cfg(not(feature = "rocksdb"))]
-    pub fn open<P: AsRef<Path>>(_path: P) -> ConsensusResult<Self> {
-        Ok(Self {
-            _data: std::collections::HashMap::new(),
-        })
-    }
-
-    /// Create a new in-memory Raft storage (for testing).
-    #[cfg(not(feature = "rocksdb"))]
-    pub fn new() -> Self {
-        Self {
-            _data: std::collections::HashMap::new(),
-        }
-    }
-
     /// Save the current term.
-    #[cfg(feature = "rocksdb")]
     pub fn save_term(&self, term: Term) -> ConsensusResult<()> {
-        let key = b"current_term";
         let value = bincode::serialize(&term.0)
             .map_err(|e: bincode::Error| ConsensusError::Storage(e.to_string()))?;
-        self.db
-            .put(key, value)
-            .map_err(|e| ConsensusError::Storage(format!("RocksDB error: {}", e)))?;
-        Ok(())
-    }
-
-    /// Save the current term (in-memory fallback).
-    #[cfg(not(feature = "rocksdb"))]
-    pub fn save_term(&self, _term: Term) -> ConsensusResult<()> {
-        // In-memory implementation
+        let write_txn = self.db.begin_write().map_err(storage_err)?;
+        {
+            let mut table = write_txn.open_table(RAFT_TABLE).map_err(storage_err)?;
+            table
+                .insert("current_term", value.as_slice())
+                .map_err(storage_err)?;
+        }
+        write_txn.commit().map_err(storage_err)?;
         Ok(())
     }
 
     /// Load the current term.
-    #[cfg(feature = "rocksdb")]
     pub fn load_term(&self) -> ConsensusResult<Option<Term>> {
-        let key = b"current_term";
-        match self.db.get(key) {
-            Ok(Some(value_box)) => {
-                let term: u64 = bincode::deserialize(&value_box)
+        let read_txn = self.db.begin_read().map_err(storage_err)?;
+        let table = read_txn.open_table(RAFT_TABLE).map_err(storage_err)?;
+        match table.get("current_term").map_err(storage_err)? {
+            Some(value) => {
+                let term: u64 = bincode::deserialize(value.value())
                     .map_err(|e: bincode::Error| ConsensusError::Storage(e.to_string()))?;
                 Ok(Some(Term::new(term)))
             }
-            Ok(None) => Ok(None),
-            Err(e) => Err(ConsensusError::Storage(format!("RocksDB error: {}", e))),
+            None => Ok(None),
         }
-    }
-
-    /// Load the current term (in-memory fallback).
-    #[cfg(not(feature = "rocksdb"))]
-    pub fn load_term(&self) -> ConsensusResult<Option<Term>> {
-        Ok(None)
     }
 
     /// Save the voted-for candidate.
-    #[cfg(feature = "rocksdb")]
     pub fn save_voted_for(&self, node_id: Option<&NodeId>) -> ConsensusResult<()> {
-        let key = b"voted_for";
-        match node_id {
-            Some(id) => {
-                let value = bincode::serialize(&id.0)
-                    .map_err(|e: bincode::Error| ConsensusError::Storage(e.to_string()))?;
-                self.db
-                    .put(key, value)
-                    .map_err(|e| ConsensusError::Storage(format!("RocksDB error: {}", e)))?;
-            }
-            None => {
-                self.db
-                    .delete(key)
-                    .map_err(|e| ConsensusError::Storage(format!("RocksDB error: {}", e)))?;
+        let write_txn = self.db.begin_write().map_err(storage_err)?;
+        {
+            let mut table = write_txn.open_table(RAFT_TABLE).map_err(storage_err)?;
+            match node_id {
+                Some(id) => {
+                    let value = bincode::serialize(&id.0)
+                        .map_err(|e: bincode::Error| ConsensusError::Storage(e.to_string()))?;
+                    table
+                        .insert("voted_for", value.as_slice())
+                        .map_err(storage_err)?;
+                }
+                None => {
+                    table.remove("voted_for").map_err(storage_err)?;
+                }
             }
         }
-        Ok(())
-    }
-
-    /// Save the voted-for candidate (in-memory fallback).
-    #[cfg(not(feature = "rocksdb"))]
-    pub fn save_voted_for(&self, _node_id: Option<&NodeId>) -> ConsensusResult<()> {
+        write_txn.commit().map_err(storage_err)?;
         Ok(())
     }
 
     /// Load the voted-for candidate.
-    #[cfg(feature = "rocksdb")]
     pub fn load_voted_for(&self) -> ConsensusResult<Option<NodeId>> {
-        let key = b"voted_for";
-        match self.db.get(key) {
-            Ok(Some(value_box)) => {
-                let id: String = bincode::deserialize(&value_box)
+        let read_txn = self.db.begin_read().map_err(storage_err)?;
+        let table = read_txn.open_table(RAFT_TABLE).map_err(storage_err)?;
+        match table.get("voted_for").map_err(storage_err)? {
+            Some(value) => {
+                let id: String = bincode::deserialize(value.value())
                     .map_err(|e: bincode::Error| ConsensusError::Storage(e.to_string()))?;
                 Ok(Some(NodeId::new(id)))
             }
-            Ok(None) => Ok(None),
-            Err(e) => Err(ConsensusError::Storage(format!("RocksDB error: {}", e))),
+            None => Ok(None),
         }
     }
 
-    /// Load the voted-for candidate (in-memory fallback).
-    #[cfg(not(feature = "rocksdb"))]
-    pub fn load_voted_for(&self) -> ConsensusResult<Option<NodeId>> {
-        Ok(None)
-    }
-
     /// Append a log entry.
-    #[cfg(feature = "rocksdb")]
     pub fn append_log_entry(&self, entry: &LogEntry) -> ConsensusResult<()> {
         let key = format!("log:{}", entry.index.0);
         let value = bincode::serialize(entry)
             .map_err(|e: bincode::Error| ConsensusError::Storage(e.to_string()))?;
-        self.db
-            .put(key.as_bytes(), value)
-            .map_err(|e| ConsensusError::Storage(format!("RocksDB error: {}", e)))?;
-        Ok(())
-    }
-
-    /// Append a log entry (in-memory fallback).
-    #[cfg(not(feature = "rocksdb"))]
-    pub fn append_log_entry(&self, _entry: &LogEntry) -> ConsensusResult<()> {
+        let write_txn = self.db.begin_write().map_err(storage_err)?;
+        {
+            let mut table = write_txn.open_table(RAFT_TABLE).map_err(storage_err)?;
+            table
+                .insert(key.as_str(), value.as_slice())
+                .map_err(storage_err)?;
+        }
+        write_txn.commit().map_err(storage_err)?;
         Ok(())
     }
 
     /// Load a log entry at the given index.
-    #[cfg(feature = "rocksdb")]
     pub fn load_log_entry(&self, index: LogIndex) -> ConsensusResult<Option<LogEntry>> {
         let key = format!("log:{}", index.0);
-        match self.db.get(key.as_bytes()) {
-            Ok(Some(value_box)) => {
-                let entry: LogEntry = bincode::deserialize(&value_box)
+        let read_txn = self.db.begin_read().map_err(storage_err)?;
+        let table = read_txn.open_table(RAFT_TABLE).map_err(storage_err)?;
+        match table.get(key.as_str()).map_err(storage_err)? {
+            Some(value) => {
+                let entry: LogEntry = bincode::deserialize(value.value())
                     .map_err(|e: bincode::Error| ConsensusError::Storage(e.to_string()))?;
                 Ok(Some(entry))
             }
-            Ok(None) => Ok(None),
-            Err(e) => Err(ConsensusError::Storage(format!("RocksDB error: {}", e))),
+            None => Ok(None),
         }
-    }
-
-    /// Load a log entry at the given index (in-memory fallback).
-    #[cfg(not(feature = "rocksdb"))]
-    pub fn load_log_entry(&self, _index: LogIndex) -> ConsensusResult<Option<LogEntry>> {
-        Ok(None)
     }
 
     /// Get all log entries.
-    #[cfg(feature = "rocksdb")]
     pub fn load_all_log_entries(&self) -> ConsensusResult<Vec<LogEntry>> {
         let mut entries = Vec::new();
-        let iter = self.db.iterator(rocksdb::IteratorMode::Start);
+        let read_txn = self.db.begin_read().map_err(storage_err)?;
+        let table = read_txn.open_table(RAFT_TABLE).map_err(storage_err)?;
 
-        for item_result in iter {
-            match item_result {
-                Ok((key_box, value_box)) => {
-                    let key: &[u8] = &key_box;
-                    if key.starts_with(b"log:") {
-                        let value: &[u8] = &value_box;
-                        match bincode::deserialize::<LogEntry>(value) {
-                            Ok(entry) => entries.push(entry),
-                            Err(e) => return Err(ConsensusError::Storage(e.to_string())),
-                        }
-                    }
-                }
-                Err(e) => return Err(ConsensusError::Storage(format!("RocksDB error: {}", e))),
+        for item_result in table.iter().map_err(storage_err)? {
+            let (key, value) = item_result.map_err(storage_err)?;
+            if key.value().starts_with("log:") {
+                let entry: LogEntry = bincode::deserialize(value.value())
+                    .map_err(|e: bincode::Error| ConsensusError::Storage(e.to_string()))?;
+                entries.push(entry);
             }
         }
 
-        // Sort by index
+        // Sort by index (lexicographic key order does not match numeric order)
         entries.sort_by_key(|e| e.index.0);
         Ok(entries)
-    }
-
-    /// Get all log entries (in-memory fallback).
-    #[cfg(not(feature = "rocksdb"))]
-    pub fn load_all_log_entries(&self) -> ConsensusResult<Vec<LogEntry>> {
-        Ok(Vec::new())
-    }
-}
-
-#[cfg(not(feature = "rocksdb"))]
-impl Default for RaftStorage {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[cfg(feature = "rocksdb")]
     use tempfile::TempDir;
 
     #[tokio::test]
-    #[cfg(feature = "rocksdb")]
     async fn test_storage_term() {
         let temp_dir = TempDir::new().unwrap();
         let storage = RaftStorage::open(temp_dir.path()).unwrap();
@@ -291,7 +231,32 @@ mod tests {
     }
 
     #[tokio::test]
-    #[cfg(feature = "rocksdb")]
+    async fn test_storage_persistence_across_reopen() {
+        let temp_dir = TempDir::new().unwrap();
+        {
+            let storage = RaftStorage::open(temp_dir.path()).unwrap();
+            storage.save_term(Term::new(7)).unwrap();
+            let node_id = NodeId::new("node-1");
+            storage.save_voted_for(Some(&node_id)).unwrap();
+            storage
+                .append_log_entry(&LogEntry {
+                    term: Term::new(1),
+                    index: LogIndex::new(1),
+                    data: b"entry1".to_vec(),
+                })
+                .unwrap();
+        }
+        // Reopen from the same file: state must survive the restart
+        let storage = RaftStorage::open(temp_dir.path()).unwrap();
+        assert_eq!(storage.load_term().unwrap(), Some(Term::new(7)));
+        assert_eq!(
+            storage.load_voted_for().unwrap(),
+            Some(NodeId::new("node-1"))
+        );
+        assert_eq!(storage.load_all_log_entries().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
     async fn test_storage_voted_for() {
         let temp_dir = TempDir::new().unwrap();
         let storage = RaftStorage::open(temp_dir.path()).unwrap();
@@ -309,7 +274,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[cfg(feature = "rocksdb")]
     async fn test_storage_log_entries() {
         let temp_dir = TempDir::new().unwrap();
         let storage = RaftStorage::open(temp_dir.path()).unwrap();

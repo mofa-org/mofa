@@ -3,7 +3,6 @@
 //! Provides TTS capabilities using a generic TTS engine interface.
 //! This module is designed to work with multiple TTS backends.
 //!
-//! Kokoro TTS is available behind the `kokoro` feature flag.
 //! When enabled, initialization failures are treated as hard errors so
 //! callers do not accidentally receive mock/silent synthesis.
 
@@ -11,10 +10,6 @@
 pub mod cache;
 pub mod model_downloader;
 pub mod openai;
-
-// Kokoro TTS wrapper (available with kokoro feature)
-#[cfg(feature = "kokoro")]
-pub mod kokoro_wrapper;
 
 use crate::{AgentPlugin, PluginContext, PluginMetadata, PluginResult, PluginState, PluginType};
 use serde::{Deserialize, Serialize};
@@ -56,7 +51,7 @@ impl VoiceInfo {
 pub struct TTSPluginConfig {
     /// Default voice to use for synthesis
     pub default_voice: String,
-    /// Model version to use ("v1.0" or "v1.1" for Kokoro")
+    /// Model version to use for the configured TTS provider
     pub model_version: String,
     /// Streaming chunk size in bytes
     pub streaming_chunk_size: usize,
@@ -131,8 +126,7 @@ pub trait TTSEngine: Send + Sync {
     /// Get as Any for downcasting to engine-specific types
     ///
     /// This allows accessing engine-specific methods like stream_receiver()
-    /// on KokoroTTS after downcasting.
-    fn as_any(&self) -> &dyn std::any::Any;
+        fn as_any(&self) -> &dyn std::any::Any;
 }
 
 // ============================================================================
@@ -410,10 +404,10 @@ impl TTSPlugin {
     /// use mofa_plugins::TTSPlugin;
     ///
     /// // 使用默认音色
-    /// let plugin = TTSPlugin::with_engine("tts", kokoro_engine, None);
+    /// let plugin = TTSPlugin::with_engine("tts", tts_engine, None);
     ///
     /// // 指定音色
-    /// let plugin = TTSPlugin::with_engine("tts", kokoro_engine, Some("zf_090"));
+    /// let plugin = TTSPlugin::with_engine("tts", tts_engine, Some("zf_090"));
     /// ```
     pub fn with_engine<E: TTSEngine + 'static>(
         plugin_id: &str,
@@ -504,8 +498,8 @@ impl TTSPlugin {
 
     /// Stream synthesize text with f32 callback (native format)
     ///
-    /// This method is more efficient for KokoroTTS as it uses the native f32 format
-    /// without the overhead of f32 -> i16 -> u8 conversion.
+    /// Streams audio as native f32 samples, avoiding the f32 -> i16 -> u8
+    /// conversion overhead of byte-based streaming.
     ///
     /// # Arguments
     /// - `text`: The text to synthesize
@@ -534,23 +528,7 @@ impl TTSPlugin {
 
         let voice = self.config.default_voice.as_str();
 
-        #[cfg(feature = "kokoro")]
-        {
-            // Try to downcast to KokoroTTS for native f32 streaming
-            if let Some(kokoro) = engine.as_any().downcast_ref::<kokoro_wrapper::KokoroTTS>() {
-                return kokoro
-                    .synthesize_stream_f32(text, voice, callback)
-                    .await
-                    .map_err(|e| {
-                        mofa_kernel::plugin::PluginError::ExecutionFailed(format!(
-                            "F32 streaming failed: {}",
-                            e
-                        ))
-                    });
-            }
-        }
-
-        // Fallback: synthesize to bytes first, then convert to f32
+        // Synthesize to bytes first, then convert to f32
         // We can't directly pass callback to synthesize_stream because of ownership issues
         let audio_bytes = engine.synthesize(text, voice).await?;
 
@@ -759,48 +737,10 @@ impl AgentPlugin for TTSPlugin {
 
         // Initialize engine with downloaded/cached model
         if self.engine.is_none() {
-            #[cfg(feature = "kokoro")]
-            {
-                // Try to initialize Kokoro engine
-                let model_path = cache.model_path(&self.config.model_url);
-                let voice_path_buf = model_path
-                    .parent()
-                    .map(|p| p.join("voices-v1.1-zh.bin"))
-                    .unwrap_or_else(|| std::path::PathBuf::from("voices-v1.1-zh.bin"));
-                let voice_path = voice_path_buf.to_str().unwrap_or("voices-v1.1-zh.bin");
-
-                let model_path_str = model_path.to_str().ok_or_else(|| {
-                    mofa_kernel::plugin::PluginError::ExecutionFailed(
-                        "Invalid model path".to_string(),
-                    )
-                })?;
-
-                info!(
-                    "Initializing Kokoro TTS engine with model: {}, voices: {}",
-                    model_path_str, voice_path
-                );
-
-                match kokoro_wrapper::KokoroTTS::new(model_path_str, voice_path).await {
-                    Ok(engine) => {
-                        self.engine = Some(Arc::new(engine));
-                        info!("Kokoro TTS engine initialized successfully");
-                    }
-                    Err(e) => {
-                        return Err(mofa_kernel::plugin::PluginError::ExecutionFailed(format!(
-                            "Failed to initialize Kokoro engine (model: {}, voices: {}): {}",
-                            model_path_str, voice_path, e
-                        )));
-                    }
-                }
-            }
-
-            #[cfg(not(feature = "kokoro"))]
-            {
-                // Fallback to mock engine when feature not enabled
-                warn!("Kokoro feature not enabled, using mock engine");
-                let engine = MockTTSEngine::new(self.config.clone());
-                self.engine = Some(Arc::new(engine));
-            }
+            // Use the mock engine (no local ONNX TTS engine is bundled)
+            warn!("No native TTS engine available, using mock engine");
+            let engine = MockTTSEngine::new(self.config.clone());
+            self.engine = Some(Arc::new(engine));
         }
 
         Ok(())
@@ -1175,30 +1115,8 @@ mod tests {
         assert_eq!(parsed.play, Some(true));
     }
 
-    #[cfg(feature = "kokoro")]
     #[tokio::test]
-    async fn test_init_plugin_kokoro_mode_fails_instead_of_mock_fallback() {
-        let mut plugin = TTSPlugin::new("test_tts");
-        let cache_dir = TempDir::new().unwrap();
-        prepare_cached_model(&mut plugin, "test/kokoro.onnx", cache_dir.path());
-
-        let ctx = PluginContext::new("test_agent");
-        plugin.load(&ctx).await.unwrap();
-
-        let cached_model_path = plugin
-            .model_cache
-            .as_ref()
-            .unwrap()
-            .model_path(&plugin.config.model_url);
-        fs::write(&cached_model_path, b"fake-model-content").unwrap();
-
-        let result = plugin.init_plugin().await;
-        assert!(result.is_err());
-    }
-
-    #[cfg(not(feature = "kokoro"))]
-    #[tokio::test]
-    async fn test_init_plugin_without_kokoro_uses_mock_engine() {
+    async fn test_init_plugin_uses_mock_engine() {
         let mut plugin = TTSPlugin::new("test_tts");
         let cache_dir = TempDir::new().unwrap();
         prepare_cached_model(&mut plugin, "test/kokoro.onnx", cache_dir.path());

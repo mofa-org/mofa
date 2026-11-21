@@ -15,7 +15,7 @@ mofa-plugins = "0.1"
 - Runtime plugin layer (Rhai scripts) for dynamic business logic
 - Hot-reloadable plugin system
 - Plugin adapters and tool integration
-- TTS support (rodio, kokoro-tts)
+- TTS support (rodio audio playback)
 - WASM runtime via Wasmtime
 - Script execution engine
 

@@ -47,9 +47,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tokio::sync::{Mutex, RwLock};
 
-/// Type alias for TTS audio stream - boxed to avoid exposing kokoro-tts types
-pub type TtsAudioStream = Pin<Box<dyn Stream<Item = (Vec<f32>, Duration)> + Send>>;
-
 /// Cancellation token for cooperative cancellation
 struct CancellationToken {
     cancel: Arc<AtomicBool>,
@@ -83,17 +80,6 @@ impl CancellationToken {
 /// 每次 yield 一个文本片段（delta content）
 /// Yields a text fragment (delta content) each time
 pub type TextStream = Pin<Box<dyn Stream<Item = LLMResult<String>> + Send>>;
-
-/// TTS 流句柄：持有 sink 和消费者任务
-/// TTS stream handle: holds sink and consumer task
-///
-/// 用于实时流式 TTS，允许 incremental 提交文本
-/// Used for real-time streaming TTS, allowing incremental text submission
-#[cfg(feature = "kokoro")]
-struct TTSStreamHandle {
-    sink: mofa_plugins::tts::kokoro_wrapper::SynthSink<String>,
-    _stream_handle: tokio::task::JoinHandle<()>,
-}
 
 /// Active TTS session with cancellation support
 struct TTSSession {
@@ -289,7 +275,7 @@ impl Default for LLMAgentConfig {
 /// ```rust,ignore
 /// // 创建 TTS 插件（引擎 + 可选音色）
 /// // Create TTS plugin (engine + optional voice)
-/// let tts_plugin = TTSPlugin::with_engine("tts", kokoro_engine, Some("zf_090"));
+/// let tts_plugin = TTSPlugin::with_engine("tts", tts_engine, Some("zf_090"));
 ///
 /// // 通过插件系统添加
 /// // Add via plugin system
@@ -305,7 +291,7 @@ impl Default for LLMAgentConfig {
 ///
 /// // 高级用法：自定义配置
 /// // Advanced usage: custom configuration
-/// let tts_plugin = TTSPlugin::with_engine("tts", kokoro_engine, Some("zf_090"))
+/// let tts_plugin = TTSPlugin::with_engine("tts", tts_engine, Some("zf_090"))
 ///     .with_config(TTSPluginConfig {
 ///         streaming_chunk_size: 8192,
 ///         ..Default::default()
@@ -341,10 +327,6 @@ pub struct LLMAgent {
     /// TTS 插件（通过 builder 配置）
     /// TTS plugin (configured via builder)
     tts_plugin: Option<Arc<Mutex<TTSPlugin>>>,
-    /// 缓存的 Kokoro TTS 引擎（只需初始化一次，后续可复用）
-    /// Cached Kokoro TTS engine (initialize once, reuse later)
-    #[cfg(feature = "kokoro")]
-    cached_kokoro_engine: Arc<Mutex<Option<Arc<mofa_plugins::tts::kokoro_wrapper::KokoroTTS>>>>,
     /// Active TTS session for cancellation
     active_tts_session: Arc<Mutex<Option<TTSSession>>>,
     /// 持久化存储（可选，用于从数据库加载历史会话）
@@ -565,8 +547,6 @@ impl LLMAgent {
             provider,
             prompt_plugin: None,
             tts_plugin: None,
-            #[cfg(feature = "kokoro")]
-            cached_kokoro_engine: Arc::new(Mutex::new(None)),
             active_tts_session: Arc::new(Mutex::new(None)),
             message_store: None,
             session_store: None,
@@ -846,8 +826,6 @@ impl LLMAgent {
             provider,
             prompt_plugin: None,
             tts_plugin: None,
-            #[cfg(feature = "kokoro")]
-            cached_kokoro_engine: Arc::new(Mutex::new(None)),
             active_tts_session: Arc::new(Mutex::new(None)),
             message_store,
             session_store,
@@ -1136,8 +1114,8 @@ impl LLMAgent {
     /// 使用 TTS 流式合成文本（f32 native format，更高效）
     /// Stream synthesize text using TTS (f32 native format, more efficient)
     ///
-    /// This method is more efficient for KokoroTTS as it uses the native f32 format
-    /// without the overhead of f32 -> i16 -> u8 conversion.
+    /// Streams audio as native f32 samples, avoiding the f32 -> i16 -> u8
+    /// conversion overhead of byte-based streaming.
     ///
     /// # 示例
     /// # Example
@@ -1165,188 +1143,6 @@ impl LLMAgent {
             .synthesize_streaming_f32(text, callback)
             .await
             .map_err(|e| LLMError::Other(format!("TTS f32 streaming failed: {}", e)))
-    }
-
-    /// 获取 TTS 音频流（仅支持 Kokoro TTS）
-    /// Get TTS audio stream (only Kokoro TTS supported)
-    ///
-    /// Returns a direct stream of (audio_f32, duration) tuples from KokoroTTS.
-    ///
-    /// # 示例
-    /// # Example
-    ///
-    /// ```rust,ignore
-    /// use futures::StreamExt;
-    /// use rodio::buffer::SamplesBuffer;
-    ///
-    /// if let Ok(mut stream) = agent.tts_create_stream("Hello world").await {
-    ///     while let Some((audio, took)) = stream.next().await {
-    ///         // audio is Vec<f32> with values in [-1.0, 1.0]
-    ///         sink.append(SamplesBuffer::new(1, 24000, audio));
-    ///     }
-    /// }
-    /// ```
-    pub async fn tts_create_stream(&self, text: &str) -> LLMResult<TtsAudioStream> {
-        #[cfg(feature = "kokoro")]
-        {
-            use mofa_plugins::tts::kokoro_wrapper::KokoroTTS;
-
-            // 首先检查是否有缓存的引擎（只需初始化一次）
-            // First check if there's a cached engine (initializes only once)
-            let cached_engine = {
-                let cache_guard = self.cached_kokoro_engine.lock().await;
-                cache_guard.clone()
-            };
-
-            let kokoro = if let Some(engine) = cached_engine {
-                // 使用缓存的引擎（无需再次获取 tts_plugin 的锁）
-                // Use cached engine (no need to re-acquire tts_plugin lock)
-                engine
-            } else {
-                // 首次调用：获取 tts_plugin 的锁，downcast 并缓存
-                // First call: acquire tts_plugin lock, downcast, and cache
-                let tts = self
-                    .tts_plugin
-                    .as_ref()
-                    .ok_or_else(|| LLMError::Other("TTS plugin not configured".to_string()))?;
-
-                let tts_guard = tts.lock().await;
-
-                let engine = tts_guard
-                    .engine()
-                    .ok_or_else(|| LLMError::Other("TTS engine not initialized".to_string()))?;
-
-                if let Some(kokoro_ref) = engine.as_any().downcast_ref::<KokoroTTS>() {
-                    // 克隆 KokoroTTS（内部使用 Arc，克隆只是增加引用计数）
-                    // Clone KokoroTTS (uses Arc internally, cloning just increases ref count)
-                    let cloned = kokoro_ref.clone();
-                    let cloned_arc = Arc::new(cloned);
-
-                    // 获取 voice 配置
-                    // Get voice configuration
-                    let voice = tts_guard
-                        .stats()
-                        .get("default_voice")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("default");
-
-                    // 缓存克隆的引擎
-                    // Cache the cloned engine
-                    {
-                        let mut cache_guard = self.cached_kokoro_engine.lock().await;
-                        *cache_guard = Some(cloned_arc.clone());
-                    }
-
-                    cloned_arc
-                } else {
-                    return Err(LLMError::Other("TTS engine is not KokoroTTS".to_string()));
-                }
-            };
-
-            // 使用缓存的引擎创建 stream（无需再次获取 tts_plugin 的锁）
-            // Create stream using cached engine (no need to re-acquire tts_plugin lock)
-            let voice = "default"; // 可以从配置中获取
-            // voice = "default"; // Can be retrieved from configuration
-            let (mut sink, stream) = kokoro
-                .create_stream(voice)
-                .await
-                .map_err(|e| LLMError::Other(format!("Failed to create TTS stream: {}", e)))?;
-
-            // Submit text for synthesis
-            sink.synth(text.to_string()).await.map_err(|e| {
-                LLMError::Other(format!("Failed to submit text for synthesis: {}", e))
-            })?;
-
-            // Box the stream to hide the concrete type
-            Ok(Box::pin(stream))
-        }
-
-        #[cfg(not(feature = "kokoro"))]
-        {
-            Err(LLMError::Other("Kokoro feature not enabled".to_string()))
-        }
-    }
-
-    /// Stream multiple sentences through a single TTS stream
-    ///
-    /// This is more efficient than calling tts_speak_f32_stream multiple times
-    /// because it reuses the same stream for all sentences, following the kokoro-tts
-    /// streaming pattern: ONE stream, multiple synth calls, continuous audio output.
-    ///
-    /// # Arguments
-    /// - `sentences`: Vector of text sentences to synthesize
-    /// - `callback`: Function to call with each audio chunk (Vec<f32>)
-    ///
-    /// # Example
-    /// ```rust,ignore
-    /// use rodio::buffer::SamplesBuffer;
-    ///
-    /// let sentences = vec!["Hello".to_string(), "World".to_string()];
-    /// agent.tts_speak_f32_stream_batch(
-    ///     sentences,
-    ///     Box::new(|audio_f32| {
-    ///         sink.append(SamplesBuffer::new(1, 24000, audio_f32));
-    ///     }),
-    /// ).await?;
-    /// ```
-    pub async fn tts_speak_f32_stream_batch(
-        &self,
-        sentences: Vec<String>,
-        callback: Box<dyn Fn(Vec<f32>) + Send + Sync>,
-    ) -> LLMResult<()> {
-        let tts = self
-            .tts_plugin
-            .as_ref()
-            .ok_or_else(|| LLMError::Other("TTS plugin not configured".to_string()))?;
-
-        let tts_guard = tts.lock().await;
-
-        #[cfg(feature = "kokoro")]
-        {
-            use mofa_plugins::tts::kokoro_wrapper::KokoroTTS;
-
-            let engine = tts_guard
-                .engine()
-                .ok_or_else(|| LLMError::Other("TTS engine not initialized".to_string()))?;
-
-            if let Some(kokoro) = engine.as_any().downcast_ref::<KokoroTTS>() {
-                let voice = tts_guard
-                    .stats()
-                    .get("default_voice")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("default")
-                    .to_string();
-
-                // Create ONE stream for all sentences
-                let (mut sink, mut stream) = kokoro
-                    .create_stream(&voice)
-                    .await
-                    .map_err(|e| LLMError::Other(format!("Failed to create TTS stream: {}", e)))?;
-
-                // Spawn a task to consume the stream continuously
-                tokio::spawn(async move {
-                    while let Some((audio, _took)) = stream.next().await {
-                        callback(audio);
-                    }
-                });
-
-                // Submit all sentences to the same sink
-                for sentence in sentences {
-                    sink.synth(sentence)
-                        .await
-                        .map_err(|e| LLMError::Other(format!("Failed to submit text: {}", e)))?;
-                }
-
-                return Ok(());
-            }
-
-            Err(LLMError::Other("TTS engine is not KokoroTTS".to_string()))
-        }
-
-        #[cfg(not(feature = "kokoro"))]
-        {
-            Err(LLMError::Other("Kokoro feature not enabled".to_string()))
-        }
     }
 
     /// 检查是否配置了 TTS 插件
@@ -1426,82 +1222,6 @@ impl LLMAgent {
             .await
     }
 
-    /// 创建实时 TTS 流
-    /// Create a real-time TTS stream
-    ///
-    /// 返回的 handle 允许 incremental 提交文本，实现真正的实时流式 TTS。
-    /// The returned handle allows incremental text submission for true streaming TTS.
-    ///
-    /// # 核心机制
-    /// # Core Mechanism
-    /// 1. 创建 TTS stream（仅一次）
-    /// 1. Create TTS stream (only once)
-    /// 2. 启动消费者任务（持续接收音频块）
-    /// 2. Start consumer task (continuously receiving audio chunks)
-    /// 3. 返回的 sink 支持多次 `synth()` 调用
-    /// 3. The returned sink supports multiple `synth()` calls
-    #[cfg(feature = "kokoro")]
-    async fn create_tts_stream_handle(
-        &self,
-        callback: Box<dyn Fn(Vec<f32>) + Send + Sync>,
-        cancellation_token: Option<CancellationToken>,
-    ) -> LLMResult<TTSStreamHandle> {
-        use mofa_plugins::tts::kokoro_wrapper::KokoroTTS;
-
-        let tts = self
-            .tts_plugin
-            .as_ref()
-            .ok_or_else(|| LLMError::Other("TTS plugin not configured".to_string()))?;
-
-        let tts_guard = tts.lock().await;
-        let engine = tts_guard
-            .engine()
-            .ok_or_else(|| LLMError::Other("TTS engine not initialized".to_string()))?;
-
-        let kokoro = engine
-            .as_any()
-            .downcast_ref::<KokoroTTS>()
-            .ok_or_else(|| LLMError::Other("TTS engine is not KokoroTTS".to_string()))?;
-
-        let voice = tts_guard
-            .stats()
-            .get("default_voice")
-            .and_then(|v| v.as_str())
-            .unwrap_or("default")
-            .to_string();
-
-        // 创建 TTS stream（只创建一次）
-        // Create TTS stream (only created once)
-        let (sink, mut stream) = kokoro
-            .create_stream(&voice)
-            .await
-            .map_err(|e| LLMError::Other(format!("Failed to create TTS stream: {}", e)))?;
-
-        // Clone cancellation token for the spawned task
-        let token_clone = cancellation_token.as_ref().map(|t| t.clone_token());
-
-        // 启动消费者任务（持续接收音频块，支持取消检查）
-        // Start consumer task (receiving audio chunks with cancellation support)
-        let stream_handle = tokio::spawn(async move {
-            while let Some((audio, _took)) = stream.next().await {
-                // 检查取消信号
-                // Check cancellation signal
-                if let Some(ref token) = token_clone
-                    && token.is_cancelled()
-                {
-                    break; // 退出循环，停止音频处理
-                    // Exit loop, stop audio processing
-                }
-                callback(audio);
-            }
-        });
-
-        Ok(TTSStreamHandle {
-            sink,
-            _stream_handle: stream_handle,
-        })
-    }
-
     /// 内部实现：LLM + TTS 实时流式对话
     /// Internal implementation: LLM + TTS real-time streaming dialogue
     ///
@@ -1519,132 +1239,9 @@ impl LLMAgent {
         message: impl Into<String>,
         callback: Option<Box<dyn Fn(Vec<f32>) + Send + Sync>>,
     ) -> LLMResult<()> {
-        #[cfg(feature = "kokoro")]
         {
-            use mofa_plugins::tts::kokoro_wrapper::KokoroTTS;
-
-            let callback = match callback {
-                Some(cb) => cb,
-                None => {
-                    // 无 TTS 请求，仅流式输出文本
-                    // No TTS request, only stream text output
-                    let mut text_stream =
-                        self.chat_stream_with_session(session_id, message).await?;
-                    while let Some(result) = text_stream.next().await {
-                        match result {
-                            Ok(text_chunk) => {
-                                print!("{}", text_chunk);
-                                std::io::stdout().flush().map_err(|e| {
-                                    LLMError::Other(format!("Failed to flush stdout: {}", e))
-                                })?;
-                            }
-                            Err(e) if e.to_string().contains("__stream_end__") => break,
-                            Err(e) => return Err(e),
-                        }
-                    }
-                    println!();
-                    return Ok(());
-                }
-            };
-
-            // Step 0: 取消任何现有的 TTS 会话
-            // Step 0: Cancel any existing TTS sessions
-            self.interrupt_tts().await?;
-
-            // Step 1: 创建 cancellation token
-            // Step 1: Create cancellation token
-            let cancellation_token = CancellationToken::new();
-
-            // Step 2: 在 LLM 流式输出之前创建 TTS stream（传入 cancellation token）
-            // Step 2: Create TTS stream before LLM output (passing cancellation token)
-            let mut tts_handle = self
-                .create_tts_stream_handle(callback, Some(cancellation_token.clone_token()))
-                .await?;
-
-            // Step 3: 创建并跟踪新的 TTS session
-            // Step 3: Create and track a new TTS session
-            let session = TTSSession::new(cancellation_token);
-
-            {
-                let mut active_session = self.active_tts_session.lock().await;
-                *active_session = Some(session);
-            }
-
-            let mut buffer = SentenceBuffer::new();
-
-            // Step 4: 流式处理 LLM 响应，实时提交句子到 TTS
-            // Step 4: Stream LLM response, submitting sentences to TTS in real-time
-            let mut text_stream = self.chat_stream_with_session(session_id, message).await?;
-
-            while let Some(result) = text_stream.next().await {
-                match result {
-                    Ok(text_chunk) => {
-                        // 检查是否已被取消
-                        // Check if it has been cancelled
-                        {
-                            let active_session = self.active_tts_session.lock().await;
-                            if let Some(ref session) = *active_session
-                                && !session.is_active()
-                            {
-                                return Ok(()); // 优雅退出
-                                // Graceful exit
-                            }
-                        }
-
-                        // 实时显示文本
-                        // Display text in real-time
-                        print!("{}", text_chunk);
-                        std::io::stdout().flush().map_err(|e| {
-                            LLMError::Other(format!("Failed to flush stdout: {}", e))
-                        })?;
-
-                        // 检测句子并立即提交到 TTS
-                        // Detect sentence and submit to TTS immediately
-                        if let Some(sentence) = buffer.push(&text_chunk)
-                            && let Err(e) = tts_handle.sink.synth(sentence).await
-                        {
-                            eprintln!("[TTS Error] Failed to submit sentence: {}", e);
-                            // 继续流式处理，即使 TTS 失败
-                            // Continue streaming even if TTS fails
-                        }
-                    }
-                    Err(e) if e.to_string().contains("__stream_end__") => break,
-                    Err(e) => return Err(e),
-                }
-            }
-
-            // Step 5: 提交剩余文本
-            // Step 5: Submit remaining text
-            if let Some(remaining) = buffer.flush()
-                && let Err(e) = tts_handle.sink.synth(remaining).await
-            {
-                eprintln!("[TTS Error] Failed to submit final sentence: {}", e);
-            }
-
-            // Step 6: 清理会话
-            // Step 6: Clean up the session
-            {
-                let mut active_session = self.active_tts_session.lock().await;
-                *active_session = None;
-            }
-
-            // Step 7: 等待 TTS 流完成（所有音频块处理完毕）
-            // Step 7: Wait for TTS stream completion (all audio blocks processed)
-            let _ = tokio::time::timeout(
-                tokio::time::Duration::from_secs(30),
-                tts_handle._stream_handle,
-            )
-            .await
-            .map_err(|_| LLMError::Other("TTS stream processing timeout".to_string()))
-            .and_then(|r| r.map_err(|e| LLMError::Other(format!("TTS stream task failed: {}", e))));
-
-            Ok(())
-        }
-
-        #[cfg(not(feature = "kokoro"))]
-        {
-            // 当 kokoro feature 未启用时，使用批量处理模式
-            // When kokoro feature is disabled, use batch processing mode
+            // 批量处理模式：收集完整句子后逐句打印
+            // Batch processing mode: collect full sentences, then print them
             let mut text_stream = self.chat_stream_with_session(session_id, message).await?;
             let mut buffer = SentenceBuffer::new();
             let mut sentences = Vec::new();
@@ -1682,10 +1279,6 @@ impl LLMAgent {
                 for sentence in &sentences {
                     println!("\n[TTS] {}", sentence);
                 }
-                // 注意：非 kokoro 环境下无法调用此方法
-                // Note: This method cannot be called in non-kokoro environments
-                // 这里需要根据实际情况处理
-                // Needs to be handled according to actual situation here
                 let _ = cb;
             }
 

@@ -27,7 +27,6 @@ members = [
     "financial_compliance_agent",
     "rhai_hot_reload",
     "adaptive_collaboration_agent",
-    "llm_tts_streaming",
     "agent_from_database_streaming",
     "workflow_dsl",
     "reflection_agent",
