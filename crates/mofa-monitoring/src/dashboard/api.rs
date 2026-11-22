@@ -366,20 +366,20 @@ pub fn create_api_router(
         .route("/metrics/custom", get(get_custom_metrics))
         // Agents
         .route("/agents", get(get_agents))
-        .route("/agents/{id}", get(get_agent))
+        .route("/agents/:id", get(get_agent))
         // Workflows
         .route("/workflows", get(get_workflows))
-        .route("/workflows/{id}", get(get_workflow))
+        .route("/workflows/:id", get(get_workflow))
         // Plugins
         .route("/plugins", get(get_plugins))
-        .route("/plugins/{id}", get(get_plugin))
+        .route("/plugins/:id", get(get_plugin))
         // Debug sessions
         .route("/debug/sessions", get(get_debug_sessions))
-        .route("/debug/sessions/{id}", get(get_debug_session))
-        .route("/debug/sessions/{id}/events", get(get_debug_session_events))
+        .route("/debug/sessions/:id", get(get_debug_session))
+        .route("/debug/sessions/:id/events", get(get_debug_session_events))
         // LLM
         .route("/llm", get(get_llm_metrics))
-        .route("/llm/{id}", get(get_llm_plugin))
+        .route("/llm/:id", get(get_llm_plugin))
         // Costs
         .route("/costs/summary", get(get_cost_summary))
         // System

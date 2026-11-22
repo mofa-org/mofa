@@ -38,8 +38,8 @@ homepage = "https://github.com/mofa-org/mofa"
 llm-prices = "1.8"
 reqwest = "0.12"
 async-trait = "0.1"
-# axum 0.8+ required — uses {param} route syntax (not :param)
-axum = "0"
+# Axum 0.7 uses :param captures and *path wildcards.
+axum = "0.7"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 serde_yaml = "0.9"
