@@ -451,6 +451,14 @@ pub fn create_dashboard(port: u16) -> DashboardServer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::body::{Body, to_bytes};
+    use axum::http::Request;
+    use mofa_foundation::workflow::InMemorySessionRecorder;
+    use mofa_kernel::workflow::telemetry::DebugSession;
+    use serde_json::json;
+    use tower::ServiceExt;
+
+    use super::super::metrics::{AgentMetrics, LLMMetrics, PluginMetrics, WorkflowMetrics};
 
     #[test]
     fn test_dashboard_config_default() {
@@ -491,5 +499,115 @@ mod tests {
         assert!(server.prometheus_exporter.is_none());
         assert!(server.prometheus_worker.is_none());
         assert!(server.session_recorder.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_dashboard_resource_id_routes() {
+        let id = "resource-1";
+        let recorder = Arc::new(InMemorySessionRecorder::new());
+        recorder
+            .start_session(&DebugSession::new(id, "workflow-1", "execution-1"))
+            .await
+            .unwrap();
+        let mut server =
+            DashboardServer::new(DashboardConfig::default()).with_session_recorder(recorder);
+        let collector = server.collector();
+        collector
+            .update_agent(AgentMetrics {
+                agent_id: id.to_string(),
+                ..Default::default()
+            })
+            .await;
+        collector
+            .update_workflow(WorkflowMetrics {
+                workflow_id: id.to_string(),
+                ..Default::default()
+            })
+            .await;
+        collector
+            .update_plugin(PluginMetrics {
+                plugin_id: id.to_string(),
+                ..Default::default()
+            })
+            .await;
+        collector
+            .update_llm(LLMMetrics {
+                plugin_id: id.to_string(),
+                ..Default::default()
+            })
+            .await;
+        collector.collect().await;
+
+        let router = server.build_router();
+        for (uri, pointer, expected) in [
+            ("/api/agents/resource-1", "/data/agent_id", json!(id)),
+            ("/api/workflows/resource-1", "/data/workflow_id", json!(id)),
+            ("/api/plugins/resource-1", "/data/plugin_id", json!(id)),
+            ("/api/llm/resource-1", "/data/plugin_id", json!(id)),
+            (
+                "/api/debug/sessions/resource-1",
+                "/data/session_id",
+                json!(id),
+            ),
+            ("/api/debug/sessions/resource-1/events", "/data", json!([])),
+        ] {
+            let response = router
+                .clone()
+                .oneshot(Request::get(uri).body(Body::empty()).unwrap())
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK, "{uri}");
+            let body = to_bytes(response.into_body(), 4096).await.unwrap();
+            let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
+            assert_eq!(body["success"], true, "{uri}");
+            assert_eq!(body.pointer(pointer), Some(&expected), "{uri}");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_dashboard_missing_resource_id_routes() {
+        let mut server = DashboardServer::new(DashboardConfig::default())
+            .with_session_recorder(Arc::new(InMemorySessionRecorder::new()));
+        let router = server.build_router();
+
+        for uri in [
+            "/api/agents/missing-id",
+            "/api/workflows/missing-id",
+            "/api/plugins/missing-id",
+            "/api/llm/missing-id",
+            "/api/debug/sessions/missing-id",
+            "/api/debug/sessions/missing-id/events",
+        ] {
+            let response = router
+                .clone()
+                .oneshot(Request::get(uri).body(Body::empty()).unwrap())
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::NOT_FOUND, "{uri}");
+            let body = to_bytes(response.into_body(), 4096).await.unwrap();
+            let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
+            assert_eq!(body["success"], false, "{uri}");
+            assert!(
+                body["error"].as_str().unwrap().contains("missing-id"),
+                "{uri}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_dashboard_static_asset_route() {
+        let mut server = DashboardServer::new(DashboardConfig::default());
+        let response = server
+            .build_router()
+            .oneshot(
+                Request::get("/assets/styles.css")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.headers()[header::CONTENT_TYPE], "text/css");
     }
 }
