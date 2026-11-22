@@ -181,6 +181,7 @@ async fn generate_demo_data(collector: Arc<MetricsCollector>) {
                 running_instances: if *status == "running" { 1 + (i as u32 % 2) } else { 0 },
                 avg_execution_time_ms: 500.0 + (i as f64 * 200.0),
                 node_count: 5 + (i as u32 * 2),
+                graph_json: None,
             };
 
             collector.update_workflow(metrics).await;
