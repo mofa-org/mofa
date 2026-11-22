@@ -74,17 +74,33 @@ impl ReviewPolicy for NeverReviewPolicy {
 ///
 /// Automatically intercepts high-risk transactions and enforces cryptographic
 /// security seal validation to eliminate unaudited ghost transactions.
-#[derive(Debug, Clone)]
+///
+/// Supports both unkeyed SHA-256 drift detection and keyed HMAC-SHA256
+/// adversarial tamper-evidence via [`crate::hitl::context::SealKeyProvider`].
+#[derive(Clone)]
 pub struct AuditValidationPolicy {
     /// Minimum risk level that triggers mandatory human-in-the-loop review.
     /// Default: `RiskLevel::High`.
     pub review_threshold: crate::hitl::context::RiskLevel,
-    /// Whether to cryptographically verify the SHA-256 security seal against the transaction input.
+    /// Whether to cryptographically verify the security seal against the transaction input.
     /// Default: `true`.
     pub require_valid_seal: bool,
     /// Whether transactions without `auditing_data` must be escalated for review.
     /// Default: `true`.
     pub require_auditing_data: bool,
+    /// Optional pluggable key provider for verifying keyed HMAC-SHA256 seals.
+    pub key_provider: Option<std::sync::Arc<dyn crate::hitl::context::SealKeyProvider>>,
+}
+
+impl std::fmt::Debug for AuditValidationPolicy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AuditValidationPolicy")
+            .field("review_threshold", &self.review_threshold)
+            .field("require_valid_seal", &self.require_valid_seal)
+            .field("require_auditing_data", &self.require_auditing_data)
+            .field("has_key_provider", &self.key_provider.is_some())
+            .finish()
+    }
 }
 
 impl Default for AuditValidationPolicy {
@@ -93,6 +109,7 @@ impl Default for AuditValidationPolicy {
             review_threshold: crate::hitl::context::RiskLevel::High,
             require_valid_seal: true,
             require_auditing_data: true,
+            key_provider: None,
         }
     }
 }
@@ -116,6 +133,33 @@ impl AuditValidationPolicy {
     pub fn with_require_auditing_data(mut self, require: bool) -> Self {
         self.require_auditing_data = require;
         self
+    }
+
+    /// Attach a pluggable [`crate::hitl::context::SealKeyProvider`] to authenticate keyed HMAC-SHA256 seals.
+    pub fn with_key_provider(
+        mut self,
+        provider: std::sync::Arc<dyn crate::hitl::context::SealKeyProvider>,
+    ) -> Self {
+        self.key_provider = Some(provider);
+        self
+    }
+
+    /// Helper to verify seal validity against payload, delegating to the key provider if available.
+    pub fn is_seal_valid(
+        &self,
+        auditing: &crate::hitl::context::AuditingData,
+        payload: &serde_json::Value,
+    ) -> bool {
+        match &self.key_provider {
+            Some(provider) => {
+                if auditing.is_keyed() {
+                    auditing.verify_seal_with_provider(provider.as_ref(), payload)
+                } else {
+                    auditing.verify_seal(payload)
+                }
+            }
+            None => auditing.verify_seal(payload),
+        }
     }
 }
 
@@ -146,7 +190,7 @@ impl ReviewPolicy for AuditValidationPolicy {
         };
 
         // 1. Verify cryptographic seal integrity
-        if self.require_valid_seal && !auditing.verify_seal(&context.input_data) {
+        if self.require_valid_seal && !self.is_seal_valid(auditing, &context.input_data) {
             let mut req = ReviewRequest::new("unknown", ReviewType::Approval, context.clone());
             req.metadata.custom.insert(
                 "reason".to_string(),
@@ -180,7 +224,7 @@ impl ReviewPolicy for AuditValidationPolicy {
             None => return Ok(!self.require_auditing_data),
         };
 
-        if self.require_valid_seal && !auditing.verify_seal(&request.context.input_data) {
+        if self.require_valid_seal && !self.is_seal_valid(auditing, &request.context.input_data) {
             return Ok(false);
         }
 
@@ -308,6 +352,40 @@ mod tests {
                 .await
                 .unwrap()
                 .is_none()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_audit_validation_with_keyed_hmac_provider() {
+        use crate::hitl::context::StaticKeyProvider;
+        use std::sync::Arc;
+
+        let key = b"policy-auditor-secret-key";
+        let provider = Arc::new(StaticKeyProvider::new(key));
+        let payload = json!({"amount": 500});
+
+        let audit = AuditingData::builder("transfer-agent", "send", "Disburse payment", "fintech")
+            .with_metadata("trace_id", json!("trace-101"))
+            .with_risk_level(RiskLevel::Low)
+            .seal_keyed(key, &payload);
+
+        let ctx = test_context(Some(audit), payload.clone());
+
+        // 1. Policy with matching key provider succeeds for low risk
+        let policy = AuditValidationPolicy::new(RiskLevel::High).with_key_provider(provider);
+        assert!(policy.should_request_review(&ctx).await.unwrap().is_none());
+
+        // 2. Policy with mismatched key provider detects invalid seal
+        let wrong_provider = Arc::new(StaticKeyProvider::new(b"different-key"));
+        let strict_policy =
+            AuditValidationPolicy::new(RiskLevel::High).with_key_provider(wrong_provider);
+        let review_req = strict_policy.should_request_review(&ctx).await.unwrap();
+        assert!(review_req.is_some());
+        assert!(
+            review_req.unwrap().metadata.custom["reason"]
+                .as_str()
+                .unwrap()
+                .contains("Security seal verification failed")
         );
     }
 }
