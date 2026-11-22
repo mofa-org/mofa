@@ -64,6 +64,8 @@ flume = "0.10"
 notify = { version = "6.1", features = ["serde"] }
 libloading = "0.8"
 sha2 = "0.10"
+hmac = "0.12"
+subtle = "2.6"
 tempfile = "3.8"
 
 # OpenTelemetry for distributed tracing (compatible versions)
