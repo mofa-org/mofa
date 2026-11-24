@@ -110,7 +110,8 @@ impl OpenAIConfig {
         Self {
             api_key: std::env::var("OPENAI_API_KEY").unwrap_or_default(),
             base_url: std::env::var("OPENAI_BASE_URL").ok(),
-            default_model: std::env::var("OPENAI_MODEL").unwrap_or_default(),
+            default_model: std::env::var("OPENAI_MODEL")
+                .unwrap_or_else(|_| Self::default().default_model),
             ..Default::default()
         }
     }
@@ -954,6 +955,53 @@ impl OpenAIProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::process::Command;
+
+    #[test]
+    fn test_config_from_env_preserves_default_model_and_override() {
+        const CHILD_EXPECTED_MODEL: &str = "MOFA_TEST_OPENAI_CONFIG_EXPECTED_MODEL";
+        if let Ok(expected_model) = std::env::var(CHILD_EXPECTED_MODEL) {
+            let config = OpenAIConfig::from_env();
+            let defaults = OpenAIConfig::default();
+            assert_eq!(config.default_model, expected_model);
+            assert_eq!(config.api_key, "test-key");
+            assert_eq!(config.default_temperature, defaults.default_temperature);
+            assert_eq!(config.default_max_tokens, defaults.default_max_tokens);
+            return;
+        }
+
+        // Isolate environment changes in child processes so parallel tests cannot
+        // observe a missing model or the explicit override used by these cases.
+        for model in [None, Some("configured-model")] {
+            let expected = model
+                .map(str::to_owned)
+                .unwrap_or_else(|| OpenAIConfig::default().default_model);
+            let mut command = Command::new(std::env::current_exe().expect("test executable"));
+            command
+                .args([
+                    "--exact",
+                    "llm::openai::tests::test_config_from_env_preserves_default_model_and_override",
+                    "--nocapture",
+                ])
+                .env(CHILD_EXPECTED_MODEL, expected)
+                .env("OPENAI_API_KEY", "test-key")
+                .env_remove("OPENAI_MODEL");
+            if let Some(model) = model {
+                command.env("OPENAI_MODEL", model);
+            }
+            let output = command.output().expect("run isolated configuration test");
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            assert!(
+                stdout.lines().any(|line| line == "running 1 test"),
+                "isolated test did not execute: {stdout}\n{stderr}"
+            );
+            assert!(
+                output.status.success(),
+                "model case {model:?} failed: {stdout}\n{stderr}"
+            );
+        }
+    }
 
     #[test]
     fn test_config_builder() {
