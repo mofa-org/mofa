@@ -12,6 +12,7 @@ use tracing::info;
 use crate::handlers::{agents_router, chat_router, health_router, openai_router};
 use crate::inference_bridge::InferenceBridge;
 use crate::middleware::RateLimiter;
+use crate::middleware::semantic_cache::SemanticCache;
 use crate::state::AppState;
 use mofa_kernel::ObjectStore;
 use mofa_runtime::agent::registry::AgentRegistry;
@@ -124,6 +125,8 @@ pub struct GatewayServer {
     orchestrator_config: Option<OrchestratorConfig>,
     /// Pre-initialised object store injected via `with_s3`.
     s3: Option<Arc<dyn ObjectStore>>,
+    /// Optional semantic cache for chat requests
+    semantic_cache: Option<Arc<SemanticCache>>,
     #[cfg(feature = "socketio")]
     socket_io: Option<(Arc<AgentBus>, SocketIoConfig)>,
 }
@@ -136,6 +139,7 @@ impl GatewayServer {
             registry,
             orchestrator_config: None,
             s3: None,
+            semantic_cache: None,
             #[cfg(feature = "socketio")]
             socket_io: None,
         }
@@ -152,9 +156,16 @@ impl GatewayServer {
             registry,
             orchestrator_config: Some(orchestrator_config),
             s3: None,
+            semantic_cache: None,
             #[cfg(feature = "socketio")]
             socket_io: None,
         }
+    }
+
+    /// Attach a semantic cache for chat requests.
+    pub fn with_semantic_cache(mut self, cache: Arc<SemanticCache>) -> Self {
+        self.semantic_cache = Some(cache);
+        self
     }
 
     /// Attach a pre-initialised object store for the `/api/v1/files` endpoints.
@@ -194,6 +205,7 @@ impl GatewayServer {
         // When no store is configured (tests: `build_server_no_s3`) we keep `None`
         // and endpoints correctly return `501 Not Implemented`.
         state.s3 = self.s3.clone();
+        state.semantic_cache = self.semantic_cache.clone();
 
         if let Some(max_bytes) = self.config.max_upload_bytes {
             state = state.with_max_upload_bytes(max_bytes);
