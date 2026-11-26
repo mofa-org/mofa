@@ -388,6 +388,23 @@ pub struct CompiledGraphImpl<S: GraphState> {
     telemetry: Option<Arc<dyn TelemetryEmitter>>,
 }
 
+impl<S: GraphState> Clone for CompiledGraphImpl<S> {
+    fn clone(&self) -> Self {
+        Self {
+            id: self.id.clone(),
+            nodes: Arc::clone(&self.nodes),
+            edges: Arc::clone(&self.edges),
+            reducers: Arc::clone(&self.reducers),
+            entry_point: self.entry_point.clone(),
+            config: self.config.clone(),
+            policies: Arc::clone(&self.policies),
+            circuit_states: self.circuit_states.clone(),
+            parallelism_semaphore: Arc::clone(&self.parallelism_semaphore),
+            telemetry: self.telemetry.clone(),
+        }
+    }
+}
+
 impl<S: GraphState> CompiledGraphImpl<S> {
     /// Attach a telemetry emitter for checkpoint events during invocation.
     pub fn with_telemetry(mut self, telemetry: Arc<dyn TelemetryEmitter>) -> Self {
@@ -536,21 +553,33 @@ impl<S: GraphState> CompiledGraphImpl<S> {
         Ok(())
     }
 
-    async fn invoke_with_context(&self, input: S, ctx: RuntimeContext) -> AgentResult<S> {
-        info!(
-            "Starting graph execution '{}' with execution_id={}",
-            self.id, ctx.execution_id
-        );
-
+    /// Core execution loop shared between `invoke` and `stream`.
+    ///
+    /// When `event_tx` is `Some`, execution lifecycle events (`NodeStart`, `NodeEnd`, `Error`, `End`)
+    /// are streamed to the channel; when `None`, execution runs purely in-process.
+    async fn execute_loop(
+        &self,
+        input: S,
+        ctx: &RuntimeContext,
+        event_tx: Option<&tokio::sync::mpsc::Sender<Result<StreamEvent<S>, AgentError>>>,
+    ) -> AgentResult<S> {
         let mut state = input;
         let mut current_nodes = vec![self.entry_point.clone()];
         let default_policy = NodePolicy::default();
 
         while !current_nodes.is_empty() {
             if ctx.is_recursion_limit_reached().await {
+                if let Some(tx) = event_tx {
+                    let _ = tx
+                        .send(Err(AgentError::Internal(
+                            "Recursion limit reached".to_string(),
+                        )))
+                        .await;
+                }
                 return Err(AgentError::Internal("Recursion limit reached".to_string()));
             }
             ctx.decrement_steps().await;
+
             if let Some(emitter) = &self.telemetry
                 && emitter.is_enabled()
                 && ctx.config.checkpoint_enabled
@@ -577,24 +606,47 @@ impl<S: GraphState> CompiledGraphImpl<S> {
 
             if current_nodes.len() == 1 {
                 let node_id = current_nodes.remove(0);
-                let node = self
-                    .nodes
-                    .get(&node_id)
-                    .ok_or_else(|| AgentError::NotFound(format!("Node '{}'", node_id)))?;
+                let node = match self.nodes.get(&node_id) {
+                    Some(n) => n,
+                    None => {
+                        let msg = format!("Node '{}'", node_id);
+                        if let Some(tx) = event_tx {
+                            let _ = tx.send(Err(AgentError::NotFound(msg.clone()))).await;
+                        }
+                        return Err(AgentError::NotFound(msg));
+                    }
+                };
 
                 ctx.set_current_node(&node_id).await;
                 debug!("Executing node '{}' in graph '{}'", node_id, self.id);
+
+                if let Some(tx) = event_tx {
+                    if tx
+                        .send(Ok(StreamEvent::NodeStart {
+                            node_id: node_id.clone(),
+                            state: state.clone(),
+                        }))
+                        .await
+                        .is_err()
+                    {
+                        warn!(
+                            node_id,
+                            "Stream receiver dropped before node start; aborting graph execution"
+                        );
+                        return Ok(state);
+                    }
+                }
 
                 let policy = self.policies.get(&node_id).unwrap_or(&default_policy);
 
                 let command = match execute_with_policy(
                     node.as_ref(),
                     &mut state,
-                    &ctx,
+                    ctx,
                     policy,
                     &self.circuit_states,
                     &node_id,
-                    None,
+                    event_tx,
                 )
                 .await
                 {
@@ -604,36 +656,162 @@ impl<S: GraphState> CompiledGraphImpl<S> {
                         current_nodes = vec![fallback_id];
                         continue;
                     }
-                    Err(NodeExecutionOutcome::Error(e)) => return Err(e),
+                    Err(NodeExecutionOutcome::Error(e)) => {
+                        if let Some(tx) = event_tx {
+                            let _ = tx
+                                .send(Ok(StreamEvent::Error {
+                                    node_id: Some(node_id),
+                                    error: e.to_string(),
+                                }))
+                                .await;
+                        }
+                        return Err(e);
+                    }
                 };
 
-                self.apply_updates(&mut state, &command.updates).await?;
+                if let Err(e) = self.apply_updates(&mut state, &command.updates).await {
+                    if let Some(tx) = event_tx {
+                        let _ = tx
+                            .send(Ok(StreamEvent::Error {
+                                node_id: Some(node_id.clone()),
+                                error: e.to_string(),
+                            }))
+                            .await;
+                    }
+                    return Err(e);
+                }
+
+                if let Some(tx) = event_tx {
+                    if tx
+                        .send(Ok(StreamEvent::NodeEnd {
+                            node_id: node_id.clone(),
+                            state: state.clone(),
+                            command: command.clone(),
+                        }))
+                        .await
+                        .is_err()
+                    {
+                        warn!(
+                            node_id,
+                            "Stream receiver dropped after node end; aborting graph execution"
+                        );
+                        return Ok(state);
+                    }
+                }
 
                 // Get next nodes
-                current_nodes = self.get_next_nodes(&node_id, &command)?;
+                current_nodes = match self.get_next_nodes(&node_id, &command) {
+                    Ok(nodes) => nodes,
+                    Err(e) => {
+                        if let Some(tx) = event_tx {
+                            let _ = tx
+                                .send(Ok(StreamEvent::Error {
+                                    node_id: Some(node_id.clone()),
+                                    error: e.to_string(),
+                                }))
+                                .await;
+                        }
+                        return Err(e);
+                    }
+                };
 
                 debug!(
                     "Node '{}' completed, next nodes: {:?}",
                     node_id, current_nodes
                 );
             } else {
-                let mut next_nodes = Vec::new();
                 let nodes_to_execute = std::mem::take(&mut current_nodes);
-                let parallel_results = Self::execute_parallel_nodes(
+
+                if let Some(tx) = event_tx {
+                    for node_id in &nodes_to_execute {
+                        if tx
+                            .send(Ok(StreamEvent::NodeStart {
+                                node_id: node_id.clone(),
+                                state: state.clone(),
+                            }))
+                            .await
+                            .is_err()
+                        {
+                            warn!(
+                                node_id,
+                                "Stream receiver dropped during parallel start; aborting graph execution"
+                            );
+                            return Ok(state);
+                        }
+                    }
+                }
+
+                let parallel_results = match Self::execute_parallel_nodes(
                     self.nodes.as_ref(),
                     &nodes_to_execute,
                     &state,
-                    &ctx,
+                    ctx,
                     &self.parallelism_semaphore,
                 )
-                .await?;
+                .await
+                {
+                    Ok(results) => results,
+                    Err(e) => {
+                        if let Some(tx) = event_tx {
+                            let _ = tx
+                                .send(Ok(StreamEvent::Error {
+                                    node_id: None,
+                                    error: e.to_string(),
+                                }))
+                                .await;
+                        }
+                        return Err(e);
+                    }
+                };
 
+                let mut next_nodes = Vec::new();
                 for (node_id, command) in parallel_results {
                     debug!("Applying updates from parallel node '{}'", node_id);
-                    self.apply_updates(&mut state, &command.updates).await?;
+                    if let Err(e) = self.apply_updates(&mut state, &command.updates).await {
+                        if let Some(tx) = event_tx {
+                            let _ = tx
+                                .send(Ok(StreamEvent::Error {
+                                    node_id: Some(node_id.clone()),
+                                    error: e.to_string(),
+                                }))
+                                .await;
+                        }
+                        return Err(e);
+                    }
+
+                    if let Some(tx) = event_tx {
+                        if tx
+                            .send(Ok(StreamEvent::NodeEnd {
+                                node_id: node_id.clone(),
+                                state: state.clone(),
+                                command: command.clone(),
+                            }))
+                            .await
+                            .is_err()
+                        {
+                            warn!(
+                                node_id,
+                                "Stream receiver dropped during parallel end; aborting graph execution"
+                            );
+                            return Ok(state);
+                        }
+                    }
 
                     // Collect next nodes
-                    let next = self.get_next_nodes(&node_id, &command)?;
+                    let next = match self.get_next_nodes(&node_id, &command) {
+                        Ok(n) => n,
+                        Err(e) => {
+                            if let Some(tx) = event_tx {
+                                let _ = tx
+                                    .send(Ok(StreamEvent::Error {
+                                        node_id: Some(node_id.clone()),
+                                        error: e.to_string(),
+                                    }))
+                                    .await;
+                            }
+                            return Err(e);
+                        }
+                    };
                     next_nodes.extend(next);
                 }
 
@@ -642,8 +820,24 @@ impl<S: GraphState> CompiledGraphImpl<S> {
             }
         }
 
+        if let Some(tx) = event_tx {
+            let _ = tx
+                .send(Ok(StreamEvent::End {
+                    final_state: state.clone(),
+                }))
+                .await;
+        }
+
         info!("Graph '{}' execution completed", self.id);
         Ok(state)
+    }
+
+    async fn invoke_with_context(&self, input: S, ctx: RuntimeContext) -> AgentResult<S> {
+        info!(
+            "Starting graph execution '{}' with execution_id={}",
+            self.id, ctx.execution_id
+        );
+        self.execute_loop(input, &ctx, None).await
     }
 }
 
@@ -692,331 +886,45 @@ impl<S: GraphState + 'static> CompiledGraph<S, serde_json::Value> for CompiledGr
         let timeout_ms = ctx.config.timeout_ms;
         let execution_id = ctx.execution_id.clone();
         let graph_id = self.id.clone();
-
-        let nodes = self.nodes.clone();
-        let reducers = self.reducers.clone();
-        let edges = self.edges.clone();
-        let entry_point = self.entry_point.clone();
-        let policies = self.policies.clone();
-        let circuit_states = self.circuit_states.clone();
-        let semaphore = self.parallelism_semaphore.clone();
+        let this = self.clone();
 
         // Create a channel for streaming events
         let (tx, rx) = tokio::sync::mpsc::channel(100);
 
         // Spawn execution task
         let stream_span = tracing::info_span!("state_graph.stream");
-        tokio::spawn(async move {
-            let timeout_tx = tx.clone();
-            let stream_task = async move {
-                let mut state = input;
-                let mut current_nodes = vec![entry_point];
-                let default_policy = NodePolicy::default();
+        tokio::spawn(
+            async move {
+                let timeout_tx = tx.clone();
+                let stream_task = async move {
+                    let _ = this.execute_loop(input, &ctx, Some(&tx)).await;
+                };
 
-            // Helper function to get next nodes based on command and edges
-            let get_next_nodes = |current_node: &str, command: &Command| -> AgentResult<Vec<String>> {
-                match &command.control {
-                    ControlFlow::Goto(target) => Ok(vec![target.clone()]),
-                    ControlFlow::Return => Ok(vec![]), // End execution
-                    ControlFlow::Send(sends) => {
-                        // MapReduce: create branches for each send target
-                        Ok(sends.iter().map(|s| s.target.clone()).collect())
-                    }
-                    ControlFlow::Continue => {
-                        // Follow graph edges
-                        match edges.get(current_node) {
-                            Some(EdgeTarget::Single(target)) => Ok(vec![target.clone()]),
-                            Some(EdgeTarget::Parallel(targets)) => Ok(targets.clone()),
-                            Some(EdgeTarget::Conditional(routes)) => {
-                                // Priority 1: explicit route decision
-                                if let Some(decision) = command.route_value()
-                                    && let Some(target) = routes.get(decision)
-                                {
-                                    return Ok(vec![target.clone()]);
-                                }
-                                // Priority 2: legacy key-name matching (backward compatible)
-                                for update in &command.updates {
-                                    if let Some(target) = routes.get(&update.key) {
-                                        return Ok(vec![target.clone()]);
-                                    }
-                                }
-                                // No route matched — report error instead of silent fallback
-                                let update_keys: Vec<&str> = command.updates.iter().map(|u| u.key.as_str()).collect();
-                                let route_keys: Vec<&String> = routes.keys().collect();
-                                warn!(
-                                    node_id = current_node,
-                                    ?update_keys,
-                                    ?route_keys,
-                                    "Conditional routing: no route matched for node"
-                                );
-                                Err(AgentError::Internal(format!(
-                                    "No conditional route matched for node '{}': update keys {:?}, available routes {:?}",
-                                    current_node, update_keys, route_keys
-                                )))
-                            }
-                            None => Ok(vec![]),
-                            _ => Ok(vec![]),
-                        }
-                    }
-                    _ => Ok(vec![]),
-                }
-            };
-
-            while !current_nodes.is_empty() {
-                // Check recursion limit
-                if ctx.is_recursion_limit_reached().await {
-                    let _ = tx
-                        .send(Err(AgentError::Internal(
-                            "Recursion limit reached".to_string(),
-                        )))
-                        .await;
+                if timeout_ms == 0 {
+                    stream_task.await;
                     return;
                 }
-                ctx.decrement_steps().await;
 
-                let nodes_to_execute = std::mem::take(&mut current_nodes);
-                let mut next_nodes = Vec::new();
-
-                if nodes_to_execute.len() == 1 {
-                    let node_id = nodes_to_execute[0].clone();
-                    let node = match nodes.get(&node_id) {
-                        Some(n) => n,
-                        None => {
-                            let _ = tx
-                                .send(Err(AgentError::NotFound(format!("Node '{}'", node_id))))
-                                .await;
-                            return;
-                        }
-                    };
-
-                    ctx.set_current_node(&node_id).await;
-
-                    // Send start event — abort if receiver disconnected
-                    if tx
-                        .send(Ok(StreamEvent::NodeStart {
-                            node_id: node_id.clone(),
-                            state: state.clone(),
-                        }))
-                        .await
-                        .is_err()
-                    {
-                        warn!(node_id, "Stream receiver dropped before node start; aborting graph execution");
-                        return;
-                    }
-
-                    // 使用重试/断路器执行节点
-                    // Execute node with retry/circuit-breaker
-                    let policy = policies.get(&node_id).unwrap_or(&default_policy);
-                    let command = match execute_with_policy(
-                        node.as_ref(),
-                        &mut state,
-                        &ctx,
-                        policy,
-                        &circuit_states,
-                        &node_id,
-                        Some(&tx),
-                    )
-                    .await
-                    {
-                        Ok(cmd) => cmd,
-                        Err(NodeExecutionOutcome::Fallback(fallback_id)) => {
-                            // Route to fallback node on next iteration
-                            // (execute_with_policy already emitted NodeFallback event)
-                            next_nodes.push(fallback_id);
-                            let node_set: HashSet<String> = next_nodes.into_iter().collect();
-                            current_nodes = node_set.into_iter().collect();
-                            continue;
-                        }
-                        Err(NodeExecutionOutcome::Error(e)) => {
-                            let _ = tx
-                                .send(Ok(StreamEvent::Error {
-                                    node_id: Some(node_id),
-                                    error: e.to_string(),
-                                }))
-                                .await;
-                            return;
-                        }
-                    };
-
-                    for update in &command.updates {
-                        let current = state.get_value(&update.key);
-                        let new_value = if let Some(reducer) = reducers.get(&update.key) {
-                            match reducer.reduce(current.as_ref(), &update.value).await {
-                                Ok(v) => v,
-                                Err(e) => {
-                                    let _ = tx
-                                        .send(Ok(StreamEvent::Error {
-                                            node_id: Some(node_id.clone()),
-                                            error: e.to_string(),
-                                        }))
-                                        .await;
-                                    return;
-                                }
-                            }
-                        } else {
-                            update.value.clone()
-                        };
-                        if let Err(e) = state.apply_update(&update.key, new_value).await {
-                            let _ = tx
-                                .send(Ok(StreamEvent::Error {
-                                    node_id: Some(node_id.clone()),
-                                    error: e.to_string(),
-                                }))
-                                .await;
-                            return;
-                        }
-                    }
-
-                    // Send end event — abort if receiver disconnected
-                    if tx
-                        .send(Ok(StreamEvent::NodeEnd {
-                            node_id: node_id.clone(),
-                            state: state.clone(),
-                            command: command.clone(),
-                        }))
-                        .await
-                        .is_err()
-                    {
-                        warn!(node_id, "Stream receiver dropped after node end; aborting graph execution");
-                        return;
-                    }
-
-                    match get_next_nodes(&node_id, &command) {
-                        Ok(nodes) => next_nodes.extend(nodes),
-                        Err(e) => {
-                            let _ = tx
-                                .send(Ok(StreamEvent::Error {
-                                    node_id: Some(node_id.clone()),
-                                    error: e.to_string(),
-                                }))
-                                .await;
-                            return;
-                        }
-                    }
-                } else {
-                    // Send start events for parallel batch — abort if receiver disconnected
-                    for node_id in &nodes_to_execute {
-                        if tx
-                            .send(Ok(StreamEvent::NodeStart {
-                                node_id: node_id.clone(),
-                                state: state.clone(),
-                            }))
-                            .await
-                            .is_err()
-                        {
-                            warn!(node_id, "Stream receiver dropped during parallel start; aborting graph execution");
-                            return;
-                        }
-                    }
-
-                    let commands = match Self::execute_parallel_nodes(
-                        nodes.as_ref(),
-                        &nodes_to_execute,
-                        &state,
-                        &ctx,
-                        &semaphore,
-                    )
-                    .await
-                    {
-                        Ok(results) => results,
-                        Err(e) => {
-                            let _ = tx
-                                .send(Ok(StreamEvent::Error {
-                                    node_id: None,
-                                    error: e.to_string(),
-                                }))
-                                .await;
-                            return;
-                        }
-                    };
-
-                    for (node_id, command) in commands {
-                        for update in &command.updates {
-                            let current = state.get_value(&update.key);
-                            let new_value = if let Some(reducer) = reducers.get(&update.key) {
-                                match reducer.reduce(current.as_ref(), &update.value).await {
-                                    Ok(v) => v,
-                                    Err(e) => {
-                                        let _ = tx
-                                            .send(Ok(StreamEvent::Error {
-                                                node_id: Some(node_id.clone()),
-                                                error: e.to_string(),
-                                            }))
-                                            .await;
-                                        return;
-                                    }
-                                }
-                            } else {
-                                update.value.clone()
-                            };
-                            if let Err(e) = state.apply_update(&update.key, new_value).await {
-                                let _ = tx
-                                    .send(Ok(StreamEvent::Error {
-                                        node_id: Some(node_id.clone()),
-                                        error: e.to_string(),
-                                    }))
-                                    .await;
-                                return;
-                            }
-                        }
-
-                        if tx
-                            .send(Ok(StreamEvent::NodeEnd {
-                                node_id: node_id.clone(),
-                                state: state.clone(),
-                                command: command.clone(),
-                            }))
-                            .await
-                            .is_err()
-                        {
-                            warn!(node_id, "Stream receiver dropped during parallel end; aborting graph execution");
-                            return;
-                        }
-
-                        match get_next_nodes(&node_id, &command) {
-                            Ok(nodes) => next_nodes.extend(nodes),
-                            Err(e) => {
-                                let _ = tx
-                                    .send(Ok(StreamEvent::Error {
-                                        node_id: Some(node_id.clone()),
-                                        error: e.to_string(),
-                                    }))
-                                    .await;
-                                return;
-                            }
-                        }
-                    }
-                }
-
-                // Deduplicate current_nodes for parallel execution
-                let node_set: HashSet<String> = next_nodes.into_iter().collect();
-                current_nodes = node_set.into_iter().collect();
-            }
-
-                // Send final event
-                let _ = tx.send(Ok(StreamEvent::End { final_state: state })).await;
-            };
-
-            if timeout_ms == 0 {
-                stream_task.await;
-                return;
-            }
-
-            match tokio::time::timeout(std::time::Duration::from_millis(timeout_ms), stream_task)
+                match tokio::time::timeout(
+                    std::time::Duration::from_millis(timeout_ms),
+                    stream_task,
+                )
                 .await
-            {
-                Ok(()) => {}
-                Err(_) => {
-                    error!(
-                        graph_id = %graph_id,
-                        execution_id = %execution_id,
-                        timeout_ms,
-                        "Graph stream timed out"
-                    );
-                    let _ = timeout_tx.send(Err(AgentError::timeout(timeout_ms))).await;
+                {
+                    Ok(()) => {}
+                    Err(_) => {
+                        error!(
+                            graph_id = %graph_id,
+                            execution_id = %execution_id,
+                            timeout_ms,
+                            "Graph stream timed out"
+                        );
+                        let _ = timeout_tx.send(Err(AgentError::timeout(timeout_ms))).await;
+                    }
                 }
             }
-        }.instrument(stream_span));
+            .instrument(stream_span),
+        );
 
         // Convert receiver to stream
         Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx))
@@ -1733,6 +1641,62 @@ mod tests {
         assert!(
             got_error,
             "stream should emit an error event when no conditional route matches"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_shared_execution_core_parity_invoke_and_stream() {
+        let mut graph = StateGraphImpl::<JsonState>::new("shared_core_parity");
+
+        graph
+            .add_node(
+                "step1",
+                Box::new(TestNode {
+                    name: "step1".to_string(),
+                    updates: vec![StateUpdate::new("val", json!(10))],
+                }),
+            )
+            .add_node(
+                "step2",
+                Box::new(TestNode {
+                    name: "step2".to_string(),
+                    updates: vec![StateUpdate::new("val", json!(20))],
+                }),
+            )
+            .add_edge(START, "step1")
+            .add_edge("step1", "step2")
+            .add_edge("step2", END);
+
+        let compiled = graph.compile().unwrap();
+
+        // 1. Run via invoke
+        let state_invoke = compiled.invoke(JsonState::new(), None).await.unwrap();
+        assert_eq!(
+            state_invoke.get_value::<serde_json::Value>("val"),
+            Some(json!(20))
+        );
+
+        // 2. Run via stream
+        let mut stream = compiled.stream(JsonState::new(), None);
+        let mut start_nodes = Vec::new();
+        let mut end_nodes = Vec::new();
+        let mut final_state = None;
+
+        while let Some(event) = stream.next().await {
+            match event.unwrap() {
+                StreamEvent::NodeStart { node_id, .. } => start_nodes.push(node_id),
+                StreamEvent::NodeEnd { node_id, .. } => end_nodes.push(node_id),
+                StreamEvent::End { final_state: s } => final_state = Some(s),
+                _ => {}
+            }
+        }
+
+        assert_eq!(start_nodes, vec!["step1", "step2"]);
+        assert_eq!(end_nodes, vec!["step1", "step2"]);
+        assert!(final_state.is_some());
+        assert_eq!(
+            final_state.unwrap().get_value::<serde_json::Value>("val"),
+            Some(json!(20))
         );
     }
 }
